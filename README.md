@@ -12,3 +12,4 @@ The scripts folder contains notebooks of examples using the functions to process
 
 Eventually, I will add a "data" folder with test data for people to play around with. 
 
+I have never written a Python package before so I may screw up some logistical aspects of how this is organized or setup. I am generally trying to follow that system laid out here: https://goodresearch.dev/index.html
