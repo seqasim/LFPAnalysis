@@ -2,6 +2,13 @@ import numpy as np
 import re
  
 
+def drop_irrelevant_channels(raw_data):
+    """
+    Drop the irrelevant channels from the raw data. 
+    """
+
+    return raw_data
+
 def wm_ref():
     """
     Define a custom reference using the white matter electrodes. Choose the best 
@@ -29,14 +36,48 @@ def bipolar_ref():
     return cathode_list, anode_list
 
 
-def match_elec_names(rec_names, pdf_names):
+def match_elec_names(mne_names, loc_names):
     """
     The electrode names in the pdf (used for localization) do not always match the electrode 
     names in the recording. This function tries matches the two.
 
-    1. strip spaces from rec_names and put in lower case
-    2. 
     """
+    # strip spaces from mne_names and put in lower case
+    mne_names = [x:x.replace(" ", "").lower() for x in mne_names]
+
+    # put loc_names in lower case
+    loc_names = loc_names.str.lower()
+
+    # Check which electrodes are not shared (should just be micros, surface EEG, and trigger)
+    unmatched_names = list(set(loc_names) ^ set(mne_names))
+
+    # seeg electrodes start with 'r' or 'l' - find the elecs in the mne names which are not in the localization data
+    unmatched_seeg = [x for x in unmatched_names if x[0] in ['r', 'l']]
+
+    # use string matching logic to try and determine if they are just misspelled (often i's and l's are mixed up)
+    # (this is a bit of a hack, but should work for the most part)
+    for elec in unmatched_seeg:
+        # find the closest match in the loc_names
+        match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=0.8)[0]
+        # if this fails, iteratively lower the cutoff until it works:
+        while (len(match) == 0) & (cutoff >= 0.5):
+            cutoff -= 0.05
+            match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=cutoff)[0]
+        if len(match) != 0:
+            # replace the unmatched name with the matched name
+            mne_names[mne_names.index(elec)] = match
+            unmatched_seeg.remove(elec)
+            unmatched_names.remove(elec)
+        else:
+            print(f"Could not find a match for {elec}.")
+    
+    # how many seeg electrodes are left unmatched?
+    print(f"{len(unmatched_seeg)} seeg electrodes were not matched to the localization data.")
+
+    # which ones?
+    print(unmatched_seeg)
+
+    return unmatched_names, mne_names, loc_names
 
 def bad_electrode_detection(all_channels): 
     """
