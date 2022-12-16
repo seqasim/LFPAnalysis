@@ -40,7 +40,9 @@ def match_elec_names(mne_names, loc_names):
     """
     The electrode names in the pdf (used for localization) do not always match the electrode 
     names in the recording. This function tries matches the two.
-
+    params:
+        mne_names: list of electrode names in the recording data (mne)
+        loc_names: list of electrode names in the pdf, used for the localization
     """
     # strip spaces from mne_names and put in lower case
     mne_names = [x:x.replace(" ", "").lower() for x in mne_names]
@@ -59,13 +61,14 @@ def match_elec_names(mne_names, loc_names):
     for elec in unmatched_seeg:
         # find the closest match in the loc_names
         match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=0.8)[0]
-        # if this fails, iteratively lower the cutoff until it works:
+        # if this fails, iteratively lower the cutoff until it works (to a point):
         while (len(match) == 0) & (cutoff >= 0.5):
             cutoff -= 0.05
             match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=cutoff)[0]
         if len(match) != 0:
             # replace the unmatched name with the matched name
             mne_names[mne_names.index(elec)] = match
+            # drop the matched electrode from the unmatched lists
             unmatched_seeg.remove(elec)
             unmatched_names.remove(elec)
         else:
@@ -79,7 +82,7 @@ def match_elec_names(mne_names, loc_names):
 
     return unmatched_names, mne_names, loc_names
 
-def bad_electrode_detection(all_channels): 
+def detect_bad_elecs(all_channels): 
     """
     Find outlier channels using a combination of kurtosis, variance, and standard deviation.
     
@@ -88,8 +91,10 @@ def bad_electrode_detection(all_channels):
     Plot these channels for manual verification. 
     """
 
+    pass
+    # return bad_channels
 
-def IED_detection(channel, k=7): 
+def detect_IEDs(channel, k=7): 
     """
     This function detects IEDs in the LFP signal.
 
@@ -106,6 +111,8 @@ def IED_detection(channel, k=7):
     """
 
     pass
+
+    # return bad_epochs
 
 
 def remove_bad_data(mne_epoch_object, bad_channels, bad_epochs): 
