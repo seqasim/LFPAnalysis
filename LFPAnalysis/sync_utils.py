@@ -4,6 +4,9 @@ import scipy.stats
 # Utility functions for synchronization
 
 def moving_average(a, n=11) :
+    """
+    Clean up the sync channel a bit. 
+    """
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
