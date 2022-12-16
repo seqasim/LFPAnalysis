@@ -20,7 +20,7 @@ def wm_ref():
     Also rename the electrodes accordingly.
     """
 
-    return wm_ref_data
+    return wm_ref_data  
 
 
 def bipolar_ref():
