@@ -9,21 +9,62 @@ def drop_irrelevant_channels(raw_data):
 
     return raw_data
 
-def wm_ref():
+def wm_ref(loc_data, bad_channels):
     """
-    Define a custom reference using the white matter electrodes. Choose the best 
-    (most quiet) white matter reference on each electrode. 
+    Define a custom reference using the white matter electrodes. (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
-    Then, manually subtract the reference from the LFP for each electrode and 
-    return the new data. 
+    Identify all white matter electrodes (based on the electrode names), and make sure they are not bad electrodes (based on the bad channels list).
 
-    Also rename the electrodes accordingly.
+    1. iterate through each electrode, compute distance to all white matter electrodes 
+    2. find 3 closest wm electrodes, compute amplitude (rms) 
+    3. lowest amplitude electrode = wm reference 
     """
 
-    return wm_ref_data  
+    # get the white matter electrodes and make sure they are note in the bad channel list
+    if 'Manual Examination' in loc_data.keys():
+        wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'][ind] not in bad_channels]
+        oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
+    else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
+        wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
+        oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
+    
+    # Make sure we don't include any microelectrodes here 
+    wm_elec_ix = [x for x in wm_elec_ix if loc_data['label'][x][0]!='u']
+    all_ix = loc_data.index.values
+    gm_elec_ix = [x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix]
+    # Make sure we don't include any microelectrodes here 
+    gm_elec_ix = [x for x in gm_elec_ix if loc_data['label'][x][0]!='u']
 
 
-def bipolar_ref():
+    cathode_list = []
+    anode_list = []
+    # reference is anode - cathode, so here wm is cathode
+
+    for elec_ix in gm_elec_ix:
+        # get the electrode location
+        elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values
+        # compute the distance to all wm electrodes
+        wm_elec_dist = np.sqrt(np.sum((loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc)**2, axis=1))
+        # get the 3 closest wm electrodes
+        wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:3]]
+        # get the amplitude of the 3 closest wm electrodes
+        wm_elec_amp = np.sqrt(np.sum((loc_data.loc[wm_elec_ix_closest, ['x', 'y', 'z']].values - elec_loc)**2, axis=1))
+        # get the index of the lowest amplitude electrode
+        wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
+        # get the name of the lowest amplitude electrode
+        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label']
+        # get the electrode name
+        elec_name = loc_data.loc[elec_ix, 'label']
+        anode_list.append(elec_name)
+        cathode_list.append(wm_elec_name)
+
+    cathode_list = np.hstack(cathode_list)
+    anode_list = np.hstack(anode_list)
+
+    return anode_list, cathode_list  
+
+
+def bipolar_ref(loc_data, bad_channels):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
     """
@@ -33,7 +74,44 @@ def bipolar_ref():
         return list(map(int, re.findall(r'\d+', string)))[0]
 
 
-    return cathode_list, anode_list
+    # # identify the bundles for re-referencing:
+    # loc_data['bundle'] = np.nan
+    # loc_data['bundle'] = loc_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
+
+    # cathode_list = [] 
+    # anode_list = [] 
+    # names = [] 
+    # ref_category = [] 
+    # # make a new elec_df 
+    # elec_df_bipolar = [] 
+    # for bundle in loc_data.bundle.unique():
+        
+    #     if bundle[0] == 'u':
+    #         print('this is a microwire, pass')
+    #         continue
+                        
+    #     # Isolate the electrodes in each bundle 
+    #     bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='z', ignore_index=True)
+        
+    #     all_elecs = loc_data.label.tolist()
+    #     # Sort them by number 
+    #     all_elecs.sort(key=num_sort)
+    #     # make sure these are not bad channels 
+    #     all_elecs = [x for x in all_elecs if x not in bad_channels]
+    #     # & (x.lower() not in MS007_data.info['bads']))
+    #     # Set the cathodes and anodes 
+    #     cath = all_elecs[1:]
+    #     an = all_elecs[:-1]
+    #     cathode_list.append(cath)
+    #     anode_list.append(an)
+
+
+    
+    # cathode_list = np.hstack(cathode_list)
+    # anode_list = np.hstack(anode_list)
+
+
+    # return anode_list, cathode_list
 
 
 def match_elec_names(mne_names, loc_names):
@@ -82,9 +160,9 @@ def match_elec_names(mne_names, loc_names):
 
     return unmatched_names, mne_names, loc_names
 
-def detect_bad_elecs(all_channels): 
+def detect_bad_elecs(all_channels, loc_data): 
     """
-    Find outlier channels using a combination of kurtosis, variance, and standard deviation.
+    Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the loc_data to find channels out of the brain
     
     https://www-sciencedirect-com.eresources.mssm.edu/science/article/pii/S016502701930278X
     
