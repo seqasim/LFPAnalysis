@@ -55,14 +55,14 @@ def wm_ref(mne_data, loc_data, bad_channels):
         # get the index of the lowest amplitude electrode
         wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
         # get the name of the lowest amplitude electrode
-        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label']
+        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].str.lower()
         # get the electrode name
-        elec_name = loc_data.loc[elec_ix, 'label']
+        elec_name = loc_data.loc[elec_ix, 'label'].str.lower()
         anode_list.append(elec_name)
         cathode_list.append(wm_elec_name)
 
-    cathode_list = np.hstack(cathode_list)
-    anode_list = np.hstack(anode_list)
+    # cathode_list = np.hstack(cathode_list)
+    # anode_list = np.hstack(anode_list)
 
     return anode_list, cathode_list  
 
