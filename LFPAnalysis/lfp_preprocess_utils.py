@@ -1,6 +1,6 @@
 import numpy as np
 import re
- 
+import difflib 
 
 def drop_irrelevant_channels(raw_data):
     """
@@ -116,49 +116,55 @@ def bipolar_ref(loc_data, bad_channels):
 
 def match_elec_names(mne_names, loc_names):
     """
-    The electrode names in the pdf (used for localization) do not always match the electrode 
-    names in the recording. This function tries matches the two.
+    The electrode names read ut of the edf file do not always match those 
+    in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
+    or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'. 
+
+    This function matches the MNE channel names to those used in the localization. 
+
     params:
         mne_names: list of electrode names in the recording data (mne)
         loc_names: list of electrode names in the pdf, used for the localization
     """
     # strip spaces from mne_names and put in lower case
-    mne_names = [x:x.replace(" ", "").lower() for x in mne_names]
+    mne_names = [x.replace(" ", "").lower() for x in mne_names]
+    new_mne_names = mne_names.copy()
 
     # put loc_names in lower case
     loc_names = loc_names.str.lower()
 
-    # Check which electrodes are not shared (should just be micros, surface EEG, and trigger)
-    unmatched_names = list(set(loc_names) ^ set(mne_names))
+    # Check which electrode names are in the loc but not the mne
+    unmatched_names = list(set(loc_names) - set(mne_names))
 
     # seeg electrodes start with 'r' or 'l' - find the elecs in the mne names which are not in the localization data
     unmatched_seeg = [x for x in unmatched_names if x[0] in ['r', 'l']]
 
     # use string matching logic to try and determine if they are just misspelled (often i's and l's are mixed up)
     # (this is a bit of a hack, but should work for the most part)
+    cutoff=0.8
+    matched_elecs = []
     for elec in unmatched_seeg:
-        # find the closest match in the loc_names
-        match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=0.8)[0]
+        # find the closest matches in each list. 
+        match = difflib.get_close_matches(elec, mne_names, n=2, cutoff=cutoff)
         # if this fails, iteratively lower the cutoff until it works (to a point):
-        while (len(match) == 0) & (cutoff >= 0.5):
+        while (len(match) == 0) & (cutoff >= 0.6):
             cutoff -= 0.05
-            match = difflib.get_close_matches(elec, loc_names, n=1, cutoff=cutoff)[0]
-        if len(match) != 0:
-            # replace the unmatched name with the matched name
-            mne_names[mne_names.index(elec)] = match
-            # drop the matched electrode from the unmatched lists
-            unmatched_seeg.remove(elec)
-            unmatched_names.remove(elec)
+            match = difflib.get_close_matches(elec, mne_names, n=2, cutoff=cutoff)
+        if len(match) > 1: # pick the match with the correct hemisphere
+            match = [x for x in match if x.startswith(elec[0])]
+        if len(match) > 1: # if both are correct, pick the one with the correct #
+            match = [x for x in match if x.endswith(elec[-1])]
+        if len(match)>0:   
+            # agree on one name: the localization name 
+            new_mne_names[mne_names.index(match[0])] = elec
+            matched_elecs.append(elec)
         else:
             print(f"Could not find a match for {elec}.")
-    
-    # how many seeg electrodes are left unmatched?
-    print(f"{len(unmatched_seeg)} seeg electrodes were not matched to the localization data.")
+    # drop the matched electrode from the unmatched lists
+    unmatched_seeg = [i for i in unmatched_seeg if i not in matched_elecs]
+    unmatched_names = [i for i in unmatched_names if i not in matched_elecs] # this should mostly be EEG and misc 
 
-    # which ones?
-    print(unmatched_seeg)
-
-    return unmatched_names, mne_names, loc_names
+    return new_mne_names, unmatched_names, unmatched_seeg
 
 def detect_bad_elecs(all_channels, loc_data): 
     """
