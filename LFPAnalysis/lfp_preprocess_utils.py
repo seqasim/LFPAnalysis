@@ -10,7 +10,7 @@ def drop_irrelevant_channels(raw_data):
 
     return raw_data
 
-def wm_ref(mne_data, loc_data, bad_channels):
+def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     """
     Define a custom reference using the white matter electrodes. (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
@@ -21,6 +21,16 @@ def wm_ref(mne_data, loc_data, bad_channels):
     3. lowest amplitude electrode = wm reference 
     """
 
+    # Drop the micros and unmatched seeg from here for now....
+    drop_from_locs = []
+    for ind, data in loc_data['label'].str.lower().items(): 
+        if data in unmatched_seeg:
+            drop_from_locs.append(ind)
+        elif data[0] == 'u':
+            drop_from_locs.append(ind)
+
+    loc_data = loc_data.drop(index=drop_from_locs).reset_index(drop=True)
+
     # get the white matter electrodes and make sure they are note in the bad channel list
     if 'Manual Examination' in loc_data.keys():
         wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'][ind] not in bad_channels]
@@ -29,13 +39,10 @@ def wm_ref(mne_data, loc_data, bad_channels):
         wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
         oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
 
-    # Make sure we don't include any microelectrodes here 
-    wm_elec_ix = np.array([x for x in wm_elec_ix if loc_data['label'][x][0]!='u'])
-    all_ix = loc_data.index.values
-    gm_elec_ix = [x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix]
-    # Make sure we don't include any microelectrodes here 
-    gm_elec_ix = np.array([x for x in gm_elec_ix if loc_data['label'][x][0]!='u'])
 
+    all_ix = loc_data.index.values
+    gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix])
+    wm_elec_ix = np.array(wm_elec_ix)
 
     cathode_list = []
     anode_list = []
@@ -55,9 +62,9 @@ def wm_ref(mne_data, loc_data, bad_channels):
         # get the index of the lowest amplitude electrode
         wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
         # get the name of the lowest amplitude electrode
-        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].str.lower()
+        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
         # get the electrode name
-        elec_name = loc_data.loc[elec_ix, 'label'].str.lower()
+        elec_name = loc_data.loc[elec_ix, 'label'].lower()
         anode_list.append(elec_name)
         cathode_list.append(wm_elec_name)
 
