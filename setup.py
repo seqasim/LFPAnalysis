@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='src',
+    name='LFPAnalysis',
     packages=find_packages(),
 )

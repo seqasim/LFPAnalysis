@@ -1,6 +1,7 @@
 import numpy as np
 import re
 import difflib 
+from mne.preprocessing.bads import _find_outliers
 
 def drop_irrelevant_channels(raw_data):
     """
@@ -9,7 +10,7 @@ def drop_irrelevant_channels(raw_data):
 
     return raw_data
 
-def wm_ref(loc_data, bad_channels):
+def wm_ref(mne_data, loc_data, bad_channels):
     """
     Define a custom reference using the white matter electrodes. (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
@@ -27,28 +28,30 @@ def wm_ref(loc_data, bad_channels):
     else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
         wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
         oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
-    
+
     # Make sure we don't include any microelectrodes here 
-    wm_elec_ix = [x for x in wm_elec_ix if loc_data['label'][x][0]!='u']
+    wm_elec_ix = np.array([x for x in wm_elec_ix if loc_data['label'][x][0]!='u'])
     all_ix = loc_data.index.values
     gm_elec_ix = [x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix]
     # Make sure we don't include any microelectrodes here 
-    gm_elec_ix = [x for x in gm_elec_ix if loc_data['label'][x][0]!='u']
+    gm_elec_ix = np.array([x for x in gm_elec_ix if loc_data['label'][x][0]!='u'])
 
 
     cathode_list = []
     anode_list = []
     # reference is anode - cathode, so here wm is cathode
 
+    # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
     for elec_ix in gm_elec_ix:
         # get the electrode location
-        elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values
+        elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
         # compute the distance to all wm electrodes
-        wm_elec_dist = np.sqrt(np.sum((loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc)**2, axis=1))
+        wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
         # get the 3 closest wm electrodes
         wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:3]]
         # get the amplitude of the 3 closest wm electrodes
-        wm_elec_amp = np.sqrt(np.sum((loc_data.loc[wm_elec_ix_closest, ['x', 'y', 'z']].values - elec_loc)**2, axis=1))
+        wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+        wm_elec_amp = wm_data.mean(axis=1)
         # get the index of the lowest amplitude electrode
         wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
         # get the name of the lowest amplitude electrode
@@ -174,9 +177,15 @@ def detect_bad_elecs(all_channels, loc_data):
     
     Plot these channels for manual verification. 
     """
+    # Find bad channels
+    kurt_chans = _find_outliers(kurtosis(data, axis=1))
+    var_chans = _find_outliers(np.var(data, axis=1))
+    std_chans = _find_outliers(np.std(data, axis=1))
+    kurt_chans = np.array([*sEEG_mapping_dict])[kurt_chans]
+    var_chans = np.array([*sEEG_mapping_dict])[var_chans]
+    std_chans = np.array([*sEEG_mapping_dict])[std_chans]
 
-    pass
-    # return bad_channels
+    return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
 
 def detect_IEDs(channel, k=7): 
     """
