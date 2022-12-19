@@ -2,13 +2,7 @@ import numpy as np
 import re
 import difflib 
 from mne.preprocessing.bads import _find_outliers
-
-def drop_irrelevant_channels(raw_data):
-    """
-    Drop the irrelevant channels from the raw data. 
-    """
-
-    return raw_data
+import neurodsp
 
 def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     """
@@ -126,7 +120,7 @@ def bipolar_ref(loc_data, bad_channels):
 
 def match_elec_names(mne_names, loc_names):
     """
-    The electrode names read ut of the edf file do not always match those 
+    The electrode names read out of the edf file do not always match those 
     in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
     or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'. 
 
