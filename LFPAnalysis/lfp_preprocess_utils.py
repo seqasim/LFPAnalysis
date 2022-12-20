@@ -175,6 +175,9 @@ def detect_bad_elecs(all_channels, sEEG_mapping_dict):
     Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the loc_data to find channels out of the brain
     
     https://www-sciencedirect-com.eresources.mssm.edu/science/article/pii/S016502701930278X
+    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7472198/
+    https://www.biorxiv.org/content/10.1101/2021.05.14.444176v2.full.pdf
+
     
     Plot these channels for manual verification. 
     """
@@ -186,11 +189,13 @@ def detect_bad_elecs(all_channels, sEEG_mapping_dict):
     var_chans = np.array([*sEEG_mapping_dict])[var_chans]
     std_chans = np.array([*sEEG_mapping_dict])[std_chans]
 
+    # 
+
     return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
 
 def detect_IEDs(channel, k=7): 
     """
-    This function detects IEDs in the LFP signal.
+    This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
     Method 1: Compute power of LFP signal in the [50-200] Hz band. Find z > 1. 
     (https://www.nature.com/articles/s41598-020-76138-7)

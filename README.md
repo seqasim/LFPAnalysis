@@ -13,3 +13,11 @@ The scripts folder contains notebooks of examples using the functions to process
 Eventually, I will add a "data" folder with test data for people to play around with. 
 
 I have never written a Python package before so I may screw up some logistical aspects of how this is organized or setup. I am generally trying to follow that system laid out here: https://goodresearch.dev/index.html
+
+Most of the Python packages you need here should come from the install for mne: https://mne.tools/stable/install/manual_install.html#manual-install
+
+Otherwise, consult the environment.yml file. 
+
+Some important misc notes if you're on MINERVA (I will compile here as I go and make a more comprehensive guide to using Minerva later): 
+
+1. Make sure your conda environment points away from the default /hpc/user/ directory as this runs out of space quite quickly. See: https://labs.icahn.mssm.edu/minervalab/documentation/conda/
