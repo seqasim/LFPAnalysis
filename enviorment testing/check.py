@@ -1,3 +1,8 @@
+#prompt
+#go to directory
+#conda env create environment
+
+
 # Open the file in read mode
 with open('environment2.yml', 'r') as f:
   # Read all lines in the file
