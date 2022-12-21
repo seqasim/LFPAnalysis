@@ -13,4 +13,5 @@ dependencies:
   - mne-connectivity
   - neurodsp
   - ipykernel
+  - openpyxl
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis

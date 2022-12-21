@@ -170,7 +170,7 @@ def match_elec_names(mne_names, loc_names):
 
     return new_mne_names, unmatched_names, unmatched_seeg
 
-def detect_bad_elecs(all_channels, sEEG_mapping_dict): 
+def detect_bad_elecs(mne_struct, sEEG_mapping_dict): 
     """
     Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the loc_data to find channels out of the brain
     
@@ -181,6 +181,10 @@ def detect_bad_elecs(all_channels, sEEG_mapping_dict):
     
     Plot these channels for manual verification. 
     """
+
+    # Get the data
+    all_channels = mne_struct.pick_channels([*sEEG_mapping_dict])._data
+
     # Find bad channels
     kurt_chans = _find_outliers(kurtosis(all_channels, axis=1))
     var_chans = _find_outliers(np.var(all_channels, axis=1))
