@@ -2,6 +2,7 @@ import numpy as np
 import re
 import difflib 
 from mne.preprocessing.bads import _find_outliers
+from scipy.stats import kurtosis
 import neurodsp
 
 def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
@@ -40,6 +41,7 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
 
     cathode_list = []
     anode_list = []
+    drop_wm_channels = []
     # reference is anode - cathode, so here wm is cathode
 
     # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
@@ -61,16 +63,22 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
         elec_name = loc_data.loc[elec_ix, 'label'].lower()
         anode_list.append(elec_name)
         cathode_list.append(wm_elec_name)
+        
+    # Also collect the wm electrodes that are not used for referencing and drop them later
+    drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
+    oob_channels = loc_data.loc[oob_elec_ix, 'label'].str.lower().tolist()
 
     # cathode_list = np.hstack(cathode_list)
     # anode_list = np.hstack(anode_list)
 
-    return anode_list, cathode_list  
+    return anode_list, cathode_list, drop_wm_channels, oob_channels
 
 
 def bipolar_ref(loc_data, bad_channels):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
+
+    TODO: Later - not a priority if white matter referencing is working.
     """
 
     # helper function to perform sort for bipolar electrodes:
