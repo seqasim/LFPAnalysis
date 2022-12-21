@@ -14,6 +14,8 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     1. iterate through each electrode, compute distance to all white matter electrodes 
     2. find 3 closest wm electrodes, compute amplitude (rms) 
     3. lowest amplitude electrode = wm reference 
+
+    Make sure it's the same hemisphere. If it can be on the same shaft that's great.    
     """
 
     # Drop the micros and unmatched seeg from here for now....
@@ -48,10 +50,13 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     for elec_ix in gm_elec_ix:
         # get the electrode location
         elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
+        elec_name = loc_data.loc[elec_ix, 'label'].lower()
         # compute the distance to all wm electrodes
         wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
         # get the 3 closest wm electrodes
-        wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:3]]
+        wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+        # only keep the ones in the same hemisphere: 
+        wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
         # get the amplitude of the 3 closest wm electrodes
         wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
         wm_elec_amp = wm_data.mean(axis=1)
@@ -60,7 +65,6 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
         # get the name of the lowest amplitude electrode
         wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
         # get the electrode name
-        elec_name = loc_data.loc[elec_ix, 'label'].lower()
         anode_list.append(elec_name)
         cathode_list.append(wm_elec_name)
         
