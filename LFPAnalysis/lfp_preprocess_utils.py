@@ -15,7 +15,9 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     2. find 3 closest wm electrodes, compute amplitude (rms) 
     3. lowest amplitude electrode = wm reference 
 
-    Make sure it's the same hemisphere. If it can be on the same shaft that's great.    
+    Make sure it's the same hemisphere. 
+    
+    TODO: If it can be on the same shaft that's great.    
     """
 
     # Drop the micros and unmatched seeg from here for now....
