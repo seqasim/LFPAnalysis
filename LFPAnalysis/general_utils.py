@@ -9,7 +9,9 @@ import numpy as np
 
 def bokeh_scroll_plot(timestamps, data, win_samples=1000, sub_sample=10): 
     """
-    Code for visualizing data in bokeh.
+    Code for visualizing and annotating data in bokeh. This was necessary because mne's interactive plot wasn't working in Jupyter notebooks on
+    our headless Minerva server. This is a rudimentary function for approximating that functionality. 
+
     Note: You should sub-sample your timestamps and data to about 1000 Hz to ensure bokeh can plot all your points. 
     Save after every selection to output a text file of timestamps! 
     

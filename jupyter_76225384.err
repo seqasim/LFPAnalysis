@@ -1,0 +1,48 @@
+
+Currently Loaded Modules:
+  1) gcc/8.3.0   2) anaconda3/2018.12
+
+ 
+
+[I 11:28:31.736 NotebookApp] JupyterLab extension loaded from /hpc/packages/minerva-centos7/anaconda3/2018.12/lib/python3.7/site-packages/jupyterlab
+[I 11:28:31.736 NotebookApp] JupyterLab application directory is /hpc/packages/minerva-centos7/anaconda3/2018.12/share/jupyter/lab
+[I 11:28:31.739 NotebookApp] Serving notebooks from local directory: /hpc/users/qasims01/resources/LFPAnalysis
+[I 11:28:31.739 NotebookApp] The Jupyter Notebook is running at:
+[I 11:28:31.739 NotebookApp] http://lh06c12:8888/?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c
+[I 11:28:31.740 NotebookApp]  or http://127.0.0.1:8888/?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c
+[I 11:28:31.740 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 11:28:31.765 NotebookApp] 
+    
+    To access the notebook, open this file in a browser:
+        file:///hpc/users/qasims01/.local/share/jupyter/runtime/nbserver-145204-open.html
+    Or copy and paste one of these URLs:
+        http://lh06c12:8888/?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c
+     or http://127.0.0.1:8888/?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c
+[I 11:28:53.921 NotebookApp] 302 GET /?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c (127.0.0.1) 0.93ms
+[E 11:28:54.260 NotebookApp] Could not open static file ''
+[W 11:28:54.585 NotebookApp] 404 GET /static/components/react/react-dom.production.min.js (127.0.0.1) 42.67ms referer=http://10.95.46.103:45384/tree?token=2b3b6314ceba3d3c0784f736c2fa88a488590ccd8abbcf9c
+[W 11:29:12.716 NotebookApp] 404 GET /static/components/react/react-dom.production.min.js (127.0.0.1) 2.99ms referer=http://10.95.46.103:45384/notebooks/scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:29:14.801 NotebookApp] Kernel started: f9a1dcbb-a80f-400d-a4a4-827394b0180c
+0.06s - Debugger warning: It seems that frozen modules are being used, which may
+0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+0.00s - to python to disable frozen modules.
+0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+[I 11:31:15.942 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:33:15.655 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:35:15.452 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:38:06.101 NotebookApp] Starting buffering for f9a1dcbb-a80f-400d-a4a4-827394b0180c:a95dc26136a34e1ebec7b1ac4e1ca006
+[I 11:38:09.556 NotebookApp] Kernel restarted: f9a1dcbb-a80f-400d-a4a4-827394b0180c
+0.02s - Debugger warning: It seems that frozen modules are being used, which may
+0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+0.00s - to python to disable frozen modules.
+0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+[I 11:38:17.854 NotebookApp] Restoring connection for f9a1dcbb-a80f-400d-a4a4-827394b0180c:a95dc26136a34e1ebec7b1ac4e1ca006
+[I 11:38:17.855 NotebookApp] Replaying 6 buffered messages
+[I 11:39:17.013 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:41:16.677 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:43:18.657 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:45:15.311 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[I 11:47:15.936 NotebookApp] Saving file at /scripts/Qasim_LFP_preprocessing_example.ipynb
+[C 13:07:35.408 NotebookApp] received signal 15, stopping
+[I 13:07:35.411 NotebookApp] Shutting down 1 kernel
+[I 13:07:35.512 NotebookApp] Kernel shutdown: f9a1dcbb-a80f-400d-a4a4-827394b0180c

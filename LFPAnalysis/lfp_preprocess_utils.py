@@ -5,7 +5,7 @@ from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis
 import neurodsp
 
-def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
+def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Define a custom reference using the white matter electrodes. (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
@@ -20,64 +20,103 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None):
     TODO: If it can be on the same shaft that's great.    
     """
 
-    # Drop the micros and unmatched seeg from here for now....
-    drop_from_locs = []
-    for ind, data in loc_data['label'].str.lower().items(): 
-        if data in unmatched_seeg:
-            drop_from_locs.append(ind)
-        elif data[0] == 'u':
-            drop_from_locs.append(ind)
+    if site == 'MSSM': 
+        # Drop the micros and unmatched seeg from here for now....
+        drop_from_locs = []
+        for ind, data in loc_data['label'].str.lower().items(): 
+            if data in unmatched_seeg:
+                drop_from_locs.append(ind)
+            elif data[0] == 'u':
+                drop_from_locs.append(ind)
 
-    loc_data = loc_data.drop(index=drop_from_locs).reset_index(drop=True)
+        loc_data = loc_data.drop(index=drop_from_locs).reset_index(drop=True)
 
-    # get the white matter electrodes and make sure they are note in the bad channel list
-    if 'Manual Examination' in loc_data.keys():
-        wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'][ind] not in bad_channels]
-        oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
-    else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-        wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
-        oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
+        # get the white matter electrodes and make sure they are note in the bad channel list
+        if 'Manual Examination' in loc_data.keys():
+            wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'][ind] not in bad_channels]
+            oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
+        else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
+            wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
+            oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
 
+        all_ix = loc_data.index.values
+        gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix])
+        wm_elec_ix = np.array(wm_elec_ix)
 
-    all_ix = loc_data.index.values
-    gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix])
-    wm_elec_ix = np.array(wm_elec_ix)
+        cathode_list = []
+        anode_list = []
+        drop_wm_channels = []
+        # reference is anode - cathode, so here wm is cathode
 
-    cathode_list = []
-    anode_list = []
-    drop_wm_channels = []
-    # reference is anode - cathode, so here wm is cathode
+        # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
+        for elec_ix in gm_elec_ix:
+            # get the electrode location
+            elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
+            elec_name = loc_data.loc[elec_ix, 'label'].lower()
+            # compute the distance to all wm electrodes
+            wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
+            # get the 3 closest wm electrodes
+            wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+            # only keep the ones in the same hemisphere: 
+            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
+            # get the amplitude of the 3 closest wm electrodes
+            wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+            wm_elec_amp = wm_data.mean(axis=1)
+            # get the index of the lowest amplitude electrode
+            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
+            # get the name of the lowest amplitude electrode
+            wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
+            # get the electrode name
+            anode_list.append(elec_name)
+            cathode_list.append(wm_elec_name)
+            
+        # Also collect the wm electrodes that are not used for referencing and drop them later
+        drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
+        oob_channels = loc_data.loc[oob_elec_ix, 'label'].str.lower().tolist()
 
-    # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
-    for elec_ix in gm_elec_ix:
-        # get the electrode location
-        elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
-        elec_name = loc_data.loc[elec_ix, 'label'].lower()
-        # compute the distance to all wm electrodes
-        wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
-        # get the 3 closest wm electrodes
-        wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
-        # only keep the ones in the same hemisphere: 
-        wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
-        # get the amplitude of the 3 closest wm electrodes
-        wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
-        wm_elec_amp = wm_data.mean(axis=1)
-        # get the index of the lowest amplitude electrode
-        wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
-        # get the name of the lowest amplitude electrode
-        wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
-        # get the electrode name
-        anode_list.append(elec_name)
-        cathode_list.append(wm_elec_name)
-        
-    # Also collect the wm electrodes that are not used for referencing and drop them later
-    drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
-    oob_channels = loc_data.loc[oob_elec_ix, 'label'].str.lower().tolist()
+        # cathode_list = np.hstack(cathode_list)
+        # anode_list = np.hstack(anode_list)
 
-    # cathode_list = np.hstack(cathode_list)
-    # anode_list = np.hstack(anode_list)
+        return anode_list, cathode_list, drop_wm_channels, oob_channels
 
-    return anode_list, cathode_list, drop_wm_channels, oob_channels
+    elif site == 'UI':
+        wm_elec_ix = [ind for ind, data in loc_data['region'].str.lower().items() if 'white' in data and loc_data['Channel'][ind] not in mne_data.info['bads']]
+        all_ix = loc_data.index.values
+        gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
+        wm_elec_ix = np.array(wm_elec_ix)
+
+        cathode_list = []
+        anode_list = []
+        drop_wm_channels = []
+        # reference is anode - cathode, so here wm is cathode
+
+        # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
+        for elec_ix in gm_elec_ix:
+            # get the electrode location
+            elec_loc = loc_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+            elec_name = loc_data.loc[elec_ix, 'Channel'].lower()
+            # compute the distance to all wm electrodes
+            wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values - elec_loc, axis=1)
+            # get the 3 closest wm electrodes
+            wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+            # only keep the ones in the same hemisphere: 
+            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==loc_data.loc[elec_ix, 'label'].lower()[0]]
+            # get the amplitude of the 3 closest wm electrodes
+            wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
+            wm_elec_amp = wm_data.mean(axis=1)
+            # get the index of the lowest amplitude electrode
+            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
+            # get the name of the lowest amplitude electrode
+            wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'Channel'].lower()
+            # get the electrode name
+            anode_list.append(elec_name)
+            cathode_list.append(wm_elec_name)
+
+        # Also collect the wm electrodes that are not used for referencing and drop them later
+        drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'Channel'].str.lower() if x not in cathode_list]
+
+        return anode_list, cathode_list, drop_wm_channels
+
 
 
 def bipolar_ref(loc_data, bad_channels):
