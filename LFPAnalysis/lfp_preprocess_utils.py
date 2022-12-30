@@ -19,7 +19,7 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
 
     Make sure it's the same hemisphere. 
     
-    TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference... 
+    TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference [separate per hemi]... 
     see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
 
     """
@@ -122,9 +122,11 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         return anode_list, cathode_list, drop_wm_channels
 
 
-def laplacian_ref(loc_data, bad_channels):
+def laplacian_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for laplacian referencing.
+
+    In this case, the cathode is the average of the surrounding electrodes. If an edge electrode, it's just bipolar. 
 
     From here: https://doi.org/10.1016/j.neuroimage.2018.08.020
 
@@ -132,56 +134,56 @@ def laplacian_ref(loc_data, bad_channels):
 
     pass
 
-def bipolar_ref(loc_data, bad_channels):
+def bipolar_ref(loc_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
 
-    TODO: Later - not a priority if white matter referencing is working.
+    TODO: figure out a renaming convention across sites so that this can be generalized.
     """
 
     # helper function to perform sort for bipolar electrodes:
     def num_sort(string):
         return list(map(int, re.findall(r'\d+', string)))[0]
 
+    cathode_list = [] 
+    anode_list = [] 
 
-    # # identify the bundles for re-referencing:
-    # loc_data['bundle'] = np.nan
-    # loc_data['bundle'] = loc_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
+    if site=='MSSM':
 
-    # cathode_list = [] 
-    # anode_list = [] 
-    # names = [] 
-    # ref_category = [] 
-    # # make a new elec_df 
-    # elec_df_bipolar = [] 
-    # for bundle in loc_data.bundle.unique():
-        
-    #     if bundle[0] == 'u':
-    #         print('this is a microwire, pass')
-    #         continue
-                        
-    #     # Isolate the electrodes in each bundle 
-    #     bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-        
-    #     all_elecs = loc_data.label.tolist()
-    #     # Sort them by number 
-    #     all_elecs.sort(key=num_sort)
-    #     # make sure these are not bad channels 
-    #     all_elecs = [x for x in all_elecs if x not in bad_channels]
-    #     # & (x.lower() not in MS007_data.info['bads']))
-    #     # Set the cathodes and anodes 
-    #     cath = all_elecs[1:]
-    #     an = all_elecs[:-1]
-    #     cathode_list.append(cath)
-    #     anode_list.append(an)
+        for bundle in loc_data.bundle.unique():
+            if bundle[0] == 'u':
+                print('this is a microwire, pass')
+                continue         
+            # Isolate the electrodes in each bundle 
+            bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='z', ignore_index=True)
+            all_elecs = loc_data.label.tolist()
+            # Sort them by number 
+            all_elecs.sort(key=num_sort)
+            # make sure these are not bad channels 
+            all_elecs = [x for x in all_elecs if x not in bad_channels]
+            # Set the cathodes and anodes 
+            cath = all_elecs[1:]
+            an = all_elecs[:-1]
+            cathode_list = cathode_list + cath
+            anode_list = anode_list + an
 
+    elif site=='UI':
 
-    
-    # cathode_list = np.hstack(cathode_list)
-    # anode_list = np.hstack(anode_list)
+        for bundle in loc_data.bundle.unique():
+            # Isolate the electrodes in each bundle 
+            bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
+            all_elecs = bundle_df.Channel.tolist()
+            # make sure these are not bad channels 
+            all_elecs = [x for x in all_elecs if x not in bad_channels]
+            # Set the cathodes and anodes 
+            cath = all_elecs[1:]
+            an = all_elecs[:-1]
+            cathode_list = cathode_list + cath
+            anode_list = anode_list + an
 
-
-    # return anode_list, cathode_list
+    cathode_list = np.array(cathode_list)
+    anode_list = np.array(anode_list)
+    return anode_list, cathode_list
 
 
 def match_elec_names(mne_names, loc_names):
