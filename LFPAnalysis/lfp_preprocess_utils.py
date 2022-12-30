@@ -5,9 +5,11 @@ from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis
 import neurodsp
 
-def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
+def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, average=False):
     """
-    Define a custom reference using the white matter electrodes. (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
+    Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
+
+    (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
     Identify all white matter electrodes (based on the electrode names), and make sure they are not bad electrodes (based on the bad channels list).
 
@@ -17,7 +19,9 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
 
     Make sure it's the same hemisphere. 
     
-    TODO: If it can be on the same shaft that's great.    
+    TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference... 
+    see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
+
     """
 
     if site == 'MSSM': 
@@ -61,9 +65,9 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
             wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
             # get the amplitude of the 3 closest wm electrodes
             wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
-            wm_elec_amp = wm_data.mean(axis=1)
-            # get the index of the lowest amplitude electrode
-            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
+            wm_elec_var = wm_data.var(axis=1)
+            # get the index of the lowest variance electrode
+            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
             # get the name of the lowest amplitude electrode
             wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
             # get the electrode name
@@ -103,9 +107,9 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
             wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==loc_data.loc[elec_ix, 'label'].lower()[0]]
             # get the amplitude of the 3 closest wm electrodes
             wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
-            wm_elec_amp = wm_data.mean(axis=1)
-            # get the index of the lowest amplitude electrode
-            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_amp)]
+            wm_elec_var = wm_data.var(axis=1)
+            # get the index of the lowest variance electrode
+            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
             # get the name of the lowest amplitude electrode
             wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'Channel'].lower()
             # get the electrode name
@@ -118,6 +122,15 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
         return anode_list, cathode_list, drop_wm_channels
 
 
+def laplacian_ref(loc_data, bad_channels):
+    """
+    Return the cathode list and anode list for mne to use for laplacian referencing.
+
+    From here: https://doi.org/10.1016/j.neuroimage.2018.08.020
+
+    """
+
+    pass
 
 def bipolar_ref(loc_data, bad_channels):
     """
