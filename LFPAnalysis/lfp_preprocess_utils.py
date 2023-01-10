@@ -113,10 +113,10 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
 
         # get the white matter electrodes and make sure they are note in the bad channel list
         if 'Manual Examination' in loc_data.keys():
-            wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'][ind] not in bad_channels]
+            wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'].str.lower()[ind] not in bad_channels]
             oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
         else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-            wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'][ind] not in bad_channels]
+            wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'].str.lower()[ind] not in bad_channels]
             oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
 
         all_ix = loc_data.index.values

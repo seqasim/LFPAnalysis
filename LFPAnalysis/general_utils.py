@@ -7,6 +7,8 @@ from bokeh.io import output_notebook, show, push_notebook
 from bokeh.plotting import figure, output_file, show
 import numpy as np
 
+# UPDATE: deprecated since mne interactive plotting is working now. 
+
 def bokeh_scroll_plot(timestamps, data, win_samples=1000, sub_sample=10): 
     """
     Code for visualizing and annotating data in bokeh. This was necessary because mne's interactive plot wasn't working in Jupyter notebooks on
