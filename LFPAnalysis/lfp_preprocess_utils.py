@@ -5,6 +5,80 @@ from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis
 import neurodsp
 
+def mean_baseline_time(data, baseline): 
+    
+    """
+    Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
+    mne doesn't allow baseline period to vary. 
+    
+    1. Calculate the mean signal of the baseline period.
+    2. Subtract this mean from the entire epoch.
+    """
+    
+
+    m = baseline.mean(axis=-1)
+    m = np.expand_dims(m, axis=2)
+    m = np.repeat(m,  data.shape[-1], axis=2)
+    
+    
+    baseline_corrected = data - m 
+
+    return baseline_corrected 
+
+def zscore_TFR_average(data, baseline): 
+    
+    """
+    Meant to mimic the mne baseline (specifically just the zscore for now) 
+    for TFR but when the specific baseline period might change across trials. 
+
+    This presumes you're using trial-averaged data (check dimensions)
+    
+    TODO: make this more general to any kind of baselining ('mean', etc. )
+    """
+    
+
+    m = baseline.mean(axis=-1)
+    m = np.expand_dims(m, axis=2)
+    m = np.repeat(m,  data.shape[-1], axis=2)
+    
+    sd = baseline.std(axis=-1)
+    sd = np.expand_dims(sd, axis=2)
+    sd = np.repeat(sd,  data.shape[-1], axis=2)
+    
+    
+    baseline_corrected = (data - m)/sd
+
+    return baseline_corrected 
+
+def zscore_TFR_across_trials(data, baseline): 
+    
+    """
+    Meant to mimic the mne baseline (specifically just the zscore for now) 
+    for TFR but when the specific baseline period might change across trials. 
+
+    This presumes you're using trial-level data (check dimensions)
+    
+    TODO: make this more general to any kind of baselining ('mean', etc. )
+    """
+    
+    # Create an array of the mean and standard deviation of the power values across the session
+    # 1. Compute the mean for every electrode, at every frequency 
+    m = np.mean(np.mean(baseline, axis=3) ,axis=0)
+    # 2. Expand the array
+    m = np.expand_dims(np.expand_dims(m, axis=0),axis=3)
+    # 3. Copy the data to every event and time-point
+    m = np.repeat(np.repeat(m, data.shape[0],axis=0), 
+                  data.shape[-1],axis=3)
+
+    sd = np.std(np.mean(baseline, axis=3),axis=0)
+    sd = np.expand_dims(np.expand_dims(sd, axis=0),axis=3)
+    sd = np.repeat(np.repeat(sd, data.shape[0], axis=0), 
+                   data.shape[-1],axis=3)
+
+    zpower_data = (data-m)/sd
+    
+    return zpower_data
+
 def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
@@ -21,6 +95,8 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
     
     TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference [separate per hemi]... 
     see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
+
+    TODO: this is SLOW; any vectorization to speed it up or parallelization?
 
     """
 
@@ -84,7 +160,7 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         return anode_list, cathode_list, drop_wm_channels, oob_channels
 
     elif site == 'UI':
-        wm_elec_ix = [ind for ind, data in loc_data['region'].str.lower().items() if 'white' in data and loc_data['Channel'][ind] not in mne_data.info['bads']]
+        wm_elec_ix = [ind for ind, data in loc_data['region_1'].str.lower().items() if 'white' in data and loc_data['Channel'][ind] not in mne_data.info['bads']]
         all_ix = loc_data.index.values
         gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
         wm_elec_ix = np.array(wm_elec_ix)
@@ -181,8 +257,6 @@ def bipolar_ref(loc_data, bad_channels, unmatched_seeg=None, site=None):
             cathode_list = cathode_list + cath
             anode_list = anode_list + an
 
-    cathode_list = np.array(cathode_list)
-    anode_list = np.array(anode_list)
     return anode_list, cathode_list
 
 
