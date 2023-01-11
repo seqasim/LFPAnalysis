@@ -5,23 +5,39 @@ from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis
 import neurodsp
 
-def mean_baseline_time(data, baseline): 
+
+def make_mne(data_path, elec_path, format='edf'):
+    """
+    Make a mne object from the data and electrode files. 
+    """
+    pass 
+
+def mean_baseline_time(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
     mne doesn't allow baseline period to vary. 
-    
-    1. Calculate the mean signal of the baseline period.
-    2. Subtract this mean from the entire epoch.
+
     """
     
+    baseline_mean =  baseline.mean(axis=-1)
+    m = np.expand_dims(baseline_mean, axis=2)
+    baseline_std = baseline.std(axis=-1)
+    std = np.expand_dims(baseline_std, axis=2)
 
-    m = baseline.mean(axis=-1)
-    m = np.expand_dims(m, axis=2)
-    m = np.repeat(m,  data.shape[-1], axis=2)
-    
-    
-    baseline_corrected = data - m 
+
+    if mode == 'mean':
+        baseline_corrected = data - m
+    elif mode == 'ratio':
+        baseline_corrected = data / m
+    elif mode == 'logratio':
+        baseline_corrected = np.log10(data / m)
+    elif mode == 'percent':
+        baseline_corrected = (data - m) / m 
+    elif mode == 'zscore':
+        baseline_corrected = (data - m) / std 
+    elif mode == 'zlogratio':
+        baseline_corrected = np.log10(data / m) / std
 
     return baseline_corrected 
 
@@ -41,13 +57,23 @@ def zscore_TFR_average(data, baseline):
     m = np.expand_dims(m, axis=2)
     m = np.repeat(m,  data.shape[-1], axis=2)
     
-    sd = baseline.std(axis=-1)
-    sd = np.expand_dims(sd, axis=2)
-    sd = np.repeat(sd,  data.shape[-1], axis=2)
-    
-    
-    baseline_corrected = (data - m)/sd
+    std = baseline.std(axis=-1)
+    std = np.expand_dims(std, axis=2)
+    std = np.repeat(std,  data.shape[-1], axis=2)
 
+    if mode == 'mean':
+        baseline_corrected = data - m
+    elif mode == 'ratio':
+        baseline_corrected = data / m
+    elif mode == 'logratio':
+        baseline_corrected = np.log10(data / m)
+    elif mode == 'percent':
+        baseline_corrected = (data - m) / m 
+    elif mode == 'zscore':
+        baseline_corrected = (data - m) / std 
+    elif mode == 'zlogratio':
+        baseline_corrected = np.log10(data / m) / std
+    
     return baseline_corrected 
 
 def zscore_TFR_across_trials(data, baseline): 
@@ -70,14 +96,25 @@ def zscore_TFR_across_trials(data, baseline):
     m = np.repeat(np.repeat(m, data.shape[0],axis=0), 
                   data.shape[-1],axis=3)
 
-    sd = np.std(np.mean(baseline, axis=3),axis=0)
-    sd = np.expand_dims(np.expand_dims(sd, axis=0),axis=3)
-    sd = np.repeat(np.repeat(sd, data.shape[0], axis=0), 
+    std = np.std(np.mean(baseline, axis=3),axis=0)
+    std = np.expand_dims(np.expand_dims(std, axis=0),axis=3)
+    std = np.repeat(np.repeat(std, data.shape[0], axis=0), 
                    data.shape[-1],axis=3)
 
-    zpower_data = (data-m)/sd
+    if mode == 'mean':
+        baseline_corrected = data - m
+    elif mode == 'ratio':
+        baseline_corrected = data / m
+    elif mode == 'logratio':
+        baseline_corrected = np.log10(data / m)
+    elif mode == 'percent':
+        baseline_corrected = (data - m) / m 
+    elif mode == 'zscore':
+        baseline_corrected = (data - m) / std 
+    elif mode == 'zlogratio':
+        baseline_corrected = np.log10(data / m) / std
     
-    return zpower_data
+    return baseline_corrected 
 
 def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, average=False):
     """
@@ -112,16 +149,18 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         loc_data = loc_data.drop(index=drop_from_locs).reset_index(drop=True)
 
         # get the white matter electrodes and make sure they are note in the bad channel list
+        wm_elec_ix_manual = [] 
+        wm_elec_ix_auto = []
         if 'Manual Examination' in loc_data.keys():
-            wm_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'].str.lower()[ind] not in bad_channels]
+            wm_elec_ix_manual = wm_elec_ix_manual + [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'].str.lower()[ind] not in bad_channels]
             oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
         else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-            wm_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'].str.lower()[ind] not in bad_channels]
+            wm_elec_ix_auto = wm_elec_ix_auto + [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'].str.lower()[ind] not in bad_channels]
             oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
 
+        wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
         all_ix = loc_data.index.values
         gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix])
-        wm_elec_ix = np.array(wm_elec_ix)
 
         cathode_list = []
         anode_list = []
@@ -139,7 +178,7 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
             wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
-            # get the amplitude of the 3 closest wm electrodes
+            # get the variance of the 3 closest wm electrodes
             wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
             wm_elec_var = wm_data.var(axis=1)
             # get the index of the lowest variance electrode
@@ -181,7 +220,7 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
             wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==loc_data.loc[elec_ix, 'label'].lower()[0]]
-            # get the amplitude of the 3 closest wm electrodes
+            # get the variance of the 3 closest wm electrodes
             wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
             wm_elec_var = wm_data.var(axis=1)
             # get the index of the lowest variance electrode
@@ -339,7 +378,7 @@ def detect_bad_elecs(mne_struct, sEEG_mapping_dict):
 
     return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
 
-def detect_IEDs(channel, k=7): 
+def detect_IEDs(signal, k=7): 
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
@@ -348,6 +387,8 @@ def detect_IEDs(channel, k=7):
     Method 2: Bandpass filter in the [25-80] Hz band. Rectify. Find filtered envelope > 3. 
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
 
+    Exclude IEDs that occur too close in time to each other 
+
     After each method, use k-means clustering to cluster IEDs by amplitude and timing. 
 
     Plot each cluster for visual inspection. 
@@ -355,16 +396,14 @@ def detect_IEDs(channel, k=7):
     Remove outlying clusters manually until satisfied. 
     """
 
-    pass
+
+
+    # Method 1: 
+
+
+    # Method 2: 
+
+    
 
     # return bad_epochs
-
-
-def remove_bad_data(mne_epoch_object, bad_channels, bad_epochs): 
-    """
-    Remove bad channels, and epochs from the mne Epoch object. 
-    """
-
-    pass
-
     

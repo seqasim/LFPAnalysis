@@ -7,6 +7,7 @@ def get_behav_ts(logfile, format='old'):
     """
     Gets the timestamps from the behavioral logfile depending on the format of the task (old? or new?)
     """
+    pass
     
 
 def moving_average(a, n=11) :
