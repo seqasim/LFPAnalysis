@@ -4,13 +4,10 @@ import difflib
 from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis
 import neurodsp
-
-
-def make_mne(data_path, elec_path, format='edf'):
-    """
-    Make a mne object from the data and electrode files. 
-    """
-    pass 
+import mne
+from glob import glob
+from LFPAnalysis import nlx_utils, lfp_preprocess_utils
+import pandas as pd
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     
@@ -407,3 +404,106 @@ def detect_IEDs(signal, k=7):
 
     # return bad_epochs
     
+def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
+    """
+    Make a mne object from the data and electrode files, and save out the photodiode. 
+    Following this step, you can indicate bad electrodes manually.
+    """
+
+    # 1) load the data:
+    if format=='edf':
+        edf_file = glob(f'{data_path}/*.edf')[0]
+        mne_data = mne.io.read_raw_edf(edf_file, preload=True)
+    elif format =='nlx': 
+        ncs_files = glob(f'{data_path}/*.ncs')
+        for chan_path in ncs_files:
+            # This is leftover from Iowa - let's see how channels are named in MSSM data
+            chan_name = chan_path.split('/')[-1][:-4]
+            ch_num = int(chan_name[4:])
+            try:
+                fdata = nlx_utils.load_ncs(chan_path)
+            except IndexError: 
+                print(f'No data in channel {chan_name}')
+                continue
+            lfp.append(fdata['data'])
+            sr.append(fdata['sampling_rate'])
+            ch_name.append(str(ch_num))
+            unix_time = fdata['time']
+        info = mne.create_info(ch_name, np.unique(sr), ch_type)
+        mne_data = mne.io.RawArray(lfp, info)
+    
+    # 2) load the electrode file:
+    loc_data = pd.read_csv(elec_path)
+
+    # Sometimes there's extra columns with no entries: 
+    loc_data = loc_data[loc_data.columns.drop(list(loc_data.filter(regex='Unnamed')))]
+
+    if format=='edf':
+        # The electrode names read out of the edf file do not always match those 
+        # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
+        # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
+        
+        # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, loc_data.label)
+        # Rename the mne data according to the localization data
+        new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+        mne_data.rename_channels(new_name_dict)
+
+    right_seeg_names = [i for i in mne_data.ch_names if i.startswith('r')]
+    left_seeg_names = [i for i in mne_data.ch_names if i.startswith('l')]
+    sEEG_mapping_dict = {f'{x}':'seeg' for x in left_seeg_names+right_seeg_names}
+
+    mne_data.set_channel_types(sEEG_mapping_dict)
+
+
+    # 3) Identify line noise
+    mne_data.info['line_freq'] = 60
+
+    # Notch out 60 Hz noise and harmonics 
+    mne_data.notch_filter(freqs=(60, 120, 180, 240))
+
+    # 4) Save out the photodiode channel separately
+    mne_data.save(f'{save_path}/photodiode.fif', picks='dc1', overwrite=True)
+
+    # 5) Clean up the MNE data 
+
+    bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+
+    mne_data.info['bads'] = bads
+
+    return mne_data
+
+
+def ref_mne(mne_data, loc_data, method='wm', site='MSSM'):
+    """
+    Following this step, you can indicate IEDs manually.
+    """
+    
+    # Check which electrode names are in the loc but not the mne
+    unmatched_names = list(set(loc_data.label) - set(mne_data.ch_names))
+    # seeg electrodes start with 'r' or 'l' - find the elecs in the mne names which are not in the localization data
+    unmatched_seeg = [x for x in unmatched_names if x[0] in ['r', 'l']]
+
+    if method=='wm':
+        anode_list, cathode_list, drop_wm_channels, oob_channels = wm_ref(mne_data=mne_data, 
+                                                                                       loc_data=loc_data, 
+                                                                                       bad_channels=mne_data.info['bads'], 
+                                                                                       unmatched_seeg=unmatched_seeg,
+                                                                                       site=site)
+    elif method=='bipolar':
+        pass
+    
+    mne_data_reref = mne.set_bipolar_reference(mne_data, 
+                          anode=anode_list, 
+                          cathode=cathode_list,
+                          copy=True)
+    mne_data_reref.drop_channels(drop_wm_channels)
+    mne_data_reref.drop_channels(oob_channels)
+
+    right_seeg_names = [i for i in mne_data_reref.ch_names if i.startswith('r')]
+    left_seeg_names = [i for i in mne_data_reref.ch_names if i.startswith('l')]
+    sEEG_mapping_dict = {f'{x}':'seeg' for x in left_seeg_names+right_seeg_names}
+    mne_data_reref.set_channel_types(sEEG_mapping_dict)
+
+    return mne_data_reref
+
