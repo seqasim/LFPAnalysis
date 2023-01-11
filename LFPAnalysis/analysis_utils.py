@@ -37,6 +37,7 @@ def plot_TFR(data, freqs, pre_win, post_win, sr, title):
 
 
 def detect_ripple_evs(signal, method=None):
+    
     """
     Method 1: Foster et al., 
     1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
