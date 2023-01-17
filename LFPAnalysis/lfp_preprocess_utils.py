@@ -2,12 +2,14 @@ import numpy as np
 import re
 import difflib 
 from mne.preprocessing.bads import _find_outliers
-from scipy.stats import kurtosis
+from scipy.stats import kurtosis, zscore
 import neurodsp
 import mne
 from glob import glob
 from LFPAnalysis import nlx_utils, lfp_preprocess_utils
 import pandas as pd
+from mne.filter import next_fast_len
+from scipy.signal import hilbert, find_peaks
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     
@@ -348,7 +350,7 @@ def match_elec_names(mne_names, loc_names):
 
     return new_mne_names, unmatched_names, unmatched_seeg
 
-def detect_bad_elecs(mne_struct, sEEG_mapping_dict): 
+def detect_bad_elecs(mne_data, sEEG_mapping_dict): 
     """
     Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the loc_data to find channels out of the brain
     
@@ -361,7 +363,7 @@ def detect_bad_elecs(mne_struct, sEEG_mapping_dict):
     """
 
     # Get the data
-    all_channels = mne_struct.pick_channels([*sEEG_mapping_dict])._data
+    all_channels = mne_data.pick_channels([*sEEG_mapping_dict])._data
 
     # Find bad channels
     kurt_chans = _find_outliers(kurtosis(all_channels, axis=1))
@@ -375,34 +377,70 @@ def detect_bad_elecs(mne_struct, sEEG_mapping_dict):
 
     return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
 
-def detect_IEDs(signal, k=7): 
+def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=500): 
     """
+    Great images of interictal and ictal spiking: 
+    https://pubmed.ncbi.nlm.nih.gov/32007920/
+    
+    https://www.sciencedirect.com/science/article/pii/S1059131119304200
+
+    More on IEDs: https://www.frontiersin.org/articles/10.3389/fnhum.2020.00044/full
+
+
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
-    Method 1: Compute power of LFP signal in the [50-200] Hz band. Find z > 1. 
-    (https://www.nature.com/articles/s41598-020-76138-7)
-    Method 2: Bandpass filter in the [25-80] Hz band. Rectify. Find filtered envelope > 3. 
+    Method 1: 
+    1. Bandpass filter in the [25-80] Hz band. 
+    2. Rectify. 
+    3. Find filtered envelope > 3. 
+    4. Eliminate events with peaks with unfiltered envelope < 3. 
+    5. Eliminate close IEDs (peaks within 500 ms). 
+    6. TODO: Compute rise-decay asymmetry (time-to-peak / time between troughs). Must be < 0.5
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
 
-    Exclude IEDs that occur too close in time to each other 
-
-    After each method, use k-means clustering to cluster IEDs by amplitude and timing. 
-
-    Plot each cluster for visual inspection. 
-
-    Remove outlying clusters manually until satisfied. 
     """
 
+    sr = mne_data.info['sfreq']
 
+    # filter data in beta bands 
+    filtered_data = mne_data.copy().filter(20, 40, n_jobs=-1)
 
-    # Method 1: 
+    n_times = mne_data._data.shape[1]
+    n_fft = next_fast_len(n_times)
 
+    # Hilbert bandpass amplitude 
+    filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=-1)
 
-    # Method 2: 
+    # Zscore
+    filtered_data.apply_function(lambda x: zscore(x, axis=-1))
 
-    
+    # Rectify
+    filtered_data.apply_function(lambda x: x[x<0]==0)
 
-    # return bad_epochs
+    IED_times_s = {'f{x}': np.nan for x in mne_data.ch_names}
+
+    for ch_ in filtered_data.ch_names:
+        sig = filtered_data.get_data(picks=[ch_])
+        # Find peaks 
+        IED_index, _ = find_peaks(sig, height=peak_thresh)
+        # IED_z_amp = IED_z_amp['peak_heights']
+
+        # Which peaks are below 3 in z-scored unfiltered signal? 
+        small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_index] < 3)[0]
+
+        # Which IEDs follow an initial IED too closely? 
+        follow_IEDs = np.where(((1000* (np.diff(IED_index) / sr)) <= closeness_thresh))[0]+1
+        
+        elim_IEDs = np.unique(np.hstack([small_IEDs, follow_IEDs]))
+
+        IED_index = np.delete(IED_index, elim_IEDs)
+        # IED_z_amp = np.delete(IED_z_amp, elim_IEDs)
+        IED_s = (IED_index / sr)
+
+        IED_times_s[ch_] = IED_s
+
+    return IED_times_s
+
     
 def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
     """
