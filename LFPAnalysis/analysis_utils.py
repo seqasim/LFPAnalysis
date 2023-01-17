@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import math
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 
@@ -7,16 +9,16 @@ def lfp_sta(ev_times, signal, sr, pre, post):
     Compute the STA for a vector of stimuli.
 
     Input: 
-    spikes - raw spike times used to compute STA, should be in ms
+    spikes - raw spike times used to compute STA, should be in s
     signal - signal for averaging. can be filtered or unfiltered.  
     bound - bound of the STA in ms, +- this number 
     
     '''
 
     num_evs = len(ev_times)
-    ev_in_samples = ((ev_times / 1000) * sr).astype(int)
-    pre_in_samples = int((pre / 1000) * sr)
-    post_in_samples = int((post / 1000) * sr)
+    ev_in_samples = (ev_times * sr).astype(int)
+    pre_in_samples = int(pre  * sr)
+    post_in_samples = int(post * sr)
     
     lfp_pre_avg = np.zeros([num_evs, (pre_in_samples + post_in_samples)])
     for sidx in range(0, num_evs):
@@ -25,7 +27,10 @@ def lfp_sta(ev_times, signal, sr, pre, post):
         if len(range(idx1, idx2)) != (pre_in_samples + post_in_samples):
             continue
         else:
-            lfp_pre_avg[sidx, :] = signal[idx1:idx2]  # - nanmean(raw_lfp(idx1:idx2)); % subtract the mean of the signal
+            try:
+                lfp_pre_avg[sidx, :] = signal[idx1:idx2]  # - nanmean(raw_lfp(idx1:idx2)); % subtract the mean of the signal
+            except ValueError: 
+                continue
 
     sta = np.nanmean(lfp_pre_avg, 0)
     ste = np.nanstd(lfp_pre_avg, 0) / np.sqrt(len(sta))
