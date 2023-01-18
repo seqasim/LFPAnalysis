@@ -401,10 +401,15 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
     """
 
     # What type of data is this? Continuous or epoched? 
-    if type(mne_data) == 'mne.epochs.Epochs':
+    if type(mne_data) == mne.epochs.Epochs:
         data_type = 'epoch'
-    elif type(mne_data) == 'mne.io.fiff.raw.Raw': 
+        n_times = mne_data._data.shape[-1]
+    elif type(mne_data) == mne.io.fiff.raw.Raw: 
         data_type = 'continuous'
+        n_times = mne_data._data.shape[1]
+    else: 
+        data_type = 'continuous'
+        n_times = mne_data._data.shape[1]       
 
     sr = mne_data.info['sfreq']
     min_width = width_thresh * sr
@@ -412,7 +417,6 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
     # filter data in beta bands 
     filtered_data = mne_data.copy().filter(25, 80, n_jobs=-1)
 
-    n_times = mne_data._data.shape[1]
     n_fft = next_fast_len(n_times)
 
     # Hilbert bandpass amplitude 
@@ -430,31 +434,25 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
             sig[sig<0] = 0
 
             # Find peaks 
-            IED_index, _ = find_peaks(sig, height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
+            IED_samps, _ = find_peaks(sig, height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
 
-            widths = peak_widths(sig, IED_index, rel_height=0.75)
+            widths = peak_widths(sig, IED_samps, rel_height=0.75)
 
             # print(widths[0])
             too_wide_IEDs = np.where(widths[0] > min_width)[0]
 
-            # print(too_wide_IEDs)
-            # IED_z_amp = IED_z_amp['peak_heights']
-
             # Which peaks are below 3 in z-scored unfiltered signal? 
-            small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_index] < 3)[0]
+            small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_samps] < 3)[0]
 
-            # Which IEDs follow an initial IED too closely? 
-            # follow_IEDs = np.where(((1000* (np.diff(IED_index) / sr)) <= closeness_thresh))[0]+1
-            
             elim_IEDs = np.unique(np.hstack([small_IEDs, too_wide_IEDs]))
 
-            IED_index = np.delete(IED_index, elim_IEDs)
-            # IED_z_amp = np.delete(IED_z_amp, elim_IEDs)
-            IED_s = (IED_index / sr)
+            IED_samps = np.delete(IED_samps, elim_IEDs)
+            IED_s = (IED_samps / sr)
 
             IED_times_s[ch_] = IED_s
     elif data_type == 'epoch':
-        for ch_ in filtered_data.ch_names[0:1]:
+        # Detect the IEDs in every event in epoch time
+        for ch_ in filtered_data.ch_names:
             sig = filtered_data.get_data(picks=[ch_])[:,0,:]
 
             # Rectify
@@ -470,10 +468,12 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
                 elim_IEDs = np.unique(np.hstack([small_IEDs, too_wide_IEDs]))
                 IED_samps = np.delete(IED_samps, elim_IEDs)
                 IED_s = (IED_samps / sr)
-                IED_dict[event] = (IED_samps, IED_s)
+                if len(IED_samps) == 0: 
+                    IED_samps = np.nan
+                    # IED_s = np.nan
+                IED_dict[event] = IED_samps
                 
             IED_times_s[ch_] = IED_dict
-
 
     return IED_times_s
 
