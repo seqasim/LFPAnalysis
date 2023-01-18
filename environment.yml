@@ -10,8 +10,10 @@ dependencies:
   - ca-certificates
   - certifi
   - openssl
-  - mne-connectivity
   - neurodsp
   - ipykernel
   - openpyxl
+  - ipywidgets
+  - ipyevents
+  - fooof
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis
