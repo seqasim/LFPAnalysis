@@ -72,6 +72,9 @@ def plot_TFR(data, freqs, pre_win, post_win, sr, title):
 def detect_ripple_evs(signal, method=None):
     
     """
+    Input: 
+    signal = continuous voltage time-series filtered and re-referenced
+    
     Method 1: Foster et al., 
     1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
     2. the root mean square (RMS) of the band-passed signal was calculated and smoothed using a 20-ms window
@@ -85,9 +88,29 @@ In addition to the amplitude and duration criteria the spectral features of each
     8. reject events where the most prominent and highest peak was outside the ripple band and sharp wave band for a frequencies > 30 Hz
     9. reject events where ripple-peak width was greater than 3 standard deviations from the mean ripple-peak width calculated for a given electrode and recording session
     10. reject events where high frequency activity peaks exceed 80% of the ripple peak height
-
+  
     """
+    sf = signal.info["sfreq"] # get the sampling frequency
+    single_ch = signal._data[1,:] # subset just one channel (WIP purposes)
     
+    # Step 1: band-pass filter from 80 - 120 Hz (ripple band) using a FIR filter
+    bandpass_filtered_data = mne.filter.filter_data(single_ch,sf,80,120,method='fir')
+    
+    # visualize 2s of white matter referenced and band-passed signal
+    fig1 = plt.figure()
+    plt.plot(bandpass_filtered_data[1:2048])
+    plt.plot(bandpass_filtered_data[1:2048])
+    
+    # Step 2: Calculate the root mean square of the band-passed signal
+    rms = np.sqrt((bandpass_filtered_data**2).mean(axis=0))
+    
+    rms.shape = (1, rms.shape[0]) # format data for smoothing function
+    info = mne.create_info([signal.ch_names[0]],1024) # format data for smoothing function
+    rms_raw = mne.io.RawArray(data=rms,info = info) # format data for smoothing function
+    
+    # Smooth signal using a 20 ms window (# Not sure this is the best way to do it yet... see discussion here: https://mne.discourse.group/t/using-a-gaussian-kernel-to-smooth-epoch-data-in-mne/2902/5)
+
+    smoothed_rms_data = rms_raw.savgol_filter(h_freq = 50, verbose=None) 
 
 
     return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq 
