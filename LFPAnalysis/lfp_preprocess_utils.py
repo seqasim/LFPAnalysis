@@ -386,6 +386,13 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
 
     More on IEDs: https://www.frontiersin.org/articles/10.3389/fnhum.2020.00044/full
 
+    Why removing trials with IEDs might be important for generalizable conclusions about behavior:
+    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3770206/
+    https://academic.oup.com/cercorcomms/article/2/2/tgab019/6179205
+    
+    Especially for low frequencies (sub-gamma) this is important! 
+    "Low-frequency power remained elevated for several seconds following the IED...
+    Low-frequency power was elevated and high-frequency power suppressed in pre-IED epochs compared with non-IED epochs."
 
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
@@ -414,7 +421,7 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
     sr = mne_data.info['sfreq']
     min_width = width_thresh * sr
 
-    # filter data in beta bands 
+    # filter data in beta-gamma band
     filtered_data = mne_data.copy().filter(25, 80, n_jobs=-1)
 
     n_fft = next_fast_len(n_times)
@@ -477,7 +484,8 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
 
     return IED_times_s
 
-    
+# Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
+
 def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
@@ -580,4 +588,110 @@ def ref_mne(mne_data, loc_data, method='wm', site='MSSM'):
     mne_data_reref.set_channel_types(sEEG_mapping_dict)
 
     return mne_data_reref
+
+
+def make_epochs(reref_data_path=None, elec_path=None, save_path=None, slope=None, offset=None, behav_times=None, 
+baseline_times=None, baseline_dur=0.5, fixed_baseline=[-1.0, 0],
+buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
+    """
+
+    behav_times: dict with format {'event_name': np.array([times])}
+    baseline_times: dict with format {'event_name': np.array([times])}
+    IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+    """
+    # Load the data 
+    mne_data_reref = mne.io.read_raw_fif(reref_data_path, preload=True)
+    # Reconstruct the anode list 
+    anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
+    # Load the electrodes
+    loc_data = pd.read_csv(elec_path)
+    # Sometimes there's extra columns with no entries: 
+    loc_data = loc_data[loc_data.columns.drop(list(loc_data.filter(regex='Unnamed')))]
+    # Filter the list 
+    elec_df = loc_data[loc_data.label.str.lower().isin(anode_list)]
+    elec_df['label'] = mne_data_reref.ch_names
+
+    # all behavioral times of interest 
+    beh_ts = [(x*slope + offset) for x in list(behav_times.values())[0]]
+
+    # Make events 
+    evs = beh_ts
+    durs = np.zeros_like(beh_ts).tolist()
+    descriptions = list(behav_times.keys())*len(beh_ts)
+    # Make mne annotations based on these descriptions
+    annot = mne.Annotations(onset=evs,
+                            duration=durs,
+                            description=descriptions)
+    mne_data_reref.set_annotations(annot)
+    events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
+
+    if baseline_times==None: 
+        # Then baseline according to fixed baseline
+        ev_epochs = mne.Epochs(mne_data_reref, 
+                    events_from_annot, 
+                    event_id=event_dict, 
+                    baseline=fixed_baseline, 
+                    tmin=pre_s - buf_s, 
+                    tmax=post_s + buf_s, 
+                    reject=None, 
+                    reject_by_annotation=False,
+                    preload=True)
+    else: 
+        ev_epochs = mne.Epochs(mne_data_reref, 
+            events_from_annot, 
+            event_id=event_dict, 
+            baseline=None, 
+            tmin=pre_s - buf_s, 
+            tmax=post_s + buf_s, 
+            reject=None, 
+            reject_by_annotation=False,
+            preload=True)
+
+        # Make baseline epochs to use for baselining 
+        baseline_ts = [(x*slope + offset) for x in baseline_times]
+        # Make events 
+        evs = baseline_ts
+        durs = np.zeros_like(baseline_ts).tolist()
+        descriptions = list(baseline_times.keys())*len(baseline_ts)
+        # Make mne annotations based on these descriptions
+        annot = mne.Annotations(onset=evs,
+                                duration=durs,
+                                description=descriptions)
+        mne_data_reref.set_annotations(annot)
+        events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
+        rm_baseline_epochs = 
+            mne.Epochs(mne_data_reref, 
+            events_from_annot, 
+            event_id=event_dict, 
+            baseline=None, 
+            tmin=-buf, 
+            tmax=baseline_dur+buf, 
+            reject=None, 
+            preload=True)
+
+        buf_ix = int(buf_s*ev_epochs.info['sfreq'])
+        time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
+        # Subtract the mean of the baseline data from our data 
+        ev_epochs._data = lfp_preprocess_utils.mean_baseline_time(ev_epochs._data, time_baseline, mode='mean')
+
+    # Filter and downsample the epochs 
+    ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
+
+    IED_times_s = lfp_preprocess_utils.detect_IEDs(ev_epochs, 
+                                               peak_thresh=IED_args['peak_thresh'], 
+                                               closeness_thresh=IED_args['closeness_thresh'], 
+                                               width_thresh=IED_args['width_thresh'])
+
+    # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
+
+    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()))
+
+    for ch in list(IED_times_s.keys()):
+        for ev, val in IED_times_s[ch].items():
+            event_metadata[ch].loc[ev] = val
+        
+    ev_epochs.metadata = event_metadata
+    # event_metadata
+
+    return ev_epochs
 
