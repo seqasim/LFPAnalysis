@@ -98,21 +98,32 @@ In addition to the amplitude and duration criteria the spectral features of each
     
     # visualize 2s of white matter referenced and band-passed signal
     fig1 = plt.figure()
-    plt.plot(bandpass_filtered_data[1:2048])
-    plt.plot(bandpass_filtered_data[1:2048])
+    plt.plot(bandpass_filtered_data[1:2048]) # plot the first 2s of data
+    plt.plot(bandpass_filtered_data[1:2048]) # plot the first 2s of data
+    # plt.show() - for dev purposes  
     
     # Step 2: Calculate the root mean square of the band-passed signal
     rms = np.sqrt((bandpass_filtered_data**2).mean(axis=0))
     
-    rms.shape = (1, rms.shape[0]) # format data for smoothing function
+    bandpass_filtered_data.shape = (1, bandpass_filtered_data.shape[0]) # format data for smoothing function
     info = mne.create_info([signal.ch_names[0]],1024) # format data for smoothing function
-    rms_raw = mne.io.RawArray(data=rms,info = info) # format data for smoothing function
+    bandpass_filtered_data_raw = mne.io.RawArray(data=bandpass_filtered_data,info = info) # format data for smoothing function
     
-    # Smooth signal using a 20 ms window (# Not sure this is the best way to do it yet... see discussion here: https://mne.discourse.group/t/using-a-gaussian-kernel-to-smooth-epoch-data-in-mne/2902/5)
+    # Note: h_freq = 50 because the time interval of 50 Hz is 0.02 s or 20 ms.. ref: https://mne.discourse.group/t/using-a-gaussian-kernel-to-smooth-epoch-data-in-mne/2902/5
+    smoothed_rms_data = bandpass_filtered_data_raw.savgol_filter(h_freq = 50, verbose=None) 
+    smoothed_rms_data = smoothed_rms_data._data # turn into an array 
 
-    smoothed_rms_data = rms_raw.savgol_filter(h_freq = 50, verbose=None) 
+    # Step 3: mark ripple events [ripple start, ripple end] as periods of RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean 
+    smoothed_rms_mean = np.mean(smoothed_rms_data,axis=1)[0]
+    smoothed_rms_sd = np.std(smoothed_rms_data,axis=1)[0]
 
+    # calculate lower (above 2.5 SD from mean) and upper (lower than 9 SD from mean) cutoffs for marking ripple events 
+    lower_cutoff = smoothed_rms_mean + 2.5 * smoothed_rms_sd
+    upper_cutoff = smoothed_rms_mean + 9 * smoothed_rms_sd
 
+    # get the index of ripple events according to lower_cutoff and upper_cutoff
+    ripple_events_index = smoothed_rms_data[np.where((smoothed_rms_data > lower_cutoff) & (smoothed_rms_data < upper_cutoff))]
+    
     return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq 
 
 def detect_oscillation_evs(signal, method=None): 
