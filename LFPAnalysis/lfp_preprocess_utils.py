@@ -553,7 +553,7 @@ def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
     mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
     # 4) Save out the photodiode channel separately
-    mne_data.save(f'{save_path}/photodiode.fif', picks='dc1', overwrite=True)
+    mne_data.save(f'{load_path}/photodiode.fif', picks='dc1', overwrite=True)
 
     # 5) Clean up the MNE data 
 
@@ -597,7 +597,8 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, save_path=None, elec_data=None, slope=None, offset=None, behav_times=None, 
+def make_epochs(load_path=None, save_path=None, elec_data=None, slope=None, offset=None, behav_name=None, 
+behav_times=None, 
 baseline_times=None, baseline_dur=0.5, fixed_baseline=[-1.0, 0],
 buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     """
@@ -607,24 +608,22 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
     """
     # Load the data 
-    mne_data_reref = mne.io.read_raw_fif(reref_data_path, preload=True)
+    mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
     # Reconstruct the anode list 
     anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
-    # Load the electrodes
-    elec_data = pd.read_csv(elec_path)
-    # Sometimes there's extra columns with no entries: 
-    elec_data = elec_data[elec_data.columns.drop(list(elec_data.filter(regex='Unnamed')))]
+
     # Filter the list 
     elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
     elec_df['label'] = mne_data_reref.ch_names
 
     # all behavioral times of interest 
-    beh_ts = [(x*slope + offset) for x in list(behav_times.values())[0]]
+    beh_ts = [(x*slope + offset) for x in behav_times]
 
     # Make events 
     evs = beh_ts
     durs = np.zeros_like(beh_ts).tolist()
-    descriptions = list(behav_times.keys())*len(beh_ts)
+    descriptions = [behav_name]*len(beh_ts)
+
     # Make mne annotations based on these descriptions
     annot = mne.Annotations(onset=evs,
                             duration=durs,
@@ -690,7 +689,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
 
     # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
 
-    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()))
+    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()), index=np.arange(len(evs)))
 
     for ch in list(IED_times_s.keys()):
         for ev, val in IED_times_s[ch].items():
