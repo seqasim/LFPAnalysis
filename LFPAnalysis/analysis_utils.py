@@ -148,3 +148,10 @@ def sliding_FOOOF(signal):
 
     """
     pass
+
+
+def hctsa_signal_features(signal): 
+    """
+    Implement https://github.com/DynamicsAndNeuralSystems/catch22
+    """
+
