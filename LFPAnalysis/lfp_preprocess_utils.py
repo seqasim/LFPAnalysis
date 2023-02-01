@@ -17,6 +17,18 @@ def mean_baseline_time(data, baseline, mode='zscore'):
     Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
     mne doesn't allow baseline period to vary. 
 
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     baseline_mean =  baseline.mean(axis=-1)
@@ -40,7 +52,7 @@ def mean_baseline_time(data, baseline, mode='zscore'):
 
     return baseline_corrected 
 
-def zscore_TFR_average(data, baseline): 
+def zscore_TFR_average(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -48,7 +60,18 @@ def zscore_TFR_average(data, baseline):
 
     This presumes you're using trial-averaged data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
 
@@ -75,7 +98,7 @@ def zscore_TFR_average(data, baseline):
     
     return baseline_corrected 
 
-def zscore_TFR_across_trials(data, baseline): 
+def zscore_TFR_across_trials(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -83,7 +106,18 @@ def zscore_TFR_across_trials(data, baseline):
 
     This presumes you're using trial-level data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     # Create an array of the mean and standard deviation of the power values across the session
@@ -133,6 +167,30 @@ def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, av
     see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
 
     TODO: this is SLOW; any vectorization to speed it up or parallelization?
+
+    Parameters
+    ----------
+    mne_data : mne object
+        non-referenced data stored in an MNE object 
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+    average : bool 
+        should we construct an average white matter reference instead of a default? 
+
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
+    drop_wm_channels : list 
+        list of white matter channels which were not used for reference and now serve no purpose 
 
     """
 
@@ -252,7 +310,23 @@ def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
 
-    TODO: figure out a renaming convention across sites so that this can be generalized.
+    Parameters
+    ----------
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
     """
 
     # helper function to perform sort for bipolar electrodes:
@@ -306,9 +380,21 @@ def match_elec_names(mne_names, loc_names):
 
     This function matches the MNE channel names to those used in the localization. 
 
-    params:
-        mne_names: list of electrode names in the recording data (mne)
-        loc_names: list of electrode names in the pdf, used for the localization
+    Parameters
+    ----------
+    mne_names : list
+        list of electrode names in the recording data (mne)
+    loc_names : list 
+        list of electrode names in the pdf, used for the localization
+
+    Returns
+    -------
+    new_mne_names : list 
+        revised mne names merged across sources 
+    unmatched_names : list 
+        names that do not match (mostly scalp EEG and misc)
+    unmatched_seeg : list
+        sEEG channels that do not match (should be rare)
     """
     # strip spaces from mne_names and put in lower case
     mne_names = [x.replace(" ", "").lower() for x in mne_names]
@@ -360,6 +446,18 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
 
     
     Plot these channels for manual verification. 
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    sEEG_mapping_dict : dict 
+        dict of sEEG channels 
+
+    Returns
+    -------
+    bad_channels : list 
+        list of bad channels 
     """
 
     # Get the data
@@ -373,9 +471,9 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     var_chans = np.array([*sEEG_mapping_dict])[var_chans]
     std_chans = np.array([*sEEG_mapping_dict])[std_chans]
 
+    bad_channels = np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
     # 
-
-    return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
+    return bad_channels
 
 def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
     """
@@ -389,6 +487,22 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
     5. Eliminate close IEDs (peaks within 500 ms). 
     6. Eliminate IEDs that are not present on at least 4 electrodes. 
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    peak_thresh : float 
+        the peak threshold in amplitude 
+    closeness_thresh : float 
+        the closeness threshold in time
+    width_thresh : float 
+        the width threshold for IEDs 
+
+    Returns
+    -------
+    IED_samps_dict : dict 
+        dict with every IED index  
 
     """
 
@@ -500,10 +614,24 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
+def make_mne(load_path=None, elec_data=None, format='edf'):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
+
+    Parameters
+    ----------
+    load_path : str
+        path to the neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    format : str 
+        how was this data collected? options: ['edf', 'nlx]
+
+    Returns
+    -------
+    mne_data : mne object 
+        mne object
     """
 
     # 1) load the data:
@@ -567,6 +695,22 @@ def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
 def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     """
     Following this step, you can indicate IEDs manually.
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne object
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+
+    Returns
+    -------
+    mne_data_reref : mne object 
+        mne object with re-referenced data
     """
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
@@ -597,15 +741,55 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, save_path=None, elec_data=None, slope=None, offset=None, behav_name=None, 
-behav_times=None, 
-baseline_times=None, baseline_dur=0.5, fixed_baseline=[-1.0, 0],
+def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
+baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
 buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     """
 
     behav_times: dict with format {'event_name': np.array([times])}
     baseline_times: dict with format {'event_name': np.array([times])}
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+
+
+    Parameters
+    ----------
+    load_path : str
+        path to the re-referenced neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    slope : float 
+        slope used for syncing behavioral and neural data 
+    offset : float 
+        offset used for syncing behavioral and neural data 
+    behav_name : str
+        what event are we epoching to? 
+    behav_times : dict 
+        format {'event_name': np.array([times])}
+    baseline_times : dict 
+        format {'event_name': np.array([times])}
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+    baseline_dur : float
+        only to be used if baseline_times is not None 
+    fixed_baseline : tuple 
+        time to use for baselining , only to be used if baseline_times is None 
+    buf_s : float 
+        time to add as buffer in epochs 
+    pre_s : float 
+        time to add before baseline event if baseline_times is not None 
+    post_d : float 
+        time to add after baseline event if baseline_times is not None 
+    downsamp_factor : float 
+        factor by which to downsample the data 
+    IED_args: dict 
+        format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+
+    Returns
+    -------
+    ev_epochs : mne object 
+        mne Epoch object with re-referenced data
     """
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
