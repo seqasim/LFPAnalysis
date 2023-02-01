@@ -504,6 +504,8 @@ def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
+
+    to-do: add site specificity
     """
 
     # 1) load the data:
