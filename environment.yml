@@ -16,4 +16,5 @@ dependencies:
   - ipywidgets
   - ipyevents
   - fooof
+  - python=3.10
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis

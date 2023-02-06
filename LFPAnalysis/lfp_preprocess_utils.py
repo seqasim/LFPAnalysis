@@ -17,6 +17,18 @@ def mean_baseline_time(data, baseline, mode='zscore'):
     Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
     mne doesn't allow baseline period to vary. 
 
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     baseline_mean =  baseline.mean(axis=-1)
@@ -40,7 +52,7 @@ def mean_baseline_time(data, baseline, mode='zscore'):
 
     return baseline_corrected 
 
-def zscore_TFR_average(data, baseline): 
+def zscore_TFR_average(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -48,7 +60,18 @@ def zscore_TFR_average(data, baseline):
 
     This presumes you're using trial-averaged data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
 
@@ -75,7 +98,7 @@ def zscore_TFR_average(data, baseline):
     
     return baseline_corrected 
 
-def zscore_TFR_across_trials(data, baseline): 
+def zscore_TFR_across_trials(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -83,7 +106,18 @@ def zscore_TFR_across_trials(data, baseline):
 
     This presumes you're using trial-level data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     # Create an array of the mean and standard deviation of the power values across the session
@@ -115,7 +149,7 @@ def zscore_TFR_across_trials(data, baseline):
     
     return baseline_corrected 
 
-def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, average=False):
+def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
 
@@ -134,31 +168,55 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
 
     TODO: this is SLOW; any vectorization to speed it up or parallelization?
 
+    Parameters
+    ----------
+    mne_data : mne object
+        non-referenced data stored in an MNE object 
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+    average : bool 
+        should we construct an average white matter reference instead of a default? 
+
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
+    drop_wm_channels : list 
+        list of white matter channels which were not used for reference and now serve no purpose 
+
     """
 
     if site == 'MSSM': 
         # Drop the micros and unmatched seeg from here for now....
         drop_from_locs = []
-        for ind, data in loc_data['label'].str.lower().items(): 
+        for ind, data in elec_data['label'].str.lower().items(): 
             if data in unmatched_seeg:
                 drop_from_locs.append(ind)
             elif data[0] == 'u':
                 drop_from_locs.append(ind)
 
-        loc_data = loc_data.drop(index=drop_from_locs).reset_index(drop=True)
+        elec_data = elec_data.drop(index=drop_from_locs).reset_index(drop=True)
 
         # get the white matter electrodes and make sure they are note in the bad channel list
         wm_elec_ix_manual = [] 
         wm_elec_ix_auto = []
-        if 'Manual Examination' in loc_data.keys():
-            wm_elec_ix_manual = wm_elec_ix_manual + [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='wm' and loc_data['label'].str.lower()[ind] not in bad_channels]
-            oob_elec_ix = [ind for ind, data in loc_data['Manual Examination'].str.lower().items() if data=='oob']
+        if 'Manual Examination' in elec_data.keys():
+            wm_elec_ix_manual = wm_elec_ix_manual + [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='wm' and elec_data['label'].str.lower()[ind] not in bad_channels]
+            oob_elec_ix = [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='oob']
         else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-            wm_elec_ix_auto = wm_elec_ix_auto + [ind for ind, data in loc_data['gm'].str.lower().items() if data=='white' and loc_data['label'].str.lower()[ind] not in bad_channels]
-            oob_elec_ix = [ind for ind, data in loc_data['gm'].str.lower().items() if data=='unknown']
+            wm_elec_ix_auto = wm_elec_ix_auto + [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
+            oob_elec_ix = [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
 
         wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
-        all_ix = loc_data.index.values
+        all_ix = elec_data.index.values
         gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix and x not in oob_elec_ix])
 
         cathode_list = []
@@ -169,28 +227,28 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
         for elec_ix in gm_elec_ix:
             # get the electrode location
-            elec_loc = loc_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
-            elec_name = loc_data.loc[elec_ix, 'label'].lower()
+            elec_loc = elec_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
+            elec_name = elec_data.loc[elec_ix, 'label'].lower()
             # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
+            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
             # get the 3 closest wm electrodes
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
-            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==elec_name[0]]
+            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_name[0]]
             # get the variance of the 3 closest wm electrodes
-            wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+            wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
             wm_elec_var = wm_data.var(axis=1)
             # get the index of the lowest variance electrode
             wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
             # get the name of the lowest amplitude electrode
-            wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'label'].lower()
+            wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
             # get the electrode name
             anode_list.append(elec_name)
             cathode_list.append(wm_elec_name)
             
         # Also collect the wm electrodes that are not used for referencing and drop them later
-        drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
-        oob_channels = loc_data.loc[oob_elec_ix, 'label'].str.lower().tolist()
+        drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
+        oob_channels = elec_data.loc[oob_elec_ix, 'label'].str.lower().tolist()
 
         # cathode_list = np.hstack(cathode_list)
         # anode_list = np.hstack(anode_list)
@@ -198,8 +256,8 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         return anode_list, cathode_list, drop_wm_channels, oob_channels
 
     elif site == 'UI':
-        wm_elec_ix = [ind for ind, data in loc_data['region_1'].str.lower().items() if 'white' in data and loc_data['Channel'][ind] not in mne_data.info['bads']]
-        all_ix = loc_data.index.values
+        wm_elec_ix = [ind for ind, data in elec_data['region_1'].str.lower().items() if 'white' in data and elec_data['Channel'][ind] not in mne_data.info['bads']]
+        all_ix = elec_data.index.values
         gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
         wm_elec_ix = np.array(wm_elec_ix)
 
@@ -211,32 +269,32 @@ def wm_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None, ave
         # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
         for elec_ix in gm_elec_ix:
             # get the electrode location
-            elec_loc = loc_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
-            elec_name = loc_data.loc[elec_ix, 'Channel'].lower()
+            elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+            elec_name = elec_data.loc[elec_ix, 'Channel'].lower()
             # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(loc_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values - elec_loc, axis=1)
+            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values - elec_loc, axis=1)
             # get the 3 closest wm electrodes
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
-            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if loc_data.loc[x, 'label'].lower()[0]==loc_data.loc[elec_ix, 'label'].lower()[0]]
+            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
             # get the variance of the 3 closest wm electrodes
-            wm_data = mne_data.copy().pick_channels(loc_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
+            wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
             wm_elec_var = wm_data.var(axis=1)
             # get the index of the lowest variance electrode
             wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
             # get the name of the lowest amplitude electrode
-            wm_elec_name = loc_data.loc[wm_elec_ix_lowest, 'Channel'].lower()
+            wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'Channel'].lower()
             # get the electrode name
             anode_list.append(elec_name)
             cathode_list.append(wm_elec_name)
 
         # Also collect the wm electrodes that are not used for referencing and drop them later
-        drop_wm_channels = [x for x in loc_data.loc[wm_elec_ix, 'Channel'].str.lower() if x not in cathode_list]
+        drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'Channel'].str.lower() if x not in cathode_list]
 
         return anode_list, cathode_list, drop_wm_channels
 
 
-def laplacian_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=None):
+def laplacian_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for laplacian referencing.
 
@@ -248,11 +306,27 @@ def laplacian_ref(mne_data, loc_data, bad_channels, unmatched_seeg=None, site=No
 
     pass
 
-def bipolar_ref(loc_data, bad_channels, unmatched_seeg=None, site=None):
+def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
 
-    TODO: figure out a renaming convention across sites so that this can be generalized.
+    Parameters
+    ----------
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
     """
 
     # helper function to perform sort for bipolar electrodes:
@@ -264,13 +338,13 @@ def bipolar_ref(loc_data, bad_channels, unmatched_seeg=None, site=None):
 
     if site=='MSSM':
 
-        for bundle in loc_data.bundle.unique():
+        for bundle in elec_data.bundle.unique():
             if bundle[0] == 'u':
                 print('this is a microwire, pass')
                 continue         
             # Isolate the electrodes in each bundle 
-            bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-            all_elecs = loc_data.label.tolist()
+            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
+            all_elecs = elec_data.label.tolist()
             # Sort them by number 
             all_elecs.sort(key=num_sort)
             # make sure these are not bad channels 
@@ -283,9 +357,9 @@ def bipolar_ref(loc_data, bad_channels, unmatched_seeg=None, site=None):
 
     elif site=='UI':
 
-        for bundle in loc_data.bundle.unique():
+        for bundle in elec_data.bundle.unique():
             # Isolate the electrodes in each bundle 
-            bundle_df = loc_data[loc_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
+            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
             all_elecs = bundle_df.Channel.tolist()
             # make sure these are not bad channels 
             all_elecs = [x for x in all_elecs if x not in bad_channels]
@@ -306,9 +380,21 @@ def match_elec_names(mne_names, loc_names):
 
     This function matches the MNE channel names to those used in the localization. 
 
-    params:
-        mne_names: list of electrode names in the recording data (mne)
-        loc_names: list of electrode names in the pdf, used for the localization
+    Parameters
+    ----------
+    mne_names : list
+        list of electrode names in the recording data (mne)
+    loc_names : list 
+        list of electrode names in the pdf, used for the localization
+
+    Returns
+    -------
+    new_mne_names : list 
+        revised mne names merged across sources 
+    unmatched_names : list 
+        names that do not match (mostly scalp EEG and misc)
+    unmatched_seeg : list
+        sEEG channels that do not match (should be rare)
     """
     # strip spaces from mne_names and put in lower case
     mne_names = [x.replace(" ", "").lower() for x in mne_names]
@@ -352,7 +438,7 @@ def match_elec_names(mne_names, loc_names):
 
 def detect_bad_elecs(mne_data, sEEG_mapping_dict): 
     """
-    Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the loc_data to find channels out of the brain
+    Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the elec_data to find channels out of the brain
     
     https://www-sciencedirect-com.eresources.mssm.edu/science/article/pii/S016502701930278X
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7472198/
@@ -360,6 +446,18 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
 
     
     Plot these channels for manual verification. 
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    sEEG_mapping_dict : dict 
+        dict of sEEG channels 
+
+    Returns
+    -------
+    bad_channels : list 
+        list of bad channels 
     """
 
     # Get the data
@@ -373,27 +471,12 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     var_chans = np.array([*sEEG_mapping_dict])[var_chans]
     std_chans = np.array([*sEEG_mapping_dict])[std_chans]
 
+    bad_channels = np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
     # 
+    return bad_channels
 
-    return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
-
-def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2): 
+def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
     """
-    Great images of interictal and ictal spiking: 
-    https://pubmed.ncbi.nlm.nih.gov/32007920/
-    
-    https://www.sciencedirect.com/science/article/pii/S1059131119304200
-
-    More on IEDs: https://www.frontiersin.org/articles/10.3389/fnhum.2020.00044/full
-
-    Why removing trials with IEDs might be important for generalizable conclusions about behavior:
-    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3770206/
-    https://academic.oup.com/cercorcomms/article/2/2/tgab019/6179205
-    
-    Especially for low frequencies (sub-gamma) this is important! 
-    "Low-frequency power remained elevated for several seconds following the IED...
-    Low-frequency power was elevated and high-frequency power suppressed in pre-IED epochs compared with non-IED epochs."
-
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
     Method 1: 
@@ -404,6 +487,22 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
     5. Eliminate close IEDs (peaks within 500 ms). 
     6. Eliminate IEDs that are not present on at least 4 electrodes. 
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    peak_thresh : float 
+        the peak threshold in amplitude 
+    closeness_thresh : float 
+        the closeness threshold in time
+    width_thresh : float 
+        the width threshold for IEDs 
+
+    Returns
+    -------
+    IED_samps_dict : dict 
+        dict with every IED index  
 
     """
 
@@ -420,7 +519,7 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
 
     sr = mne_data.info['sfreq']
     min_width = width_thresh * sr
-    across_chan_threshold_samps = 0.1 * sr # This sets a threshold of 100 ms for detecting cross-channel IEDs 
+    across_chan_threshold_samps = closeness_thresh * sr # This sets a threshold for detecting cross-channel IEDs 
 
     # filter data in beta-gamma band
     filtered_data = mne_data.copy().filter(25, 80, n_jobs=-1)
@@ -431,12 +530,12 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
     filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=-1)
 
     # Rectify: 
-    filtered_data._data[<0] = 0
+    filtered_data._data[filtered_data._data<0] = 0
 
     # Zscore
     filtered_data.apply_function(lambda x: zscore(x, axis=-1))
-    IED_samps = {f'{x}':np.nan for x in mne_data.ch_names}
-    IED_times_s = {f'{x}':np.nan for x in mne_data.ch_names}
+    IED_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+    IED_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
 
     if data_type == 'continuous':
         for ch_ in filtered_data.ch_names:
@@ -445,36 +544,39 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
             # Find peaks 
             IED_samps, _ = find_peaks(sig, height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
 
-            IED_samps[ch_] = IED_samps 
+            IED_samps_dict[ch_] = IED_samps 
 
         # aggregate all IEDs
-        all_IEDs = np.sort(np.concatenate(list(IED_samps.values())).ravel())
+        all_IEDs = np.sort(np.concatenate(list(IED_samps_dict.values())).ravel())
 
         # Remove lame IEDs 
         for ch_ in filtered_data.ch_names:
             sig = filtered_data.get_data(picks=[ch_])[0, :]
             # 1. Too wide  
             # Whick IEDs are longer than 200 ms?
-            widths = peak_widths(sig, IED_samps[ch_], rel_height=0.75)
+            widths = peak_widths(sig, IED_samps_dict[ch_], rel_height=0.75)
             wide_IEDs = np.where(widths[0] > min_width)[0]
             # 2. Too small 
             # Which IEDs are below 3 in z-scored unfiltered signal? 
-            small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_samps[ch_]] < 3)[0]
+            small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_samps_dict[ch_]] < 3)[0]
+            local_IEDs = [] 
             # 3. Too local 
             # Which IEDs are not present on enough electrodes? 
             # Logic - aggregate IEDs across all channels as a reference point 
             # Check each channel's IED across aggregate to find ones that are close in time (but are<500 ms so can't be same channel)
-            for IED_ix, indvid_IED in enumerate(IED_samps[ch_]): 
+            for IED_ix, indvid_IED in enumerate(IED_samps_dict[ch_]): 
                 # compute the time (in samples) to all IEDS if the 5 closest aren't all within 100 ms, then reject
                 diff_with_all_IEDs = np.sort(np.abs(indvid_IED - all_IEDs))[0:5]
-                if any(diff_with_all_IEDs>across_chan_threshold_samps): 
+                if any(diff_with_all_IEDs>=across_chan_threshold_samps): 
                     local_IEDs.append(IED_ix)
-            local_IEDs = np.array(local_IEDs)     
+                    # print(diff_with_all_IEDs)
+            local_IEDs = np.array(local_IEDs).astype(int)   
             elim_IEDs = np.unique(np.hstack([small_IEDs, wide_IEDs, local_IEDs]))
-            revised_IED_samps = np.delete(IED_samps[ch_], elim_IEDs)
+            revised_IED_samps = np.delete(IED_samps_dict[ch_], elim_IEDs)
             IED_s = (revised_IED_samps / sr)
-            IED_times_s[ch_] = IED_s         
-        return IED_times_s
+            IED_sec_dict[ch_] = IED_s   
+          
+        return IED_sec_dict
     elif data_type == 'epoch':
         # Detect the IEDs in every event in epoch time
         for ch_ in filtered_data.ch_names:
@@ -484,46 +586,60 @@ def detect_IEDs(mne_data, peak_thresh=3, closeness_thresh=0.5, width_thresh=0.2)
                 IED_samps, _ = find_peaks(sig[event, :], height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
                 # IED_s = (IED_samps / sr)
                 if len(IED_samps) == 0: 
-                    IED_samps = np.nan
+                    IED_samps = np.array([np.nan])
                     # IED_s = np.nan
                 IED_dict[event] = IED_samps
-                
-            IED_samps[ch_] = IED_dict
+            IED_samps_dict[ch_] = IED_dict
         # aggregate all IEDs
-        all_IEDs = np.sort(np.concatenate([list(x.values())[0] for x in list(IED_samps.values())]).ravel())
+        all_IEDs = np.sort(np.concatenate([list(x.values())[0] for x in list(IED_samps_dict.values())]).ravel())
         for ch_ in filtered_data.ch_names:
             sig = filtered_data.get_data(picks=[ch_])[:,0,:]
             for event in np.arange(sig.shape[0]):
-                if len(IED_samps[ch_][event]) > 0: # Make sure there are IEDs here to begin with during this event 
-                    widths = peak_widths(sig[event, :], IED_samps[ch_][event], rel_height=0.75)
+                if all(~np.isnan(IED_samps_dict[ch_][event])): # Make sure there are IEDs here to begin with during this event 
+                    widths = peak_widths(sig[event, :], IED_samps_dict[ch_][event], rel_height=0.75)
                     wide_IEDs = np.where(widths[0] > min_width)[0]
-                    small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[event, 0, IED_samps[ch_][event]] < 3)[0]
-                    for IED_ix, indvid_IED in enumerate(IED_samps[ch_][event]): 
+                    small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[event, 0, IED_samps_dict[ch_][event]] < 3)[0]
+                    local_IEDs = [] 
+                    for IED_ix, indvid_IED in enumerate(IED_samps_dict[ch_][event]): 
                         # compute the time (in samples) to all IEDS if the 5 closest aren't all within 100 ms, then reject
                         diff_with_all_IEDs = np.sort(np.abs(indvid_IED - all_IEDs))[0:5]
-                        if any(diff_with_all_IEDs>across_chan_threshold_samps): 
+                        if any(diff_with_all_IEDs>=across_chan_threshold_samps): 
                             local_IEDs.append(IED_ix)
-                local_IEDs = np.array(local_IEDs) 
-                elim_IEDs = np.unique(np.hstack([small_IEDs, wide_IEDs, local_IEDs]))
-                revised_IED_samps = np.delete(IED_samps[ch_][event], elim_IEDs)
-                IED_samps[ch_][event] = revised_IED_samps
+                    local_IEDs = np.array(local_IEDs).astype(int)
+                    elim_IEDs = np.unique(np.hstack([small_IEDs, wide_IEDs, local_IEDs]))
+                    revised_IED_samps = np.delete(IED_samps_dict[ch_][event], elim_IEDs)
+                    IED_samps_dict[ch_][event] = revised_IED_samps
 
-        return IED_samps
+        return IED_samps_dict
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
+def make_mne(load_path=None, elec_data=None, format='edf'):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
+
+    Parameters
+    ----------
+    load_path : str
+        path to the neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    format : str 
+        how was this data collected? options: ['edf', 'nlx]
+
+    Returns
+    -------
+    mne_data : mne object 
+        mne object
     """
 
     # 1) load the data:
     if format=='edf':
-        edf_file = glob(f'{data_path}/*.edf')[0]
+        edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
     elif format =='nlx': 
-        ncs_files = glob(f'{data_path}/*.ncs')
+        ncs_files = glob(f'{load_path}/*.ncs')
         for chan_path in ncs_files:
             # This is leftover from Iowa - let's see how channels are named in MSSM data
             chan_name = chan_path.split('/')[-1][:-4]
@@ -540,19 +656,13 @@ def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
         info = mne.create_info(ch_name, np.unique(sr), ch_type)
         mne_data = mne.io.RawArray(lfp, info)
     
-    # 2) load the electrode file:
-    loc_data = pd.read_csv(elec_path)
-
-    # Sometimes there's extra columns with no entries: 
-    loc_data = loc_data[loc_data.columns.drop(list(loc_data.filter(regex='Unnamed')))]
-
     if format=='edf':
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
         # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
         
         # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
-        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, loc_data.label)
+        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
         # Rename the mne data according to the localization data
         new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
         mne_data.rename_channels(new_name_dict)
@@ -571,7 +681,7 @@ def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
     mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
     # 4) Save out the photodiode channel separately
-    mne_data.save(f'{save_path}/photodiode.fif', picks='dc1', overwrite=True)
+    mne_data.save(f'{load_path}/photodiode.fif', picks='dc1', overwrite=True)
 
     # 5) Clean up the MNE data 
 
@@ -582,25 +692,40 @@ def make_mne(data_path=None, elec_path=None, save_path=None, format='edf'):
     return mne_data
 
 
-def ref_mne(mne_data, loc_data, method='wm', site='MSSM'):
+def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     """
     Following this step, you can indicate IEDs manually.
+
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne object
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+
+    Returns
+    -------
+    mne_data_reref : mne object 
+        mne object with re-referenced data
     """
-    
-    # Check which electrode names are in the loc but not the mne
-    unmatched_names = list(set(loc_data.label) - set(mne_data.ch_names))
-    # seeg electrodes start with 'r' or 'l' - find the elecs in the mne names which are not in the localization data
-    unmatched_seeg = [x for x in unmatched_names if x[0] in ['r', 'l']]
+
+    # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+    _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
 
     if method=='wm':
         anode_list, cathode_list, drop_wm_channels, oob_channels = wm_ref(mne_data=mne_data, 
-                                                                                       loc_data=loc_data, 
+                                                                                       elec_data=elec_data, 
                                                                                        bad_channels=mne_data.info['bads'], 
                                                                                        unmatched_seeg=unmatched_seeg,
                                                                                        site=site)
     elif method=='bipolar':
         pass
     
+    # Note that, despite the name, the following function lets you manually set what is being subtracted from what:
     mne_data_reref = mne.set_bipolar_reference(mne_data, 
                           anode=anode_list, 
                           cathode=cathode_list,
@@ -616,34 +741,73 @@ def ref_mne(mne_data, loc_data, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(reref_data_path=None, elec_path=None, save_path=None, slope=None, offset=None, behav_times=None, 
-baseline_times=None, baseline_dur=0.5, fixed_baseline=[-1.0, 0],
+def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
+baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
 buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     """
 
     behav_times: dict with format {'event_name': np.array([times])}
     baseline_times: dict with format {'event_name': np.array([times])}
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+
+
+    Parameters
+    ----------
+    load_path : str
+        path to the re-referenced neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    slope : float 
+        slope used for syncing behavioral and neural data 
+    offset : float 
+        offset used for syncing behavioral and neural data 
+    behav_name : str
+        what event are we epoching to? 
+    behav_times : dict 
+        format {'event_name': np.array([times])}
+    baseline_times : dict 
+        format {'event_name': np.array([times])}
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+    baseline_dur : float
+        only to be used if baseline_times is not None 
+    fixed_baseline : tuple 
+        time to use for baselining , only to be used if baseline_times is None 
+    buf_s : float 
+        time to add as buffer in epochs 
+    pre_s : float 
+        time to add before baseline event if baseline_times is not None 
+    post_d : float 
+        time to add after baseline event if baseline_times is not None 
+    downsamp_factor : float 
+        factor by which to downsample the data 
+    IED_args: dict 
+        format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+
+    Returns
+    -------
+    ev_epochs : mne object 
+        mne Epoch object with re-referenced data
     """
     # Load the data 
-    mne_data_reref = mne.io.read_raw_fif(reref_data_path, preload=True)
+    mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
     # Reconstruct the anode list 
     anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
-    # Load the electrodes
-    loc_data = pd.read_csv(elec_path)
-    # Sometimes there's extra columns with no entries: 
-    loc_data = loc_data[loc_data.columns.drop(list(loc_data.filter(regex='Unnamed')))]
+
     # Filter the list 
-    elec_df = loc_data[loc_data.label.str.lower().isin(anode_list)]
+    elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
     elec_df['label'] = mne_data_reref.ch_names
 
     # all behavioral times of interest 
-    beh_ts = [(x*slope + offset) for x in list(behav_times.values())[0]]
+    beh_ts = [(x*slope + offset) for x in behav_times]
 
     # Make events 
     evs = beh_ts
     durs = np.zeros_like(beh_ts).tolist()
-    descriptions = list(behav_times.keys())*len(beh_ts)
+    descriptions = [behav_name]*len(beh_ts)
+
     # Make mne annotations based on these descriptions
     annot = mne.Annotations(onset=evs,
                             duration=durs,
@@ -685,8 +849,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
                                 description=descriptions)
         mne_data_reref.set_annotations(annot)
         events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
-        rm_baseline_epochs = 
-            mne.Epochs(mne_data_reref, 
+        rm_baseline_epochs = mne.Epochs(mne_data_reref, 
             events_from_annot, 
             event_id=event_dict, 
             baseline=None, 
@@ -710,7 +873,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
 
     # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
 
-    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()))
+    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()), index=np.arange(len(evs)))
 
     for ch in list(IED_times_s.keys()):
         for ev, val in IED_times_s[ch].items():
@@ -720,4 +883,5 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     # event_metadata
 
     return ev_epochs
+
 
