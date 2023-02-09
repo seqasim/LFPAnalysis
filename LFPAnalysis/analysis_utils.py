@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import pandas as pd
+import mne
+
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 
@@ -91,7 +94,7 @@ In addition to the amplitude and duration criteria the spectral features of each
   
     """
     sf = signal.info["sfreq"] # get the sampling frequency
-    single_ch = signal._data[1,:] # subset just one channel (WIP purposes)
+    single_ch = signal._data[1,:] # subset just one channel (dev purposes)
     
     # Step 1: band-pass filter from 80 - 120 Hz (ripple band) using a FIR filter
     bandpass_filtered_data = mne.filter.filter_data(single_ch,sf,80,120,method='fir')
@@ -102,29 +105,39 @@ In addition to the amplitude and duration criteria the spectral features of each
     plt.plot(bandpass_filtered_data[1:2048]) # plot the first 2s of data
     # plt.show() - for dev purposes  
     
-    # Step 2: Calculate the root mean square of the band-passed signal
-    rms = np.sqrt((bandpass_filtered_data**2).mean(axis=0))
-    
-    bandpass_filtered_data.shape = (1, bandpass_filtered_data.shape[0]) # format data for smoothing function
-    info = mne.create_info([signal.ch_names[0]],1024) # format data for smoothing function
-    bandpass_filtered_data_raw = mne.io.RawArray(data=bandpass_filtered_data,info = info) # format data for smoothing function
-    
-    # Note: h_freq = 50 because the time interval of 50 Hz is 0.02 s or 20 ms.. ref: https://mne.discourse.group/t/using-a-gaussian-kernel-to-smooth-epoch-data-in-mne/2902/5
-    smoothed_rms_data = bandpass_filtered_data_raw.savgol_filter(h_freq = 50, verbose=None) 
-    smoothed_rms_data = smoothed_rms_data._data # turn into an array 
+    # Step 2: Calculate the root mean square of the band-passed signal and smooth using a 20 ms window
+    column_values = ['signal']
+    df = pd.DataFrame(data = bandpass_filtered_data, columns = column_values)
+    smoothed_data = df['signal'].pow(2).rolling(round(0.02 * 1024),min_periods=1).mean().apply(np.sqrt, raw=True)
 
     # Step 3: mark ripple events [ripple start, ripple end] as periods of RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean 
-    smoothed_rms_mean = np.mean(smoothed_rms_data,axis=1)[0]
-    smoothed_rms_sd = np.std(smoothed_rms_data,axis=1)[0]
+
+    # calculate mean and standard deviation of smoothed rms data
+    smoothed_mean = np.mean(smoothed_data)
+    smoothed_sd = np.std(smoothed_data)
 
     # calculate lower (above 2.5 SD from mean) and upper (lower than 9 SD from mean) cutoffs for marking ripple events 
-    lower_cutoff = smoothed_rms_mean + 2.5 * smoothed_rms_sd
-    upper_cutoff = smoothed_rms_mean + 9 * smoothed_rms_sd
+    lower_cutoff = smoothed_mean + 2.5 * smoothed_sd
+    upper_cutoff = smoothed_mean + 9 * smoothed_sd
 
-    # get the index of ripple events according to lower_cutoff and upper_cutoff
-    ripple_events_index = smoothed_rms_data[np.where((smoothed_rms_data > lower_cutoff) & (smoothed_rms_data < upper_cutoff))]
+    ripple_events_index = np.asarray(np.where((smoothed_data > lower_cutoff) & (smoothed_data < upper_cutoff)))
+
+    # Step 4: detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
+    min_length_ripple_event = 0.038 * sf
+    max_length_ripple_event = 0.5 * sf
     
-    return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq 
+    ripple_events_differences = np.array([0] + np.diff(ripple_events_index[0,:]))
+
+    # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
+    _, idx, counts = np.unique(np.cumsum(1-ripple_events_differences)*ripple_events_differences, return_index=True, return_counts=True)    
+
+    ripple_events_index_correct_time = idx[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))] # index of ripple events that reach criterion
+    ripple_events_length_samples = counts[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))]  # length in samples of ripple events that reach criterion
+    ripple_events_length_seconds = ripple_events_length/1024 # length in seconds of ripple events that reach criterion
+
+    
+    return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq
+
 
 def detect_oscillation_evs(signal, method=None): 
     """
