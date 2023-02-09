@@ -510,7 +510,7 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
     if type(mne_data) == mne.epochs.Epochs:
         data_type = 'epoch'
         n_times = mne_data._data.shape[-1]
-    elif type(mne_data) == mne.io.fiff.raw.Raw: 
+    elif type(mne_data) == mne.io.fif.raw.Raw: 
         data_type = 'continuous'
         n_times = mne_data._data.shape[1]
     else: 
@@ -877,7 +877,11 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
 
     for ch in list(IED_times_s.keys()):
         for ev, val in IED_times_s[ch].items():
-            event_metadata[ch].loc[ev] = val
+            if len(val) > 1:    
+                event_metadata[ch].loc[ev] = val
+            else:
+                if ~np.isnan(val): 
+                    event_metadata[ch].loc[ev] = val
         
     ev_epochs.metadata = event_metadata
     # event_metadata
