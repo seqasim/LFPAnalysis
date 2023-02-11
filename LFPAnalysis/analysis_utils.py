@@ -138,6 +138,196 @@ In addition to the amplitude and duration criteria the spectral features of each
     
     return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq
 
+def FOOOF_continuous(signal):
+    """
+    TODO
+    """
+    pass 
+
+
+def FOOOF_epochs_conditions(epochs, elec_data, tmin=0, tmax=1.5, rois=None, conditions=None, band_dict=None, 
+filepath=None, plot=True, *kwargs):
+    """
+
+    
+
+    Parameters
+    ----------
+    epochs : mne Epochs object 
+        mne object
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    rois : list 
+        list of regions that we care to look into. should at least somewhat correspond to atlas labels of interest
+    conditions : list
+        list of pandas queries that correspond to specific trial conditions to pull for FOOOF 
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    band_dict : dict 
+        frequency bands with corresponding names 
+    *kwargs : dict 
+        FOOOF arguments 
+
+    Returns
+    -------
+    mne_data_reref : mne object 
+        mne object with re-referenced data
+    """
+
+    # Helper functions for computing and analyzing differences between power spectra. 
+    def _compare_exp(fm1, fm2):
+        """Compare exponent values."""
+
+        exp1 = fm1.get_params('aperiodic_params', 'exponent')
+        exp2 = fm2.get_params('aperiodic_params', 'exponent')
+
+        return exp1 - exp2
+
+    def _compare_peak_pw(fm1, fm2, band_def):
+        """Compare the power of detected peaks."""
+
+        pw1 = fooof.analysis.get_band_peak_fm(fm1, band_def)[1]
+        pw2 = fooof.analysis.get_band_peak_fm(fm2, band_def)[1]
+
+        return pw1 - pw2
+
+    def _compare_band_pw(fm1, fm2, band_def):
+        """Compare the power of frequency band ranges."""
+
+        pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1.power_spectrum, band_def)[1])
+        pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2.power_spectrum, band_def)[1])
+
+        return pw1 - pw2
+
+    def _compare_band_pw_flat(fm1, fm2, band_def):
+        """Compare the power of frequency band ranges."""
+
+        pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1._spectrum_flat, band_def)[1])
+        pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2._spectrum_flat, band_def)[1])
+
+        return pw1 - pw2
+
+    shade_cols = ['#e8dc35', '#46b870', '#1882d9', '#a218d9', '#e60026']
+    bands = fooof.bands.Bands(band_dict)
+    all_chan_dfs = [] 
+
+    # select the electrodes in the roi
+    for region in rois: 
+        picks = elec_data[elec_data.YBA_1.str.lower().str.contains(region)].label.tolist()
+        if conditions is None: 
+            pass
+        else: 
+            fooof_groups = {f'{x}': np.nan for x in conditions}
+            for cond in conditions: 
+                # check that this is an appropriate parsing (is it in the metadata?)
+                try:
+                    epochs.metadata.query(cond)
+                except pd.errors.UndefinedVariableError:
+                    raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
+                
+                # create filepath
+                
+                # If the path doesn't exist, make it:
+                if not os.path.exists(file_path): 
+                    os.makedirs(file_path)
+
+                file_name = f'group_{cond}'
+                # Generate save path 
+                save_path = f'{file_path}/{file_name}'
+
+                # compute the multi-taper power spectrum
+                epo_spectrum = epochs[cond].compute_psd(method='multitaper',
+                                                    tmin=tmin,
+                                                    tmax=tmax, 
+                                                    picks=picks)
+
+                psds, freqs = epo_spectrum.get_data(return_freqs=True)
+
+
+                # average across epochs
+                psd_trial_avg = np.average(psds, axis=0) 
+
+                # Initialize a FOOOFGroup object, with desired settings
+                fg = FOOOFGroup(peak_width_limits=kwargs['peak_width_limits'], 
+                                min_peak_height=kwargs['min_peak_height'],
+                                peak_threshold=kwargs['peak_threshold'], 
+                                max_n_peaks=kwargs['max_n_peaks'], 
+                                verbose=False)
+
+                fg.fit(freqs, psd_trial_avg, freq_range)
+
+                # Save the FOOOFGroup for this condition 
+                fooof_groups[cond] = fg
+
+                for chan in range(psd_trial_avg.shape[0]):
+                    file_name = f'{epo_spectrum.ch_names[chan]}_PSD'
+
+                    # Get the FOOOF for individual channel
+                    cond_fits = [fooof_groups[cond].get_fooof(ind=chan, regenerate=True) for parsing in data_parsing]
+
+                    # Have to fit again to get flat spectrum
+                    for i in range(len(cond_fits)):
+                        cond_fits[i].fit()
+
+                    # Create a dataframe to store results 
+                    chan_data_df = pd.DataFrame(columns=['exp_diff', 'peak_pow_diff', 'band_pow_diff', 'band_pow_diff_flat', 'band'])
+
+                    # Compute contrast between conditions
+                    exp_diff = compare_exp(cond_fits[0], cond_fits[1])
+
+                    band_labels = []
+                    peak_pow_diffs = [] 
+                    band_pow_diffs = []
+                    band_pow_diff_flats = []
+
+                    for label, definition in bands:
+                        band_labels.append(label)
+                        peak_pow_diffs.append(compare_peak_pw(cond_fits[0], cond_fits[1], definition))
+                        band_pow_diffs.append(compare_band_pw(cond_fits[0], cond_fits[1], definition))
+                        band_pow_diff_flats.append(compare_band_pw_flat(cond_fits[0], cond_fits[1], definition))
+
+                    chan_data_df['peak_pow_diff'] = peak_pow_diffs
+                    chan_data_df['band_pow_diff'] = band_pow_diffs
+                    chan_data_df['band_pow_diff_flat'] = band_pow_diff_flats
+                    chan_data_df['band'] = band_labels
+                    chan_data_df['exp_diff'] = exp_diff
+                    chan_data_df['channel'] = epo_spectrum.ch_names[chan]
+                    chan_data_df['region'] = region
+
+                    all_chan_dfs.append(chan_data_df)
+
+                    if plot: 
+                        with PdfPages(f'{save_path}.pdf') as pdf:
+                            f, ax = plt.subplots(1, 2, figsize=[18, 6], dpi=300)
+                            # Plot the power spectra differences, representing the 'band-by-band' idea
+                            fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
+                                                                    [x.power_spectrum for x in cond_fits],
+                                                                    log_powers=False, linewidth=3,
+                                                                    shades=bands.definitions, shade_colors=shade_cols,
+                                                                    labels=conditions,
+                                                                    ax=ax[0])
+                            ax[0].set_title(f'{epo_spectrum.ch_names[chan]}', t_settings)
+
+                            # Plot the flattened power spectra differences
+                            fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
+                                                                    [x._spectrum_flat for x in cond_fits],
+                                                                    log_powers=False, linewidth=3,
+                                                                    shades=bands.definitions, shade_colors=shade_cols,
+                                                                    labels=conditions,
+                                                                    ax=ax[1])
+
+                            ax[1].set_title(f'{epo_spectrum.ch_names[chan]} - flattened ')
+
+                            f.tight_layout()
+
+                            pdf.savefig()
+                            plt.close(f)
+
+
+
+    return pd.concat(all_chan_dfs)
+
+
 
 def detect_oscillation_evs(signal, method=None): 
     """
