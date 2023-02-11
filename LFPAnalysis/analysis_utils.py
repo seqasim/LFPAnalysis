@@ -149,7 +149,7 @@ def FOOOF_epochs_conditions(epochs, elec_data, tmin=0, tmax=1.5, rois=None, cond
 filepath=None, plot=True, *kwargs):
     """
 
-    
+    This function is meant to enable easy computation and plotting of FOOOF for the purpose of contrasting experimental conditions over trials. 
 
     Parameters
     ----------
@@ -165,6 +165,10 @@ filepath=None, plot=True, *kwargs):
         how should we reference the data ['wm', 'bipolar']
     band_dict : dict 
         frequency bands with corresponding names 
+    filepath : string
+        filepath for saving plots (or other data if need be)
+    plot : bool 
+        should we or should we not lpo
     *kwargs : dict 
         FOOOF arguments 
 
@@ -215,6 +219,7 @@ filepath=None, plot=True, *kwargs):
     for region in rois: 
         picks = elec_data[elec_data.YBA_1.str.lower().str.contains(region)].label.tolist()
         if conditions is None: 
+            #TODO: implement FOOOF for non-split epochs
             pass
         else: 
             fooof_groups = {f'{x}': np.nan for x in conditions}
@@ -254,11 +259,12 @@ filepath=None, plot=True, *kwargs):
                                 max_n_peaks=kwargs['max_n_peaks'], 
                                 verbose=False)
 
-                fg.fit(freqs, psd_trial_avg, freq_range)
+                fg.fit(freqs, psd_trial_avg, kwargs['freq_range'])
 
                 # Save the FOOOFGroup for this condition 
                 fooof_groups[cond] = fg
 
+                # Go through individual channels
                 for chan in range(psd_trial_avg.shape[0]):
                     file_name = f'{epo_spectrum.ch_names[chan]}_PSD'
 
