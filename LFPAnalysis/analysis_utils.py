@@ -8,6 +8,22 @@ import joblib
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 
+def select_picks_rois(elec_data, roi=None):
+    """
+    Grab specific electrodes that you care about 
+    """
+
+    if isintance(roi, str):
+        picks = elec_data[elec_data.YBA_1.str.lower().str.contains(roi)].label.tolist()
+    elif isinstance(roi, list):
+        # then assume the user wants to group several regions
+        picks = elec_df[elec_df.YBA_1.str.lower().str.contains('|'.join(roi))].label.tolist()
+    else:
+        # Just grab everything 
+        picks = elec_df.label.tolist()
+    
+    return picks 
+
 def lfp_sta(ev_times, signal, sr, pre, post):
     '''
     Compute the STA for a vector of stimuli.
@@ -146,7 +162,7 @@ def FOOOF_continuous(signal):
     pass 
 
 
-def FOOOF_compute_epochs(epochs, elec_data, tmin=0, tmax=1.5, **kwargs):
+def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
     """
 
     This function is meant to enable easy computation of FOOOF. 
@@ -178,54 +194,6 @@ def FOOOF_compute_epochs(epochs, elec_data, tmin=0, tmax=1.5, **kwargs):
         mne object with re-referenced data
     """
 
-    # Move this outside of function
-
-    # # select multiple rois
-    # if isinstance(roi, list): 
-    #     picks = []
-    #     FOOOFGroup_res = []
-    #     for region in rois: 
-    #         filepath = f'{filepath}/region'    
-    #         # If the path doesn't exist, make it:
-    #         if not os.path.exists(file_path): 
-    #             os.makedirs(file_path)
-    #         picks.append(elec_data[elec_data.YBA_1.str.lower().str.contains(region)].label.tolist())
-
-    #         epo_spectrum_list = [epochs.compute_psd(method='multitaper',
-    #                                             tmin=tmin,
-    #                                             tmax=tmax, 
-    #                                             picks=elecs) for elecs in picks]
-
-    #         for epo_spectrum in epo_spectrum_list:
-    #             psds, freqs = epo_spectrum.get_data(return_freqs=True)
-    #             # average across epochs
-    #             psd_trial_avg = np.average(psds, axis=0) 
-    #             # average across epochs
-    #             psd_trial_avg = np.average(psds, axis=0) 
-
-    #             # Initialize a FOOOFGroup object, with desired settings
-    #             fg = FOOOFGroup(peak_width_limits=kwargs['peak_width_limits'], 
-    #                             min_peak_height=kwargs['min_peak_height'],
-    #                             peak_threshold=kwargs['peak_threshold'], 
-    #                             max_n_peaks=kwargs['max_n_peaks'], 
-    #                             verbose=False)
-
-    #             # Fit the FOOOF object 
-    #             fg.fit(freqs, psd_trial_avg, kwargs['freq_range'])
-
-    #             FOOOFGroup_res.append(fg)
-
-    # # select the electrodes in the roi
-    # elif isinstance(roi, str): 
-    #     filepath = f'{filepath}/region'    
-    #     # If the path doesn't exist, make it:
-    #     if not os.path.exists(file_path): 
-    #         os.makedirs(file_path)
-    #     picks = elec_data[elec_data.YBA_1.str.lower().str.contains(region)].label.tolist()
-
-    # elif roi is None: 
-    #     picks = elec_data.label.tolist()
-
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
                                                 tmax=tmax, 
@@ -249,7 +217,7 @@ def FOOOF_compute_epochs(epochs, elec_data, tmin=0, tmax=1.5, **kwargs):
     return FOOOFGroup_res
 
 
-def FOOOF_compare_epochs(epochs_with_metadata, elec_data, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
+def FOOOF_compare_epochs(epochs_with_metadata, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
 file_path=None, plot=True, **kwargs):
     """
     Function for comparing conditions, 
@@ -300,7 +268,7 @@ file_path=None, plot=True, **kwargs):
         except pd.errors.UndefinedVariableError:
             raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
     
-        FOOOFGroup_res = FOOOF_epochs(epochs_with_metadata[conditions], elec_data, tmin=0, tmax=1.5, **kwargs)
+        FOOOFGroup_res = FOOOF_epochs(epochs_with_metadata[conditions], tmin=0, tmax=1.5, **kwargs)
 
         fooof_groups_cond.append(FOOOFGroup_res)
 
