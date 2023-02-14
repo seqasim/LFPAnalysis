@@ -61,9 +61,6 @@ class Subject(object):
         mne_data_reref.save(f'{self.paths['save_paths']}/{self.reref}_ref_ieeg.fif', 
         overwrite=overwrite)
 
-    def 
-
-
     @property
     def photodiode(self): 
         print('Setting photodiode')

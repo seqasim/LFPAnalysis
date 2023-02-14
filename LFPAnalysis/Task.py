@@ -120,3 +120,9 @@ class Task(object):
     
 
         
+
+class MemoryBanditTask(Task):
+    def __init__(self):
+        super(Task, self).__init__() 
+
+        
