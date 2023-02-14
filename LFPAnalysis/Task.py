@@ -61,9 +61,9 @@ class Task(object):
     Step 2 uses these matched pulses for the regression and offset determination!
     
     """
-        neural_blockstart = np.linspace(0, len(self.neural_ts)-window, window)
-        beh_ipi = np.diff(self.beh_ts)
-        neural_ipi = np.diff(self.neural_ts)
+        neural_blockstart = np.linspace(0, len(self._neural_timestamps)-window, window)
+        beh_ipi = np.diff(self._behavioral_timestamps)
+        neural_ipi = np.diff(self._neural_timestamps)
 
         print(f'{len(neural_blockstart)} blocks')
         blockR = [] 
@@ -87,9 +87,9 @@ class Task(object):
         goodblocks = np.where(blockR>thresh)[0]
         for b in goodblocks:
             neural_ix = np.arange(window-1) + neural_blockstart[b]
-            neural_offset.extend(self.neural_ts[neural_ix.astype(int)])
+            neural_offset.extend(self._neural_timestamps[neural_ix.astype(int)])
             beh_ix = np.arange(window-1) + blockBehMatch[b]
-            good_beh_ms.extend(self.beh_ts[beh_ix])
+            good_beh_ms.extend(self._behavioral_timestamps[beh_ix])
 
         print(f'found matches for {len(goodblocks)} of {len(neural_blockstart)} blocks')
 
