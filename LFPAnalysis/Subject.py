@@ -6,7 +6,7 @@ import os
 
 class Subject(object):
     """
-    Each person should be 
+    Each person should be a self-contained object with data properties and functions for getting data. These will feed into the Analysis objects.
     """
     def __init__(self, subj_id=None, task_id=None, base_path='/sc/arion/', reref='wm'):
 
