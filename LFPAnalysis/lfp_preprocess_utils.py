@@ -619,6 +619,8 @@ def make_mne(load_path=None, elec_data=None, format='edf'):
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
 
+    TODO: add a condition to determine whether a notch filter is needed or not. 
+
     Parameters
     ----------
     load_path : str
@@ -746,6 +748,8 @@ baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
 buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     """
 
+    TODO: allow for a dict of pre and post times so they can vary across evs 
+    
     behav_times: dict with format {'event_name': np.array([times])}
     baseline_times: dict with format {'event_name': np.array([times])}
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
