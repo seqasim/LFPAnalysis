@@ -620,7 +620,8 @@ def make_mne(load_path=None, elec_data=None, format='edf'):
     Following this step, you can indicate bad electrodes manually.
 
     TODO: add a condition to determine whether a notch filter is needed or not. 
-
+    also add site specificity 
+    
     Parameters
     ----------
     load_path : str
