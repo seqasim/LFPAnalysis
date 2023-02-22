@@ -642,11 +642,17 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
     """
 
     # OPTIONAL: Set specific channel names that you might need: 
-    eeg_names = kwargs['eeg_names']
-    resp_names = kwargs['resp_names']
-    ekg_names = kwargs['ekg_names']
-    photodiode_name = kwargs['photodiode_name']
-    seeg_names = kwargs['seeg_names']
+    
+    if 'eeg_names' in kwargs:
+        eeg_names = kwargs['eeg_names']
+    if 'resp_names' in kwargs:
+        resp_names = kwargs['resp_names']
+    if 'ekg_names' in kwargs:
+        ekg_names = kwargs['ekg_names']
+    if 'photodiode_name' in kwargs:
+        photodiode_name = kwargs['photodiode_name']
+    if 'seeg_names' in kwargs:
+        seeg_names = kwargs['seeg_names']
 
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
