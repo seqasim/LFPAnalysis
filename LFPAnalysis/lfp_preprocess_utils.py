@@ -614,13 +614,12 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf'):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM'):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
 
-    TODO: add a condition to determine whether a notch filter is needed or not. 
-    also add site specificity 
+    TODO: add site specificity for UC Davis
     
     Parameters
     ----------
@@ -639,27 +638,10 @@ def make_mne(load_path=None, elec_data=None, format='edf'):
 
     # 1) load the data:
     if format=='edf':
+        # This is a big block of data. Have to load first, then split out the sEEG and photodiode downstream. 
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
-    elif format =='nlx': 
-        ncs_files = glob(f'{load_path}/*.ncs')
-        for chan_path in ncs_files:
-            # This is leftover from Iowa - let's see how channels are named in MSSM data
-            chan_name = chan_path.split('/')[-1][:-4]
-            ch_num = int(chan_name[4:])
-            try:
-                fdata = nlx_utils.load_ncs(chan_path)
-            except IndexError: 
-                print(f'No data in channel {chan_name}')
-                continue
-            lfp.append(fdata['data'])
-            sr.append(fdata['sampling_rate'])
-            ch_name.append(str(ch_num))
-            unix_time = fdata['time']
-        info = mne.create_info(ch_name, np.unique(sr), ch_type)
-        mne_data = mne.io.RawArray(lfp, info)
-    
-    if format=='edf':
+        
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
         # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
@@ -670,27 +652,86 @@ def make_mne(load_path=None, elec_data=None, format='edf'):
         new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
         mne_data.rename_channels(new_name_dict)
 
-    right_seeg_names = [i for i in mne_data.ch_names if i.startswith('r')]
-    left_seeg_names = [i for i in mne_data.ch_names if i.startswith('l')]
-    sEEG_mapping_dict = {f'{x}':'seeg' for x in left_seeg_names+right_seeg_names}
+        right_seeg_names = [i for i in mne_data.ch_names if i.startswith('r')]
+        left_seeg_names = [i for i in mne_data.ch_names if i.startswith('l')]
+        sEEG_mapping_dict = {f'{x}':'seeg' for x in left_seeg_names+right_seeg_names}
 
-    mne_data.set_channel_types(sEEG_mapping_dict)
+        mne_data.set_channel_types(sEEG_mapping_dict)
 
+        mne_data.info['line_freq'] = 60
+        # Notch out 60 Hz noise and harmonics 
+        mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
-    # 3) Identify line noise
-    mne_data.info['line_freq'] = 60
+        # Save out the photodiode channel separately
+        mne_data.save(f'{load_path}/photodiode.fif', picks='dc1', overwrite=True)
 
-    # Notch out 60 Hz noise and harmonics 
-    mne_data.notch_filter(freqs=(60, 120, 180, 240))
+        # drop non sEEG channels
+        drop_chans = list(set(mne_data.ch_names)^set(left_seeg_names+right_seeg_names))
+        mne_data.drop_channels(drop_chans)
 
-    # 4) Save out the photodiode channel separately
-    mne_data.save(f'{load_path}/photodiode.fif', picks='dc1', overwrite=True)
+        bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+        mne_data.info['bads'] = bads
 
-    # 5) Clean up the MNE data 
+    elif format =='nlx': 
+        # This is a pre-split data. Have to specifically load the sEEG and photodiode individually.
+        signals = [] 
+        srs = [] 
+        ch_names = [] 
+        if site == 'MSSM': 
+            # per Shawn, MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of real data
+            pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
+            ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
+            if len(ncs_files) == 0: 
+                ncs_files = glob(f'{load_path}/*.ncs')
+                lfp_files = glob(f'{load_path}/[R,L]*.ncs') 
+            else:
+                lfp_files = [x for x in glob(f'{neural_dir}/[R,L]*.ncs') if re.search(pattern, x)]
+        elif site == 'UI':
+            # here, the filenames are not informative. We have to get subject-specific information from the experimenter
+            ncs_files = glob(f'{load_path}/LFP*.ncs')
+        for chan_path in ncs_files:
+            chan_name = chan_path.split('/')[-1].replace('.ncs','')
+            # strip the file type off the end if needed 
+            if '_' in chan_name:
+                chan_name = chan_name.split('_')[0]
+            try:
+                fdata = nlx_utils.load_ncs(chan_path)
+            except IndexError: 
+                print(f'No data in channel {chan_name}')
+                continue
+            signals.append(fdata['data'])
+            srs.append(fdata['sampling_rate'])
+            ch_names.append(chan_name)
+            # unix_time = fdata['time']
 
-    bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+        if np.unique(srs).shape[0] == 1:
+            # all the sampling rates match:
+            info = mne.create_info(ch_names, np.unique(srs))
+            mne_data = mne.io.RawArray(signals, info)
+            mne_data.info['line_freq'] = 60
+            # Notch out 60 Hz noise and harmonics 
+            mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
-    mne_data.info['bads'] = bads
+            bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+            mne_data.info['bads'] = bads
+        else:
+            ## Now we have to account for differing sampling rates. This will only really happen in the case of data where ANALOGUE channels 
+            ## are recorded at a much higher sampling rate, or with micro channels. Toss it all in 'other' for now. 
+            mne_data = {'lfp': np.nan,
+            'other': np.nan}
+            for sr in np.unique(srs):
+                ch_ix = np.where(srs==sr)[0]
+                info = mne.create_info(ch_names[ch_ix], sr)
+                mne_data_temp = mne.io.RawArray(signals[ch_ix], info)
+                mne_data_temp.info['line_freq'] = 60
+                # Notch out 60 Hz noise and harmonics 
+                mne_data_temp.notch_filter(freqs=(60, 120, 180, 240))
+                if sr <= 4000:
+                    bads = detect_bad_elecs(mne_data_temp, sEEG_mapping_dict)
+                    mne_data.info['bads'] = bads
+                    mne_data['lfp'] = mne_data_temp
+                else:
+                    mne_data['other'] = mne_data_temp
 
     return mne_data
 

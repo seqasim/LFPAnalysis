@@ -1,0 +1,97 @@
+Sender: LSF System <lsfadmin@gux01-1>
+Subject: Job 86036447: <jupyter> in cluster <chimera> Exited
+
+Job <jupyter> was submitted from host <li03c03> by user <qasims01> in cluster <chimera> at Tue Feb 21 09:43:41 2023
+Job was executed on host(s) <4*gux01-1>, in queue <private>, as user <qasims01> in cluster <chimera> at Tue Feb 21 09:43:42 2023
+</hpc/users/qasims01> was used as the home directory.
+</hpc/users/qasims01/resources/LFPAnalysis/LFPAnalysis> was used as the working directory.
+Started at Tue Feb 21 09:43:42 2023
+Terminated at Tue Feb 21 12:02:38 2023
+Results reported at Tue Feb 21 12:02:38 2023
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+
+## Auto generated script for jupyter web job.
+
+#BSUB -J jupyter
+#BSUB -n 4
+#BSUB -M 12000
+#BSUB -P acc_guLab
+#BSUB -q private 
+#BSUB -R "rusage[mem=12000] span[hosts=1]"
+#BSUB -W 12:00
+#BSUB -oo jupyter_%J.out
+#BSUB -eo jupyter_%J.err
+
+
+# Set up proxy
+export http_proxy=http://172.28.7.1:3128
+export https_proxy=http://172.28.7.1:3128
+export all_proxy=http://172.28.7.1:3128
+export no_proxy=localhost,*.hpc.mssm.edu,*.chimera.hpc.mssm.edu,172.28.0.0/16
+
+ml purge
+
+ml anaconda3
+ml -python
+source activate LFPAnalysis
+which jupyter
+ml
+
+# remote host li03c03
+remote_host="10.95.46.103"
+
+# set remote port to be 4+last 4 digit of jobid. $LSB_JOBID
+remote_port="4$(echo $LSB_JOBID|cut -c 5-)"
+
+
+local_used_ports=$(netstat -4 -ltn | grep LISTEN | awk '{ print $4 }' | awk -F":" '{ print $2 }' )
+
+for p in {8888..9999}
+do
+	if [[ $local_used_ports != *$p* ]];
+	then
+		echo "Using local port $p"
+		break
+	fi
+done
+
+unset XDG_RUNTIME_DIR
+
+jupyter notebook --no-browser --ip=0.0.0.0 --port=$p &
+
+(... more ...)
+------------------------------------------------------------
+
+TERM_OWNER: job killed by owner.
+Exited with signal termination: 14.
+
+Resource usage summary:
+
+    CPU time :                                   4.00 sec.
+    Max Memory :                                 50 MB
+    Average Memory :                             46.45 MB
+    Total Requested Memory :                     48000.00 MB
+    Delta Memory :                               47950.00 MB
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                5
+    Run time :                                   8336 sec.
+    Turnaround time :                            8337 sec.
+
+The output (if any) follows:
+
+/sc/arion/work/qasims01/test-env/envs/LFPAnalysis/bin/jupyter
+Using local port 8888
+Jupyter Notebook is started on compute node gux01-1, port 8888
+
+
+
+PS:
+
+Read file <jupyter_86036447.err> for stderr output of this job.
+
