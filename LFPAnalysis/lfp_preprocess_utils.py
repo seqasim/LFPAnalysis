@@ -614,7 +614,7 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, **kwargs):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
@@ -630,6 +630,8 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
     site: str
         where was the data collected? options: ['UI', 'MSSM'].
         TODO: add site specificity for UC Davis
+    overwrite: bool 
+        whether to overwrite existing data for this person if it exists 
     kwargs: dict
         dictionary containing lists of different types of channel names 
 
@@ -652,6 +654,8 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
     
     # 1) load the data:
     if format=='edf':
+        # MAKE SURE ALL THE EDF CHANNELS HAVE THE SAME SR! See: https://github.com/mne-tools/mne-python/issues/10635
+
         if not photodiode_name: 
             photodiode_name = 'dc1'
         # EDF data always comes from MSSM AFAIK. Modify this if that changes.
@@ -681,7 +685,7 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
         mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
         # Save out the photodiode channel separately
-        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=True)
+        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
         # drop EEG and EKG channels
         drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
@@ -747,7 +751,28 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
             # all the sampling rates match:
             info = mne.create_info(ch_name, np.unique(srs), ch_type)
             mne_data = mne.io.RawArray(signals, info)
-                    
+        else:
+            ## Now we have to account for differing sampling rates. This will only really happen in the case of data where ANALOGUE channels 
+            ## are recorded at a much higher sampling rate, or with micro channels. Find the lowest sample rate, and downsample everything to that.
+            ## I generally don't like this but it should be OK. Make sure that you identify synchronization times AFTER downsampling the analogue channel, and not before:
+            ## https://gist.github.com/larsoner/01642cb3789992fbca59
+
+            target_sr = np.min(srs)
+            mne_data_resampled = []
+
+            for sr in np.unique(srs):
+                ch_ix = np.where(srs==sr)[0].astype(int)
+                info = mne.create_info([x for ix, x in enumerate(ch_name) if ix in ch_ix], sr, [x for ix, x in enumerate(ch_type) if ix in ch_ix])
+                mne_data_temp = mne.io.RawArray([x for ix, x in enumerate(signals) if ix in ch_ix], info)
+                if sr != target_sr:
+                    # resample down to one sample rate 
+                    mne_data_temp.resample(sfreq=target_sr)
+                    mne_data_resampled.append(mne_data_temp)
+                else: 
+                    mne_data = mne_data_temp
+
+            mne_data.add_channels(mne_data_resampled)
+
             mne_data.set_channel_types(sEEG_mapping_dict)
 
             mne_data.info['line_freq'] = 60
@@ -758,66 +783,27 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
             if not photodiode_name:
                 raise ValueError('no photodiode channel specified')
             else:
-                mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=True)
+                mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
             # Save out the respiration channels separately
-           if resp_names:
-                mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=True)
+            if resp_names:
+                mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
             
             # Save out the EEG channels separately
             if eeg_names: 
-                mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=True)
+                mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
 
             # Save out the EEG channels separately
             if ekg_names:
-                mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=True)
+                mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
             drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
             mne_data.drop_channels(drop_chans)
 
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
-        else:
-            ## Now we have to account for differing sampling rates. This will only really happen in the case of data where ANALOGUE channels 
-            ## are recorded at a much higher sampling rate, or with micro channels. Toss it all in 'other' for now. 
-            mne_data = {'lfp': np.nan,
-            'other': np.nan}
-            for sr in np.unique(srs):
-                ch_ix = np.where(srs==sr)[0].astype(int)
-                info = mne.create_info([x for ix, x in enumerate(ch_name) if ix in ch_ix], sr, [x for ix, x in enumerate(ch_type) if ix in ch_ix])
-                mne_data_temp = mne.io.RawArray([x for ix, x in enumerate(signals) if ix in ch_ix], info)
-                if sr <= 4000:
-                    mne_data_temp.info['line_freq'] = 60
-                    # Notch out 60 Hz noise and harmonics 
-                    mne_data_temp.notch_filter(freqs=(60, 120, 180, 240))
-                    
-                    # Save out the photodiode channel separately
-                    if not photodiode_name:
-                        raise ValueError('no photodiode channel specified')
-                    else:
-                        mne_data_temp.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=True)
 
-                    # Save out the respiration channels separately
-                    if resp_names:
-                        mne_data_temp.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=True)
-                    
-                    # Save out the EEG channels separately
-                    if eeg_names: 
-                        mne_data_temp.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=True)
-
-                    # Save out the EEG channels separately
-                    if ekg_names:
-                        mne_data_temp.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=True)
-
-                    drop_chans = list(set(mne_data_temp.ch_names)^set(seeg_names))
-                    mne_data_temp.drop_channels(drop_chans)
-
-                    bads = detect_bad_elecs(mne_data_temp, sEEG_mapping_dict)
-                    mne_data_temp.info['bads'] = bads
-
-                    mne_data['lfp'] = mne_data_temp
-                else:
-                    mne_data['other'] = mne_data_temp
+            mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     return mne_data
 

@@ -60,7 +60,7 @@ def pulsealign(beh_ts, neural_ts, window=30, thresh=0.99):
 
 def sync_matched_pulses(beh_pulse, neural_pulse):
     """
-    
+    Idea is similar to this: https://github.com/mne-tools/mne-python/blob/main/mne/preprocessing/realign.py#L13-L111
     """
     bfix = beh_pulse[0]
     res = scipy.stats.linregress(beh_pulse-bfix, neural_pulse)
