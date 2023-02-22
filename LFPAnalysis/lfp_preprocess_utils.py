@@ -694,6 +694,8 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
         bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
         mne_data.info['bads'] = bads
 
+        mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
+
     elif format =='nlx': 
         # This is a pre-split data. Have to specifically load the sEEG and photodiode individually.
         signals = [] 
@@ -718,6 +720,8 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
         if not seeg_names: 
             raise ValueError('no seeg channels specified')
         else:
+            # standardize to lower
+            seeg_names = [x.lower() for x in seeg_names]
             sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         for chan_path in ncs_files:
@@ -731,21 +735,30 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
                 print(f'No data in channel {chan_name}')
                 continue
             #  surface eeg
-            if chan_name.lower() in eeg_names:
-                ch_type.append('eeg')
-            elif chan_name.lower() in resp_names:
-                ch_type.append('bio')
-            elif chan_name.lower() in ekg_names: 
-                ch_type.append('ecg')  
-            elif chan_name.lower() in seeg_names:
-                ch_type.append('seeg')  
-            else:
-                print(f'Unidentified data type in {chan_name}')
-                continue
-        
+            if eeg_names:
+                eeg_names = [x.lower() for x in eeg_names]
+                if chan_name.lower() in eeg_names:
+                    ch_type.append('eeg')
+            if resp_names:
+                resp_names = [x.lower() for x in resp_names]
+                if chan_name.lower() in resp_names:
+                    ch_type.append('bio')
+            if ekg_names:
+                ekg_names = [x.lower() for x in ekg_names]
+                if chan_name.lower() in ekg_names: 
+                    ch_type.append('ecg') 
+            if seeg_names: 
+                if chan_name.lower() in seeg_names:
+                    ch_type.append('seeg')  
+                elif chan_name.lower()[0] == 'u':
+                    # microwire data
+                    ch_type.append('seeg')  
             signals.append(fdata['data'])
             srs.append(fdata['sampling_rate'])
             ch_name.append(chan_name)
+            if len(ch_type) < len(ch_name):
+                ch_type.append('misc')
+                print(f'Unidentified data type in {chan_name}')
 
         if np.unique(srs).shape[0] == 1:
             # all the sampling rates match:
@@ -766,18 +779,25 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
                 mne_data_temp = mne.io.RawArray([x for ix, x in enumerate(signals) if ix in ch_ix], info)
                 if sr != target_sr:
                     # resample down to one sample rate 
-                    mne_data_temp.resample(sfreq=target_sr)
+                    mne_data_temp.resample(sfreq=target_sr, npad='auto', n_jobs=-1)
                     mne_data_resampled.append(mne_data_temp)
                 else: 
                     mne_data = mne_data_temp
 
-            mne_data.add_channels(mne_data_resampled)
+            #Because of the resampling, the end timings might not match perfectly:https://github.com/mne-tools/mne-python/issues/8257
+            if mne_data_resampled[0].tmax > mne_data.tmax:
+                mne_data_resampled[0].crop(tmin=0, tmax=mne_data.tmax)
+            elif mne_data_resampled[0].tmax < mne_data.tmax:
+                mne_data.crop(tmin=0, tmax=mne_data_resampled[0].tmax)
 
-            mne_data.set_channel_types(sEEG_mapping_dict)
+            mne_data.add_channels(mne_data_resampled)
 
             mne_data.info['line_freq'] = 60
             # Notch out 60 Hz noise and harmonics 
             mne_data.notch_filter(freqs=(60, 120, 180, 240))
+
+            new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
+            mne_data.rename_channels(new_name_dict)
 
             # Save out the photodiode channel separately
             if not photodiode_name:
@@ -797,7 +817,7 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
             if ekg_names:
                 mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
-            drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
+            drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
             mne_data.drop_channels(drop_chans)
 
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
