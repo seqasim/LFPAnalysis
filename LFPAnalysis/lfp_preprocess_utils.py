@@ -16,7 +16,18 @@ def mean_baseline_time(data, baseline, mode='zscore'):
     """
     Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
     mne doesn't allow baseline period to vary. 
-
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     baseline_mean =  baseline.mean(axis=-1)
@@ -40,15 +51,25 @@ def mean_baseline_time(data, baseline, mode='zscore'):
 
     return baseline_corrected 
 
-def zscore_TFR_average(data, baseline): 
+def zscore_TFR_average(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
     for TFR but when the specific baseline period might change across trials. 
-
     This presumes you're using trial-averaged data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
 
@@ -75,15 +96,25 @@ def zscore_TFR_average(data, baseline):
     
     return baseline_corrected 
 
-def zscore_TFR_across_trials(data, baseline): 
+def zscore_TFR_across_trials(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
     for TFR but when the specific baseline period might change across trials. 
-
     This presumes you're using trial-level data (check dimensions)
     
-    TODO: make this more general to any kind of baselining ('mean', etc. )
+    Parameters
+    ----------
+    data : 2d numpy array
+        original data
+    baseline : 2d numpy array
+        baseline data 
+    mode : str
+        choice of baseline mode
+    Returns
+    -------
+    baseline_corrected : 2d numpy array
+        baselined data 
     """
     
     # Create an array of the mean and standard deviation of the power values across the session
@@ -118,22 +149,39 @@ def zscore_TFR_across_trials(data, baseline):
 def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
-
     (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
     
     Identify all white matter electrodes (based on the electrode names), and make sure they are not bad electrodes (based on the bad channels list).
-
     1. iterate through each electrode, compute distance to all white matter electrodes 
     2. find 3 closest wm electrodes, compute amplitude (rms) 
     3. lowest amplitude electrode = wm reference 
-
     Make sure it's the same hemisphere. 
     
     TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference [separate per hemi]... 
     see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
-
     TODO: this is SLOW; any vectorization to speed it up or parallelization?
-
+    Parameters
+    ----------
+    mne_data : mne object
+        non-referenced data stored in an MNE object 
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+    average : bool 
+        should we construct an average white matter reference instead of a default? 
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
+    drop_wm_channels : list 
+        list of white matter channels which were not used for reference and now serve no purpose 
     """
 
     if site == 'MSSM': 
@@ -239,11 +287,8 @@ def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, av
 def laplacian_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for laplacian referencing.
-
     In this case, the cathode is the average of the surrounding electrodes. If an edge electrode, it's just bipolar. 
-
     From here: https://doi.org/10.1016/j.neuroimage.2018.08.020
-
     """
 
     pass
@@ -251,8 +296,22 @@ def laplacian_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=N
 def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
-
-    TODO: figure out a renaming convention across sites so that this can be generalized.
+    Parameters
+    ----------
+    elec_data : pandas df 
+        dataframe containing the electrode localization information
+    bad_channels : list 
+        bad channels 
+    unmatched_seeg : list 
+        list of channels that were not in the edf file 
+    site : str
+        hospital where the recording took place 
+    Returns
+    -------
+    anode_list : list 
+        list of channels to subtract from
+    cathode_list : list 
+        list of channels to subtract
     """
 
     # helper function to perform sort for bipolar electrodes:
@@ -303,12 +362,21 @@ def match_elec_names(mne_names, loc_names):
     The electrode names read out of the edf file do not always match those 
     in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
     or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'. 
-
     This function matches the MNE channel names to those used in the localization. 
-
-    params:
-        mne_names: list of electrode names in the recording data (mne)
-        loc_names: list of electrode names in the pdf, used for the localization
+    Parameters
+    ----------
+    mne_names : list
+        list of electrode names in the recording data (mne)
+    loc_names : list 
+        list of electrode names in the pdf, used for the localization
+    Returns
+    -------
+    new_mne_names : list 
+        revised mne names merged across sources 
+    unmatched_names : list 
+        names that do not match (mostly scalp EEG and misc)
+    unmatched_seeg : list
+        sEEG channels that do not match (should be rare)
     """
     # strip spaces from mne_names and put in lower case
     mne_names = [x.replace(" ", "").lower() for x in mne_names]
@@ -357,9 +425,18 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     https://www-sciencedirect-com.eresources.mssm.edu/science/article/pii/S016502701930278X
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7472198/
     https://www.biorxiv.org/content/10.1101/2021.05.14.444176v2.full.pdf
-
     
     Plot these channels for manual verification. 
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    sEEG_mapping_dict : dict 
+        dict of sEEG channels 
+    Returns
+    -------
+    bad_channels : list 
+        list of bad channels 
     """
 
     # Get the data
@@ -373,14 +450,13 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     var_chans = np.array([*sEEG_mapping_dict])[var_chans]
     std_chans = np.array([*sEEG_mapping_dict])[std_chans]
 
+    bad_channels = np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
     # 
-
-    return np.unique(kurt_chans.tolist() + var_chans.tolist() + std_chans.tolist()).tolist()
+    return bad_channels
 
 def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
-
     Method 1: 
     1. Bandpass filter in the [25-80] Hz band. 
     2. Rectify. 
@@ -389,14 +465,27 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
     5. Eliminate close IEDs (peaks within 500 ms). 
     6. Eliminate IEDs that are not present on at least 4 electrodes. 
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
-
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne data to check for bad channels 
+    peak_thresh : float 
+        the peak threshold in amplitude 
+    closeness_thresh : float 
+        the closeness threshold in time
+    width_thresh : float 
+        the width threshold for IEDs 
+    Returns
+    -------
+    IED_samps_dict : dict 
+        dict with every IED index  
     """
 
     # What type of data is this? Continuous or epoched? 
     if type(mne_data) == mne.epochs.Epochs:
         data_type = 'epoch'
         n_times = mne_data._data.shape[-1]
-    elif type(mne_data) == mne.io.fiff.raw.Raw: 
+    elif type(mne_data) == mne.io.fif.raw.Raw: 
         data_type = 'continuous'
         n_times = mne_data._data.shape[1]
     else: 
@@ -500,37 +589,55 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, **kwargs):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
-
-    to-do: add site specificity
+    
+    Parameters
+    ----------
+    load_path : str
+        path to the neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    format : str 
+        how was this data collected? options: ['edf', 'nlx]
+    site: str
+        where was the data collected? options: ['UI', 'MSSM'].
+        TODO: add site specificity for UC Davis
+    overwrite: bool 
+        whether to overwrite existing data for this person if it exists 
+    kwargs: dict
+        dictionary containing lists of different types of channel names 
+    Returns
+    -------
+    mne_data : mne object 
+        mne object
     """
 
+    # OPTIONAL: Set specific channel names that you might need: 
+    eeg_names = kwargs['eeg_names']
+    resp_names = kwargs['resp_names']
+    ekg_names = kwargs['ekg_names']
+    photodiode_name = kwargs['photodiode_name']
+    seeg_names = kwargs['seeg_names']
+
+    if site == 'MSSM':
+        if not eeg_names: # If no input, assume the standard EEG montage at MSSM
+            eeg_names = ['fp1', 'f7', 't3', 't5', 'o1', 'f3', 'c3', 'p3', 'fp2', 'f8', 't4', 't6', 'o2', 'f4', 'c4', 'p4', 'fz', 'cz', 'pz']
+    
     # 1) load the data:
     if format=='edf':
+        # MAKE SURE ALL THE EDF CHANNELS HAVE THE SAME SR! See: https://github.com/mne-tools/mne-python/issues/10635
+
+        if not photodiode_name: 
+            photodiode_name = 'dc1'
+        # EDF data always comes from MSSM AFAIK. Modify this if that changes.
+
+        # This is a big block of data. Have to load first, then split out the sEEG and photodiode downstream. 
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
-    elif format =='nlx': 
-        ncs_files = glob(f'{load_path}/*.ncs')
-        for chan_path in ncs_files:
-            # This is leftover from Iowa - let's see how channels are named in MSSM data
-            chan_name = chan_path.split('/')[-1][:-4]
-            ch_num = int(chan_name[4:])
-            try:
-                fdata = nlx_utils.load_ncs(chan_path)
-            except IndexError: 
-                print(f'No data in channel {chan_name}')
-                continue
-            lfp.append(fdata['data'])
-            sr.append(fdata['sampling_rate'])
-            ch_name.append(str(ch_num))
-            unix_time = fdata['time']
-        info = mne.create_info(ch_name, np.unique(sr), ch_type)
-        mne_data = mne.io.RawArray(lfp, info)
-    
-    if format=='edf':
+        
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
         # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
@@ -541,27 +648,156 @@ def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
         new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
         mne_data.rename_channels(new_name_dict)
 
-    right_seeg_names = [i for i in mne_data.ch_names if i.startswith('r')]
-    left_seeg_names = [i for i in mne_data.ch_names if i.startswith('l')]
-    sEEG_mapping_dict = {f'{x}':'seeg' for x in left_seeg_names+right_seeg_names}
+        if not seeg_names:
+            seeg_names = [i for i in mne_data.ch_names if ((i.startswith('l')) | (i.startswith('r')))]
+        sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
-    mne_data.set_channel_types(sEEG_mapping_dict)
+        mne_data.set_channel_types(sEEG_mapping_dict)
 
+        mne_data.info['line_freq'] = 60
+        # Notch out 60 Hz noise and harmonics 
+        mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
-    # 3) Identify line noise
-    mne_data.info['line_freq'] = 60
+        # Save out the photodiode channel separately
+        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
-    # Notch out 60 Hz noise and harmonics 
-    mne_data.notch_filter(freqs=(60, 120, 180, 240))
+        # drop EEG and EKG channels
+        drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
+        mne_data.drop_channels(drop_chans)
 
-    # 4) Save out the photodiode channel separately
-    mne_data.save(f'{load_path}/photodiode.fif', picks='dc1', overwrite=True)
+        bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+        mne_data.info['bads'] = bads
 
-    # 5) Clean up the MNE data 
+        mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
-    bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+    elif format =='nlx': 
+        # This is a pre-split data. Have to specifically load the sEEG and photodiode individually.
+        signals = [] 
+        srs = [] 
+        ch_name = [] 
+        ch_type = []
+        if site == 'MSSM': 
+            # per Shawn, MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of real data
+            pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
+            ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
+            # just in case this changes in the future: 
+            if len(ncs_files) == 0: 
+                ncs_files = glob(f'{load_path}/*.ncs')
+                if not seeg_names:
+                    seeg_names = [x.split('/')[-1].replace('.ncs','') for x in glob(f'{load_path}/[R,L]*.ncs')]
+            else:
+                if not seeg_names:
+                    seeg_names = [x.split('/')[-1].replace('.ncs','').split('_')[0] for x in glob(f'{load_path}/[R,L]*.ncs') if re.search(pattern, x)]
+        elif site == 'UI':
+            # here, the filenames are not informative. We have to get subject-specific information from the experimenter
+            ncs_files = glob(f'{load_path}/LFP*.ncs')
+        if not seeg_names: 
+            raise ValueError('no seeg channels specified')
+        else:
+            # standardize to lower
+            seeg_names = [x.lower() for x in seeg_names]
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
-    mne_data.info['bads'] = bads
+        for chan_path in ncs_files:
+            chan_name = chan_path.split('/')[-1].replace('.ncs','')
+            # strip the file type off the end if needed 
+            if '_' in chan_name:
+                chan_name = chan_name.split('_')[0]
+            try:
+                fdata = nlx_utils.load_ncs(chan_path)
+            except IndexError: 
+                print(f'No data in channel {chan_name}')
+                continue
+            #  surface eeg
+            if eeg_names:
+                eeg_names = [x.lower() for x in eeg_names]
+                if chan_name.lower() in eeg_names:
+                    ch_type.append('eeg')
+            if resp_names:
+                resp_names = [x.lower() for x in resp_names]
+                if chan_name.lower() in resp_names:
+                    ch_type.append('bio')
+            if ekg_names:
+                ekg_names = [x.lower() for x in ekg_names]
+                if chan_name.lower() in ekg_names: 
+                    ch_type.append('ecg') 
+            if seeg_names: 
+                if chan_name.lower() in seeg_names:
+                    ch_type.append('seeg')  
+                elif chan_name.lower()[0] == 'u':
+                    # microwire data
+                    ch_type.append('seeg')  
+            signals.append(fdata['data'])
+            srs.append(fdata['sampling_rate'])
+            ch_name.append(chan_name)
+            if len(ch_type) < len(ch_name):
+                ch_type.append('misc')
+                print(f'Unidentified data type in {chan_name}')
+
+        if np.unique(srs).shape[0] == 1:
+            # all the sampling rates match:
+            info = mne.create_info(ch_name, np.unique(srs), ch_type)
+            mne_data = mne.io.RawArray(signals, info)
+        else:
+            ## Now we have to account for differing sampling rates. This will only really happen in the case of data where ANALOGUE channels 
+            ## are recorded at a much higher sampling rate, or with micro channels. Find the lowest sample rate, and downsample everything to that.
+            ## I generally don't like this but it should be OK. Make sure that you identify synchronization times AFTER downsampling the analogue channel, and not before:
+            ## https://gist.github.com/larsoner/01642cb3789992fbca59
+
+            target_sr = np.min(srs)
+            mne_data_resampled = []
+
+            for sr in np.unique(srs):
+                ch_ix = np.where(srs==sr)[0].astype(int)
+                info = mne.create_info([x for ix, x in enumerate(ch_name) if ix in ch_ix], sr, [x for ix, x in enumerate(ch_type) if ix in ch_ix])
+                mne_data_temp = mne.io.RawArray([x for ix, x in enumerate(signals) if ix in ch_ix], info)
+                if sr != target_sr:
+                    # resample down to one sample rate 
+                    mne_data_temp.resample(sfreq=target_sr, npad='auto', n_jobs=-1)
+                    mne_data_resampled.append(mne_data_temp)
+                else: 
+                    mne_data = mne_data_temp
+
+            #Because of the resampling, the end timings might not match perfectly:https://github.com/mne-tools/mne-python/issues/8257
+            if mne_data_resampled[0].tmax > mne_data.tmax:
+                mne_data_resampled[0].crop(tmin=0, tmax=mne_data.tmax)
+            elif mne_data_resampled[0].tmax < mne_data.tmax:
+                mne_data.crop(tmin=0, tmax=mne_data_resampled[0].tmax)
+
+            mne_data.add_channels(mne_data_resampled)
+
+            mne_data.info['line_freq'] = 60
+            # Notch out 60 Hz noise and harmonics 
+            mne_data.notch_filter(freqs=(60, 120, 180, 240))
+
+            new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
+            mne_data.rename_channels(new_name_dict)
+
+            # Save out the photodiode channel separately
+            if not photodiode_name:
+                raise ValueError('no photodiode channel specified')
+            else:
+                mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
+
+            # Save out the respiration channels separately
+            if resp_names:
+                mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
+            
+            # Save out the EEG channels separately
+            if eeg_names: 
+                mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
+
+            # Save out the EEG channels separately
+            if ekg_names:
+                mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
+
+            drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
+            mne_data.drop_channels(drop_chans)
+
+            bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+            mne_data.info['bads'] = bads
+
+            mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     return mne_data
 
@@ -569,6 +805,20 @@ def make_mne(load_path=None, save_path=None, elec_data=None, format='edf'):
 def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     """
     Following this step, you can indicate IEDs manually.
+    Parameters
+    ----------
+    mne_data : mne object 
+        mne object
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+    Returns
+    -------
+    mne_data_reref : mne object 
+        mne object with re-referenced data
     """
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
@@ -599,15 +849,53 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, save_path=None, elec_data=None, slope=None, offset=None, behav_name=None, 
-behav_times=None, 
-baseline_times=None, baseline_dur=0.5, fixed_baseline=[-1.0, 0],
+def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
+baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
 buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     """
-
+    TODO: allow for a dict of pre and post times so they can vary across evs 
+    
     behav_times: dict with format {'event_name': np.array([times])}
     baseline_times: dict with format {'event_name': np.array([times])}
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+    Parameters
+    ----------
+    load_path : str
+        path to the re-referenced neural data
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
+    slope : float 
+        slope used for syncing behavioral and neural data 
+    offset : float 
+        offset used for syncing behavioral and neural data 
+    behav_name : str
+        what event are we epoching to? 
+    behav_times : dict 
+        format {'event_name': np.array([times])}
+    baseline_times : dict 
+        format {'event_name': np.array([times])}
+    method : str 
+        how should we reference the data ['wm', 'bipolar']
+    site : str 
+        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+    baseline_dur : float
+        only to be used if baseline_times is not None 
+    fixed_baseline : tuple 
+        time to use for baselining , only to be used if baseline_times is None 
+    buf_s : float 
+        time to add as buffer in epochs 
+    pre_s : float 
+        time to add before baseline event if baseline_times is not None 
+    post_d : float 
+        time to add after baseline event if baseline_times is not None 
+    downsamp_factor : float 
+        factor by which to downsample the data 
+    IED_args: dict 
+        format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
+    Returns
+    -------
+    ev_epochs : mne object 
+        mne Epoch object with re-referenced data
     """
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
@@ -695,11 +983,13 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
 
     for ch in list(IED_times_s.keys()):
         for ev, val in IED_times_s[ch].items():
-            event_metadata[ch].loc[ev] = val
+            if len(val) > 1:    
+                event_metadata[ch].loc[ev] = val
+            else:
+                if ~np.isnan(val): 
+                    event_metadata[ch].loc[ev] = val
         
     ev_epochs.metadata = event_metadata
     # event_metadata
 
     return ev_epochs
-
-
