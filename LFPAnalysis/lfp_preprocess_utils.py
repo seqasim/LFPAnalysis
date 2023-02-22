@@ -618,8 +618,6 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
-
-    TODO: add site specificity for UC Davis
     
     Parameters
     ----------
@@ -629,6 +627,11 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', **kwargs
         dataframe with all the electrode localization information
     format : str 
         how was this data collected? options: ['edf', 'nlx]
+    site: str
+        where was the data collected? options: ['UI', 'MSSM'].
+        TODO: add site specificity for UC Davis
+    kwargs: dict
+        dictionary containing lists of different types of channel names 
 
     Returns
     -------
