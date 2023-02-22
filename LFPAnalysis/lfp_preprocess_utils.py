@@ -661,15 +661,26 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
     # 1) load the data:
     if format=='edf':
         # MAKE SURE ALL THE EDF CHANNELS HAVE THE SAME SR! See: https://github.com/mne-tools/mne-python/issues/10635
-
-        if not photodiode_name: 
-            photodiode_name = 'dc1'
         # EDF data always comes from MSSM AFAIK. Modify this if that changes.
 
         # This is a big block of data. Have to load first, then split out the sEEG and photodiode downstream. 
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
-        
+
+        if not photodiode_name:
+            #There's a few possible names for the sync pulse:
+            for x in mne_data.ch_names:
+                if 'photodiode' in x.lower():
+                    photodiode_name = x 
+                elif 'trig' in x.lower(): 
+                    photodiode_name = x 
+                elif 'stim' in x.lower(): 
+                    photodiode_name = x 
+                elif 'sync' in x.lower():
+                    photodiode_name = x 
+                else: 
+                    photodiode_name = 'dc1'
+
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
         # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
