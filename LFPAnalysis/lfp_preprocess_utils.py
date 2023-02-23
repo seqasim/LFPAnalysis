@@ -651,6 +651,9 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne object
     """
 
+    if not photodiode_name:
+        warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
+
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
             eeg_names = ['fp1', 'f7', 't3', 't5', 'o1', 'f3', 'c3', 'p3', 'fp2', 'f8', 't4', 't6', 'o2', 'f4', 'c4', 'p4', 'fz', 'cz', 'pz']
@@ -748,7 +751,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             except IndexError: 
                 print(f'No data in channel {chan_name}')
                 continue
-            #  surface eeg
+            #  scalp eeg
             if eeg_names:
                 eeg_names = [x.lower() for x in eeg_names]
                 if chan_name.lower() in eeg_names:
@@ -808,32 +811,28 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
                 mne_data.crop(tmin=0, tmax=mne_data_resampled[0].tmax)
 
             mne_data.add_channels(mne_data_resampled)
+            print(mne_data.ch_names)
+
+            # Search for photodiode names if need be
+            iteration = 0
+            photodiode_options = ['photodiode', 'trig', 'sync', 'stim', 'analog' , 'dc1', 'dc2']
+            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
+                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                iteration += 1
+                
+            if not photodiode_name:
+                raise ValueError('Could not find a photodiode')
 
             mne_data.info['line_freq'] = 60
             # Notch out 60 Hz noise and harmonics 
             mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
+            # Save out the photodiode channel separately
+            print(f'Saving photodiode data to {load_path}/photodiode.fif')
+            mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
+
             new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
             mne_data.rename_channels(new_name_dict)
-
-            # Save out the photodiode channel separately
-            if not photodiode_name:
-                #There's a few possible names for the sync pulse:
-                warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
-                for x in mne_data.ch_names:
-                    if 'photodiode' in x.lower():
-                        photodiode_name = x 
-                    elif 'trig' in x.lower(): 
-                        photodiode_name = x 
-                    elif 'stim' in x.lower(): 
-                        photodiode_name = x 
-                    elif 'sync' in x.lower():
-                        photodiode_name = x 
-                    else: 
-                        photodiode_name = 'dc1'
-            else:
-                print(f'Saving photodiode data to {load_path}/photodiode.fif')
-                mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
             # Save out the respiration channels separately
             if resp_names:
