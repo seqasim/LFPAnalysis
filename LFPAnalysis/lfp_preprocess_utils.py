@@ -615,8 +615,8 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, 
-eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, return_data=False, 
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
@@ -764,7 +764,10 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
                     ch_type.append('seeg')  
                 elif chan_name.lower()[0] == 'u':
                     # microwire data
-                    ch_type.append('seeg')  
+                    if include_micros==True:
+                        ch_type.append('seeg')  
+                    else: # skip
+                        continue
             signals.append(fdata['data'])
             srs.append(fdata['sampling_rate'])
             ch_name.append(chan_name)
@@ -854,7 +857,8 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
             print(f'Saving LFP data to {load_path}/lfp_data.fif')
             mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
-    return mne_data
+    if return_data==True:
+        return mne_data
 
 
 def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
