@@ -811,7 +811,6 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
                 mne_data.crop(tmin=0, tmax=mne_data_resampled[0].tmax)
 
             mne_data.add_channels(mne_data_resampled)
-            print(mne_data.ch_names)
 
             # Search for photodiode names if need be
             iteration = 0
@@ -851,6 +850,12 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
             drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
             mne_data.drop_channels(drop_chans)
+
+            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+            # Rename the mne data according to the localization data
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            mne_data.rename_channels(new_name_dict)
 
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
