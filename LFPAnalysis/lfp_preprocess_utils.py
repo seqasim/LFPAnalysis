@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import re
 import difflib 
@@ -614,10 +615,17 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, **kwargs):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, return_data=False, 
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
+
+    This function requires users to input the file format of the raw data, and the location the data was recorded for site-specific steps.
+
+    Optionally, users can input the names of special channel types as these might be communicated manually rather than hardcoded into the raw data.
+
+    (On that note, a better idea would be for someone to go back and edit the original data to include informative names...)
     
     Parameters
     ----------
@@ -632,21 +640,16 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
         TODO: add site specificity for UC Davis
     overwrite: bool 
         whether to overwrite existing data for this person if it exists 
-    kwargs: dict
-        dictionary containing lists of different types of channel names 
+    return_data: bool 
+        whether to actually return the data or just save it in the directory 
+    include_micros : bool
+        whether to include the microwire LFP in the LFP data object or not 
 
     Returns
     -------
     mne_data : mne object 
         mne object
     """
-
-    # OPTIONAL: Set specific channel names that you might need: 
-    eeg_names = kwargs['eeg_names']
-    resp_names = kwargs['resp_names']
-    ekg_names = kwargs['ekg_names']
-    photodiode_name = kwargs['photodiode_name']
-    seeg_names = kwargs['seeg_names']
 
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
@@ -655,15 +658,26 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
     # 1) load the data:
     if format=='edf':
         # MAKE SURE ALL THE EDF CHANNELS HAVE THE SAME SR! See: https://github.com/mne-tools/mne-python/issues/10635
-
-        if not photodiode_name: 
-            photodiode_name = 'dc1'
         # EDF data always comes from MSSM AFAIK. Modify this if that changes.
 
         # This is a big block of data. Have to load first, then split out the sEEG and photodiode downstream. 
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
-        
+
+        if not photodiode_name:
+            #There's a few possible names for the sync pulse:
+            for x in mne_data.ch_names:
+                if 'photodiode' in x.lower():
+                    photodiode_name = x 
+                elif 'trig' in x.lower(): 
+                    photodiode_name = x 
+                elif 'stim' in x.lower(): 
+                    photodiode_name = x 
+                elif 'sync' in x.lower():
+                    photodiode_name = x 
+                else: 
+                    photodiode_name = 'dc1'
+
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
         # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
@@ -745,14 +759,17 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
                     ch_type.append('bio')
             if ekg_names:
                 ekg_names = [x.lower() for x in ekg_names]
-                if chan_name.lower() in ekg_names: 
+                if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
                     ch_type.append('ecg') 
             if seeg_names: 
                 if chan_name.lower() in seeg_names:
                     ch_type.append('seeg')  
                 elif chan_name.lower()[0] == 'u':
                     # microwire data
-                    ch_type.append('seeg')  
+                    if include_micros==True:
+                        ch_type.append('seeg')  
+                    else: # skip
+                        continue
             signals.append(fdata['data'])
             srs.append(fdata['sampling_rate'])
             ch_name.append(chan_name)
@@ -801,20 +818,36 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
 
             # Save out the photodiode channel separately
             if not photodiode_name:
-                raise ValueError('no photodiode channel specified')
+                #There's a few possible names for the sync pulse:
+                warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
+                for x in mne_data.ch_names:
+                    if 'photodiode' in x.lower():
+                        photodiode_name = x 
+                    elif 'trig' in x.lower(): 
+                        photodiode_name = x 
+                    elif 'stim' in x.lower(): 
+                        photodiode_name = x 
+                    elif 'sync' in x.lower():
+                        photodiode_name = x 
+                    else: 
+                        photodiode_name = 'dc1'
             else:
+                print(f'Saving photodiode data to {load_path}/photodiode.fif')
                 mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
             # Save out the respiration channels separately
             if resp_names:
+                print(f'Saving respiration data to {load_path}/respiration_data.fif')
                 mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
             
             # Save out the EEG channels separately
             if eeg_names: 
+                print(f'Saving EEG data to {load_path}/scalp_eeg_data.fif')
                 mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
 
             # Save out the EEG channels separately
             if ekg_names:
+                print(f'Saving EKG data to {load_path}/ekg_data.fif')
                 mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
             drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
@@ -823,9 +856,11 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
+            print(f'Saving LFP data to {load_path}/lfp_data.fif')
             mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
-    return mne_data
+    if return_data==True:
+        return mne_data
 
 
 def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
