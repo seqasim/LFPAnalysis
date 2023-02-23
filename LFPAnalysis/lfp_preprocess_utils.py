@@ -750,7 +750,7 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
                     ch_type.append('bio')
             if ekg_names:
                 ekg_names = [x.lower() for x in ekg_names]
-                if chan_name.lower() in ekg_names: 
+                if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
                     ch_type.append('ecg') 
             if seeg_names: 
                 if chan_name.lower() in seeg_names:
