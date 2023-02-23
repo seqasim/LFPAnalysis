@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import re
 import difflib 
@@ -619,6 +620,12 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
+
+    This function requires users to input the file format of the raw data, and the location the data was recorded for site-specific steps.
+
+    Optionally, users can input the names of special channel types as these might be communicated manually rather than hardcoded into the raw data.
+
+    (On that note, a better idea would be for someone to go back and edit the original data to include informative names...)
     
     Parameters
     ----------
@@ -806,20 +813,36 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
 
             # Save out the photodiode channel separately
             if not photodiode_name:
-                raise ValueError('no photodiode channel specified')
+                #There's a few possible names for the sync pulse:
+                warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
+                for x in mne_data.ch_names:
+                    if 'photodiode' in x.lower():
+                        photodiode_name = x 
+                    elif 'trig' in x.lower(): 
+                        photodiode_name = x 
+                    elif 'stim' in x.lower(): 
+                        photodiode_name = x 
+                    elif 'sync' in x.lower():
+                        photodiode_name = x 
+                    else: 
+                        photodiode_name = 'dc1'
             else:
+                print(f'Saving photodiode data to {load_path}/photodiode.fif')
                 mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
             # Save out the respiration channels separately
             if resp_names:
+                print(f'Saving respiration data to {load_path}/respiration_data.fif')
                 mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
             
             # Save out the EEG channels separately
             if eeg_names: 
+                print(f'Saving EEG data to {load_path}/scalp_eeg_data.fif')
                 mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
 
             # Save out the EEG channels separately
             if ekg_names:
+                print(f'Saving EKG data to {load_path}/ekg_data.fif')
                 mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
             drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
@@ -828,6 +851,7 @@ eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_name
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
+            print(f'Saving LFP data to {load_path}/lfp_data.fif')
             mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     return mne_data
