@@ -734,12 +734,12 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
+        
         if not seeg_names: 
             raise ValueError('no seeg channels specified')
         else:
             # standardize to lower
             seeg_names = [x.lower() for x in seeg_names]
-            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         for chan_path in ncs_files:
             chan_name = chan_path.split('/')[-1].replace('.ncs','')
@@ -856,6 +856,9 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             # Rename the mne data according to the localization data
             new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
             mne_data.rename_channels(new_name_dict)
+
+            seeg_names = new_mne_names
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
