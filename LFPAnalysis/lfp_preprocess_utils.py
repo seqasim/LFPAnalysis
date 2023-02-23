@@ -614,7 +614,8 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, **kwargs):
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, 
+eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
@@ -640,19 +641,6 @@ def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrit
     mne_data : mne object 
         mne object
     """
-
-    # OPTIONAL: Set specific channel names that you might need: 
-    
-    if 'eeg_names' in kwargs:
-        eeg_names = kwargs['eeg_names']
-    if 'resp_names' in kwargs:
-        resp_names = kwargs['resp_names']
-    if 'ekg_names' in kwargs:
-        ekg_names = kwargs['ekg_names']
-    if 'photodiode_name' in kwargs:
-        photodiode_name = kwargs['photodiode_name']
-    if 'seeg_names' in kwargs:
-        seeg_names = kwargs['seeg_names']
 
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
