@@ -640,8 +640,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         TODO: add site specificity for UC Davis
     overwrite: bool 
         whether to overwrite existing data for this person if it exists 
-    kwargs: dict
-        dictionary containing lists of different types of channel names 
+    return_data: bool 
+        whether to actually return the data or just save it in the directory 
+    include_micros : bool
+        whether to include the microwire LFP in the LFP data object or not 
 
     Returns
     -------
