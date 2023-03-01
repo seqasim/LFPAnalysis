@@ -1,3 +1,2 @@
-*.egg-info
-data
-.DS_Store
+scripts/.DS_Store
+LFPAnalysis/.DS_Store
