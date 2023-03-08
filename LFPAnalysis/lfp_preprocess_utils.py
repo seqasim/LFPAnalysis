@@ -672,6 +672,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             for x in mne_data.ch_names:
                 if 'photodiode' in x.lower():
                     photodiode_name = x 
+                elif 'research' in x.lower():
+                    photodiode_name = x
                 elif 'trig' in x.lower(): 
                     photodiode_name = x 
                 elif 'stim' in x.lower(): 
