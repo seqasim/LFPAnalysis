@@ -331,6 +331,10 @@ def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
         list of channels to subtract
     """
 
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
     # helper function to perform sort for bipolar electrodes:
     def num_sort(string):
         return list(map(int, re.findall(r'\d+', string)))[0]
@@ -685,6 +689,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne object
     """
 
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
     if not photodiode_name:
         warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
 
@@ -932,6 +940,10 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     mne_data_reref : mne object 
         mne object with re-referenced data
     """
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
     _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
