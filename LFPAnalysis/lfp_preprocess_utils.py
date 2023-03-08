@@ -668,20 +668,29 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
 
         if not photodiode_name:
-            #There's a few possible names for the sync pulse:
-            for x in mne_data.ch_names:
-                if 'photodiode' in x.lower():
-                    photodiode_name = x 
-                elif 'research' in x.lower():
-                    photodiode_name = x
-                elif 'trig' in x.lower(): 
-                    photodiode_name = x 
-                elif 'stim' in x.lower(): 
-                    photodiode_name = x 
-                elif 'sync' in x.lower():
-                    photodiode_name = x 
-                else: 
-                    photodiode_name = 'dc1'
+            # Search for photodiode names if need be
+            iteration = 0
+            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
+                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                iteration += 1
+            # #There's a few possible names for the sync pulse:
+            # for x in mne_data.ch_names:
+            #     if 'photodiode' in x.lower():
+            #         photodiode_name = x 
+            #     elif 'research' in x.lower():
+            #         photodiode_name = x
+            #     elif 'trig' in x.lower(): 
+            #         photodiode_name = x 
+            #     elif 'stim' in x.lower(): 
+            #         photodiode_name = x 
+            #     elif 'sync' in x.lower():
+            #         photodiode_name = x 
+            #     else: 
+            #         photodiode_name = 'dc1'
+
+        # Save out the photodiode channel separately
+        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
@@ -702,9 +711,6 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
         mne_data.notch_filter(freqs=(60, 120, 180, 240))
-
-        # Save out the photodiode channel separately
-        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
         # drop EEG and EKG channels
         drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
@@ -816,7 +822,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
             # Search for photodiode names if need be
             iteration = 0
-            photodiode_options = ['photodiode', 'trig', 'sync', 'stim', 'analog' , 'dc1', 'dc2']
+            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
             while (not photodiode_name) & (iteration<len(photodiode_options)-1):
                 photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
                 iteration += 1
@@ -973,6 +979,11 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     ev_epochs : mne object 
         mne Epoch object with re-referenced data
     """
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
     # Reconstruct the anode list 
