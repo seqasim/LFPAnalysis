@@ -419,12 +419,12 @@ def match_elec_names(mne_names, loc_names, method='levenshtein'):
             all_lev_ratios = [(x, lev.ratio(elec, x)) for x in mne_names]
             match = sorted(all_lev_ratios, key=lambda x: x[1])[-1] # Get the tuples back sorted by highest lev ratio, and pick the first tuple
             match_name = match[0] # Get the actual matched name back 
-            # Make sure the string length matches 
-            ix = -1
-            while len(elec) != len(match_name):
-                ix -= 1
-                match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
-                match_name = match[0]
+            # # Make sure the string length matches 
+            # ix = -1
+            # while len(elec) != len(match_name):
+            #     ix -= 1
+            #     match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+            #     match_name = match[0]
             # Make sure this wasn't incorrectly matched to a similar named channel on the same probe with a different NUMBER
             ix = -1
             while int(list(filter(str.isdigit, elec))[0])  != int(list(filter(str.isdigit, match_name))[0]): 
