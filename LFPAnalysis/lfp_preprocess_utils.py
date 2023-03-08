@@ -11,6 +11,7 @@ from LFPAnalysis import nlx_utils, lfp_preprocess_utils
 import pandas as pd
 from mne.filter import next_fast_len
 from scipy.signal import hilbert, find_peaks, peak_widths
+import Levenshtein as lev
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     
@@ -373,11 +374,11 @@ def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
     return anode_list, cathode_list
 
 
-def match_elec_names(mne_names, loc_names):
+def match_elec_names(mne_names, loc_names, method='levenshtein'):
     """
     The electrode names read out of the edf file do not always match those 
     in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
-    or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'. 
+    or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I', or between 'R' and 'P'... 
 
     This function matches the MNE channel names to those used in the localization. 
 
@@ -407,31 +408,64 @@ def match_elec_names(mne_names, loc_names):
     # Check which electrode names are in the loc but not the mne
     unmatched_names = list(set(loc_names) - set(mne_names))
 
-    # seeg electrodes start with 'r' or 'l' - find the elecs in the mne names which are not in the localization data
+    # # macro electrodes start with 'r' or 'l' - find the macro elecs in the mne names which are not in the localization data
     unmatched_seeg = [x for x in unmatched_names if x[0] in ['r', 'l']]
 
-    # use string matching logic to try and determine if they are just misspelled (often i's and l's are mixed up)
-    # (this is a bit of a hack, but should work for the most part)
-    cutoff=0.8
     matched_elecs = []
-    for elec in unmatched_seeg:
-        # find the closest matches in each list. 
-        match = difflib.get_close_matches(elec, mne_names, n=2, cutoff=cutoff)
-        # if this fails, iteratively lower the cutoff until it works (to a point):
-        while (len(match) == 0) & (cutoff >= 0.6):
-            cutoff -= 0.05
+    replaced_elec_names = []
+    cutoff=0.49
+    if method=='levenshtein':
+        for elec in unmatched_seeg:
+            all_lev_ratios = [(x, lev.ratio(elec, x)) for x in mne_names]
+            match = sorted(all_lev_ratios, key=lambda x: x[1])[-1] # Get the tuples back sorted by highest lev ratio, and pick the first tuple
+            match_name = match[0] # Get the actual matched name back 
+            # # Make sure the string length matches 
+            # ix = -1
+            # while len(elec) != len(match_name):
+            #     ix -= 1
+            #     match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+            #     match_name = match[0]
+            # Make sure this wasn't incorrectly matched to a similar named channel on the same probe with a different NUMBER
+            ix = -1
+            while int(list(filter(str.isdigit, elec))[0])  != int(list(filter(str.isdigit, match_name))[0]): 
+                ix -= 1
+                match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                match_name = match[0]
+            # Make sure we aren't replacing a legit channel name: 
+            ix = -1
+            while match_name in list(loc_names):
+                ix -= 1
+                match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                match_name = match[0]
+            if match[1] < cutoff: 
+                print(f"Could not find a match for {elec}.")
+            else: 
+                # agree on one name: the localization name 
+                new_mne_names[mne_names.index(match[0])] = elec
+                replaced_elec_names.append(match[0])
+                matched_elecs.append(elec)
+    else:
+        # use string matching logic to try and determine if they are just misspelled (often i's and l's are mixed up)
+        # (this is a bit of a hack, but should work for the most part)
+
+        for elec in unmatched_seeg:
+            # find the closest matches in each list. 
             match = difflib.get_close_matches(elec, mne_names, n=2, cutoff=cutoff)
-        if len(match) > 1: # pick the match with the correct hemisphere
-            match = [x for x in match if x.startswith(elec[0])]
-        if len(match) > 1: # if both are correct, pick the one with the correct #
-            match = [x for x in match if x.endswith(elec[-1])]
-        if len(match)>0:   
-            # agree on one name: the localization name 
-            new_mne_names[mne_names.index(match[0])] = elec
-            matched_elecs.append(elec)
-        else:
-            print(f"Could not find a match for {elec}.")
-    # drop the matched electrode from the unmatched lists
+            # if this fails, iteratively lower the cutoff until it works (to a point):
+            while (len(match) == 0) & (cutoff >= 0.6):
+                cutoff -= 0.05
+                match = difflib.get_close_matches(elec, mne_names, n=2, cutoff=cutoff)
+            if len(match) > 1: # pick the match with the correct hemisphere
+                match = [x for x in match if x.startswith(elec[0])]
+            if len(match) > 1: # if both are correct, pick the one with the correct #
+                match = [x for x in match if x.endswith(elec[-1])]
+            if len(match)>0:   
+                # agree on one name: the localization name 
+                new_mne_names[mne_names.index(match[0])] = elec
+                matched_elecs.append(elec)
+            else:
+                print(f"Could not find a match for {elec}.")
+        # drop the matched electrode from the unmatched lists
     unmatched_seeg = [i for i in unmatched_seeg if i not in matched_elecs]
     unmatched_names = [i for i in unmatched_names if i not in matched_elecs] # this should mostly be EEG and misc 
 
@@ -651,6 +685,9 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne object
     """
 
+    if not photodiode_name:
+        warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
+
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
             eeg_names = ['fp1', 'f7', 't3', 't5', 'o1', 'f3', 'c3', 'p3', 'fp2', 'f8', 't4', 't6', 'o2', 'f4', 'c4', 'p4', 'fz', 'cz', 'pz']
@@ -665,18 +702,29 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
 
         if not photodiode_name:
-            #There's a few possible names for the sync pulse:
-            for x in mne_data.ch_names:
-                if 'photodiode' in x.lower():
-                    photodiode_name = x 
-                elif 'trig' in x.lower(): 
-                    photodiode_name = x 
-                elif 'stim' in x.lower(): 
-                    photodiode_name = x 
-                elif 'sync' in x.lower():
-                    photodiode_name = x 
-                else: 
-                    photodiode_name = 'dc1'
+            # Search for photodiode names if need be
+            iteration = 0
+            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
+                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                iteration += 1
+            # #There's a few possible names for the sync pulse:
+            # for x in mne_data.ch_names:
+            #     if 'photodiode' in x.lower():
+            #         photodiode_name = x 
+            #     elif 'research' in x.lower():
+            #         photodiode_name = x
+            #     elif 'trig' in x.lower(): 
+            #         photodiode_name = x 
+            #     elif 'stim' in x.lower(): 
+            #         photodiode_name = x 
+            #     elif 'sync' in x.lower():
+            #         photodiode_name = x 
+            #     else: 
+            #         photodiode_name = 'dc1'
+
+        # Save out the photodiode channel separately
+        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
@@ -697,9 +745,6 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
         mne_data.notch_filter(freqs=(60, 120, 180, 240))
-
-        # Save out the photodiode channel separately
-        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
         # drop EEG and EKG channels
         drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
@@ -731,12 +776,12 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
+        
         if not seeg_names: 
             raise ValueError('no seeg channels specified')
         else:
             # standardize to lower
             seeg_names = [x.lower() for x in seeg_names]
-            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         for chan_path in ncs_files:
             chan_name = chan_path.split('/')[-1].replace('.ncs','')
@@ -748,7 +793,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             except IndexError: 
                 print(f'No data in channel {chan_name}')
                 continue
-            #  surface eeg
+            #  scalp eeg
             if eeg_names:
                 eeg_names = [x.lower() for x in eeg_names]
                 if chan_name.lower() in eeg_names:
@@ -809,31 +854,26 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
             mne_data.add_channels(mne_data_resampled)
 
+            # Search for photodiode names if need be
+            iteration = 0
+            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
+                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                iteration += 1
+                
+            if not photodiode_name:
+                raise ValueError('Could not find a photodiode')
+
             mne_data.info['line_freq'] = 60
             # Notch out 60 Hz noise and harmonics 
             mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
+            # Save out the photodiode channel separately
+            print(f'Saving photodiode data to {load_path}/photodiode.fif')
+            mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
+
             new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
             mne_data.rename_channels(new_name_dict)
-
-            # Save out the photodiode channel separately
-            if not photodiode_name:
-                #There's a few possible names for the sync pulse:
-                warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
-                for x in mne_data.ch_names:
-                    if 'photodiode' in x.lower():
-                        photodiode_name = x 
-                    elif 'trig' in x.lower(): 
-                        photodiode_name = x 
-                    elif 'stim' in x.lower(): 
-                        photodiode_name = x 
-                    elif 'sync' in x.lower():
-                        photodiode_name = x 
-                    else: 
-                        photodiode_name = 'dc1'
-            else:
-                print(f'Saving photodiode data to {load_path}/photodiode.fif')
-                mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
 
             # Save out the respiration channels separately
             if resp_names:
@@ -852,6 +892,15 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
             drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
             mne_data.drop_channels(drop_chans)
+
+            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+            # Rename the mne data according to the localization data
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            mne_data.rename_channels(new_name_dict)
+
+            seeg_names = new_mne_names
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
@@ -964,6 +1013,11 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     ev_epochs : mne object 
         mne Epoch object with re-referenced data
     """
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
     # Reconstruct the anode list 
