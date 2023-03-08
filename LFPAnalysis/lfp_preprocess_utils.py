@@ -653,7 +653,7 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, return_data=False, 
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
@@ -761,6 +761,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
         mne_data.info['bads'] = bads
 
+        # Resample
+        if resample_sr is not None: 
+            mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
+            
         mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     elif format =='nlx': 
@@ -913,6 +917,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
+            if resample_sr is not None: 
+                mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
             print(f'Saving LFP data to {load_path}/lfp_data.fif')
             mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
