@@ -745,7 +745,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data.rename_channels(new_name_dict)
 
         if not seeg_names:
-            seeg_names = [i for i in mne_data.ch_names if ((i.startswith('l')) | (i.startswith('r')))]
+            seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
         sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         mne_data.set_channel_types(sEEG_mapping_dict)
@@ -981,7 +981,7 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
 
 def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
 baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
-buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
+buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
     """
 
     TODO: allow for a dict of pre and post times so they can vary across evs 
@@ -1109,7 +1109,8 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
         ev_epochs._data = lfp_preprocess_utils.mean_baseline_time(ev_epochs._data, time_baseline, mode='mean')
 
     # Filter and downsample the epochs 
-    ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
+    if downsamp_factor is not None:
+        ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
 
     IED_times_s = lfp_preprocess_utils.detect_IEDs(ev_epochs, 
                                                peak_thresh=IED_args['peak_thresh'], 

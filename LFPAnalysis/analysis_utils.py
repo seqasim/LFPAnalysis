@@ -5,6 +5,10 @@ import pandas as pd
 import mne
 import pickle 
 import joblib
+import fooof
+from fooof import FOOOFGroup
+from matplotlib.backends.backend_pdf import PdfPages
+import os
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 
@@ -13,7 +17,7 @@ def select_picks_rois(elec_data, roi=None):
     Grab specific electrodes that you care about 
     """
 
-    if isintance(roi, str):
+    if isinstance(roi, str):
         picks = elec_data[elec_data.YBA_1.str.lower().str.contains(roi)].label.tolist()
     elif isinstance(roi, list):
         # then assume the user wants to group several regions
@@ -211,7 +215,7 @@ def FOOOF_continuous(signal):
     pass 
 
 
-def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
+def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, picks=None, **kwargs):
     """
 
     This function is meant to enable easy computation of FOOOF. 
@@ -245,8 +249,7 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
-                                                tmax=tmax, 
-                                                picks=picks)
+                                                tmax=tmax)
                                                 
     psds, freqs = epo_spectrum.get_data(return_freqs=True)
             
@@ -272,6 +275,11 @@ file_path=None, plot=True, **kwargs):
     Function for comparing conditions, 
     """
     # Helper functions for computing and analyzing differences between power spectra. 
+
+    t_settings = {'fontsize' : 24, 'fontweight' : 'bold'}
+    # If the path doesn't exist, make it:
+    if not os.path.exists(file_path): 
+        os.makedirs(file_path)
 
     def _compare_exp(fm1, fm2):
         """Compare exponent values."""
@@ -317,15 +325,15 @@ file_path=None, plot=True, **kwargs):
         except pd.errors.UndefinedVariableError:
             raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
     
-        FOOOFGroup_res = FOOOF_epochs(epochs_with_metadata[conditions], tmin=0, tmax=1.5, **kwargs)
+        FOOOFGroup_res = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, **kwargs)
 
-        fooof_groups_cond.append(FOOOFGroup_res)
+        fooof_groups_cond[cond] = FOOOFGroup_res
 
     # Go through individual channels
-    for chan in len(epochs_with_metadata.ch_names):
+    for chan in range(len(epochs_with_metadata.ch_names)):
         file_name = f'{epochs_with_metadata.ch_names[chan]}_PSD'
 
-        cond_fits = [fooof_groups[cond].get_fooof(ind=chan, regenerate=True) for cond in conditions]
+        cond_fits = [fooof_groups_cond[cond].get_fooof(ind=chan, regenerate=True) for cond in conditions]
         for i in range(len(cond_fits)):
             cond_fits[i].fit()
 
@@ -352,7 +360,7 @@ file_path=None, plot=True, **kwargs):
         chan_data_df['band'] = band_labels
         chan_data_df['exp_diff'] = exp_diff
         chan_data_df['channel'] = epochs_with_metadata.ch_names[chan]
-        chan_data_df['region'] = region
+        chan_data_df['region'] = epochs_with_metadata.metadata.region.unique()[0]
 
         all_chan_dfs.append(chan_data_df)
 
