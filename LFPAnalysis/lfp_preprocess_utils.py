@@ -331,6 +331,10 @@ def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
         list of channels to subtract
     """
 
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
     # helper function to perform sort for bipolar electrodes:
     def num_sort(string):
         return list(map(int, re.findall(r'\d+', string)))[0]
@@ -649,7 +653,7 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', overwrite=True, return_data=False, 
+def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
@@ -684,6 +688,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
     mne_data : mne object 
         mne object
     """
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
 
     if not photodiode_name:
         warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
@@ -737,7 +745,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne_data.rename_channels(new_name_dict)
 
         if not seeg_names:
-            seeg_names = [i for i in mne_data.ch_names if ((i.startswith('l')) | (i.startswith('r')))]
+            seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
         sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         mne_data.set_channel_types(sEEG_mapping_dict)
@@ -753,6 +761,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
         mne_data.info['bads'] = bads
 
+        # Resample
+        if resample_sr is not None: 
+            mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
+            
         mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     elif format =='nlx': 
@@ -905,6 +917,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
+            if resample_sr is not None: 
+                mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
             print(f'Saving LFP data to {load_path}/lfp_data.fif')
             mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
@@ -932,6 +946,10 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     mne_data_reref : mne object 
         mne object with re-referenced data
     """
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
     _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
@@ -963,7 +981,7 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
 
 def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
 baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
-buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
+buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
     """
 
     TODO: allow for a dict of pre and post times so they can vary across evs 
@@ -1042,18 +1060,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
     mne_data_reref.set_annotations(annot)
     events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
 
-    if baseline_times==None: 
-        # Then baseline according to fixed baseline
-        ev_epochs = mne.Epochs(mne_data_reref, 
-                    events_from_annot, 
-                    event_id=event_dict, 
-                    baseline=fixed_baseline, 
-                    tmin=pre_s - buf_s, 
-                    tmax=post_s + buf_s, 
-                    reject=None, 
-                    reject_by_annotation=False,
-                    preload=True)
-    else: 
+    if baseline_times is not None: 
         ev_epochs = mne.Epochs(mne_data_reref, 
             events_from_annot, 
             event_id=event_dict, 
@@ -1069,7 +1076,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
         # Make events 
         evs = baseline_ts
         durs = np.zeros_like(baseline_ts).tolist()
-        descriptions = list(baseline_times.keys())*len(baseline_ts)
+        descriptions = ['baseline']*len(baseline_ts)
         # Make mne annotations based on these descriptions
         annot = mne.Annotations(onset=evs,
                                 duration=durs,
@@ -1080,8 +1087,8 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
             events_from_annot, 
             event_id=event_dict, 
             baseline=None, 
-            tmin=-buf, 
-            tmax=baseline_dur+buf, 
+            tmin=-buf_s, 
+            tmax=baseline_dur+buf_s, 
             reject=None, 
             preload=True)
 
@@ -1089,9 +1096,22 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=2, IED_args=None):
         time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
         # Subtract the mean of the baseline data from our data 
         ev_epochs._data = lfp_preprocess_utils.mean_baseline_time(ev_epochs._data, time_baseline, mode='mean')
+    else: 
+        # Then baseline according to fixed baseline
+        ev_epochs = mne.Epochs(mne_data_reref, 
+                    events_from_annot, 
+                    event_id=event_dict, 
+                    baseline=fixed_baseline, 
+                    tmin=pre_s - buf_s, 
+                    tmax=post_s + buf_s, 
+                    reject=None, 
+                    reject_by_annotation=False,
+                    preload=True)
+        
 
     # Filter and downsample the epochs 
-    ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
+    if downsamp_factor is not None:
+        ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
 
     IED_times_s = lfp_preprocess_utils.detect_IEDs(ev_epochs, 
                                                peak_thresh=IED_args['peak_thresh'], 

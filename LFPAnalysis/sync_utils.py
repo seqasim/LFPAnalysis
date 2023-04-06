@@ -18,45 +18,73 @@ def moving_average(a, n=11) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def pulsealign(beh_ts, neural_ts, window=30, thresh=0.99):
-    """
-    Step through recorded pulses in chunks, correlate, and find matched pulses. Step 1 of a 2-step alignment process. 
-    Step 2 uses these matched pulses for the regression and offset determination!
+def pulsealign(beh_ms, pulses, windSize=30):
+
+    # FUNCTION:
+    #   function [beh_ms, eeg_offset] = pulsealign2(beh_ms, pulses, pulseIsMS)
+    #
+    # INPUT ARGS:
+    #   beh_ms = beh_ms;   % A vector of ms times extracted from the
+    #                      %  log file
+    #   pulses = pulses;   % Vector of eeg pulses extracted from the eeg
+    #
+    # OUTPUT ARGS:
+    #   beh_ms- The truncated beh_ms values that match the eeg_offset
+    #   eeg_offset- The trucated pulses that match the beh_ms
     
-    """
-    neural_blockstart = np.linspace(0, len(neural_ts)-window, window)
-    beh_ipi = np.diff(beh_ts)
-    neural_ipi = np.diff(neural_ts)
+    #  Step through the recorded sync pulses in chunks of  windsize.  Use corr to find the chunks of behavioral pulse times where the inter-pulse intervals are correlated.  When the maximum correlation is greater than corrThresh, then it indicates that the pairs match.
+    
+    # note that sampling rate never comes in here. this is how alignment should work---it should be entirely sampling-rate independent....
+    
+    
+    def fastCorr(x, y):
+        # faster version of corr
+        c = np.cov(x, y)
+        r = c[0, 1] / (np.std(x) * np.std(y))
+        return r
 
-    print(f'{len(neural_blockstart)} blocks')
-    blockR = [] 
-    blockBehMatch = [] 
-
-    for block in neural_blockstart:
-        print('.', end =" ")
-        neural_ix = np.arange(window-1) + block
-        neural_d = neural_ipi[neural_ix.astype(int)]
-        r = np.zeros(len(beh_ipi) - len(neural_d))
-        p = r.copy() 
-        for i in np.arange(len(beh_ipi)-len(neural_d)):
-            temp_beh_ix = np.arange(window-1) + i 
-            r_temp = np.corrcoef(neural_d, beh_ipi[temp_beh_ix])[0,1]
-            r[i] = r_temp
-        blockR.append(np.max(r))
-        blockBehMatch.append(np.argmax(r))
-    neural_offset = [] 
-    good_beh_ms = [] 
-    blockR = np.array(blockR)
-    goodblocks = np.where(blockR>thresh)[0]
-    for b in goodblocks:
-        neural_ix = np.arange(window-1) + neural_blockstart[b]
-        neural_offset.extend(neural_ts[neural_ix.astype(int)])
-        beh_ix = np.arange(window-1) + blockBehMatch[b]
-        good_beh_ms.extend(beh_ts[beh_ix])
-
-    print(f'found matches for {len(goodblocks)} of {len(neural_blockstart)} blocks')
-
-    return good_beh_ms, neural_offset
+    # these are parameters that one could potentially tweak....
+    corrThresh = 0.99
+    
+    eegBlockStart = np.arange(0, len(pulses) - windSize + 1, windSize)
+    
+    beh_d = np.diff(beh_ms)
+    # beh_d[beh_d > 20*1000] = 0  # if any interpulse differences are greater than twenty seconds, throw them out!
+    pulse_d = np.diff(pulses)
+    
+    print(f"{len(eegBlockStart)} blocks")
+    
+    blockR = np.zeros(len(eegBlockStart))
+    blockBehMatch = np.zeros(len(eegBlockStart), dtype=int)
+    
+    for b in range(len(eegBlockStart)):
+        print(".", end="")
+        eeg_d = pulse_d[eegBlockStart[b]:eegBlockStart[b]+windSize]
+        r = np.zeros(len(beh_d) - len(eeg_d))
+        p = np.zeros(len(beh_d) - len(eeg_d))
+        for i in range(len(beh_d) - len(eeg_d)):
+            # sometimes the lengths mismatch by one entry if we are by an edge: 
+            length = min(len(eeg_d), len(beh_d[i:i+windSize]))
+            r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
+            # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
+        blockR[b] = np.max(r)
+        blockBehMatch[b] = np.argmax(r)
+    print("\n")
+    
+    # now, for each block, check if it had a good correlation. if so, then add the set of matching pulses into the output
+    
+    eeg_offset = np.array([])
+    good_beh_ms = np.array([])
+    
+    for b in np.where(blockR > corrThresh)[0]:
+        x = pulses[eegBlockStart[b]:eegBlockStart[b]+windSize]
+        eeg_offset = np.concatenate([eeg_offset, x])
+        y = beh_ms[blockBehMatch[b]:blockBehMatch[b]+windSize]
+        good_beh_ms = np.concatenate([good_beh_ms, y])
+    
+    print(f"found matches for {len(eeg_offset)} of {len(pulses)} pulses")
+    
+    return good_beh_ms, eeg_offset
 
 def sync_matched_pulses(beh_pulse, neural_pulse):
     """
@@ -70,3 +98,38 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
     rval = res[2]
 
     return slope, offset, rval
+
+
+def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15):
+    """
+
+    Input the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
+
+    """
+
+    sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
+    timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
+    sig = scipy.stats.zscore(sig)
+
+    trig_ix = np.where((sig[:-1]<=1)*(sig[1:]>1))[0] # rising edge of trigger
+    
+    neural_ts = timestamp[trig_ix]
+    neural_ts = np.array(neural_ts)
+
+    rval = 0 
+
+    while (rval<0.99) & (windSize < 60):
+            if len(beh_ts)!=len(neural_ts):
+                # Do regression to find neural timestamps for each event type
+                good_beh_ts, good_neural_ts = pulsealign(beh_ts, neural_ts, windSize=windSize)
+                slope, offset, rval = sync_matched_pulses(good_beh_ts, good_neural_ts)
+            else:
+                slope, offset, rval = sync_matched_pulses(beh_ts, neural_ts)
+            windSize += 5
+
+    if rval < 0.99:
+        raise ValueError(f'this sync for subject has failed - examine the data')
+    else:
+        return slope, offset
+
+
