@@ -1060,18 +1060,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
     mne_data_reref.set_annotations(annot)
     events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
 
-    if baseline_times==None: 
-        # Then baseline according to fixed baseline
-        ev_epochs = mne.Epochs(mne_data_reref, 
-                    events_from_annot, 
-                    event_id=event_dict, 
-                    baseline=fixed_baseline, 
-                    tmin=pre_s - buf_s, 
-                    tmax=post_s + buf_s, 
-                    reject=None, 
-                    reject_by_annotation=False,
-                    preload=True)
-    else: 
+    if baseline_times is not None: 
         ev_epochs = mne.Epochs(mne_data_reref, 
             events_from_annot, 
             event_id=event_dict, 
@@ -1087,7 +1076,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
         # Make events 
         evs = baseline_ts
         durs = np.zeros_like(baseline_ts).tolist()
-        descriptions = list(baseline_times.keys())*len(baseline_ts)
+        descriptions = ['baseline']*len(baseline_ts)
         # Make mne annotations based on these descriptions
         annot = mne.Annotations(onset=evs,
                                 duration=durs,
@@ -1098,8 +1087,8 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
             events_from_annot, 
             event_id=event_dict, 
             baseline=None, 
-            tmin=-buf, 
-            tmax=baseline_dur+buf, 
+            tmin=-buf_s, 
+            tmax=baseline_dur+buf_s, 
             reject=None, 
             preload=True)
 
@@ -1107,6 +1096,18 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
         time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
         # Subtract the mean of the baseline data from our data 
         ev_epochs._data = lfp_preprocess_utils.mean_baseline_time(ev_epochs._data, time_baseline, mode='mean')
+    else: 
+        # Then baseline according to fixed baseline
+        ev_epochs = mne.Epochs(mne_data_reref, 
+                    events_from_annot, 
+                    event_id=event_dict, 
+                    baseline=fixed_baseline, 
+                    tmin=pre_s - buf_s, 
+                    tmax=post_s + buf_s, 
+                    reject=None, 
+                    reject_by_annotation=False,
+                    preload=True)
+        
 
     # Filter and downsample the epochs 
     if downsamp_factor is not None:
