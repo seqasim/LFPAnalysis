@@ -98,3 +98,38 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
     rval = res[2]
 
     return slope, offset, rval
+
+
+def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15):
+    """
+
+    Input the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
+
+    """
+
+    sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
+    timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
+    sig = scipy.stats.zscore(sig)
+
+    trig_ix = np.where((sig[:-1]<=1)*(sig[1:]>1))[0] # rising edge of trigger
+    
+    neural_ts = timestamp[trig_ix]
+    neural_ts = np.array(neural_ts)
+
+    rval = 0 
+
+    while (rval<0.99) & (windSize < 60):
+            if len(beh_ts)!=len(neural_ts):
+                # Do regression to find neural timestamps for each event type
+                good_beh_ts, good_neural_ts = pulsealign(beh_ts, neural_ts, windSize=windSize)
+                slope, offset, rval = sync_matched_pulses(good_beh_ts, good_neural_ts)
+            else:
+                slope, offset, rval = sync_matched_pulses(beh_ts, neural_ts)
+            windSize += 5
+
+    if rval < 0.99:
+        raise ValueError(f'this sync for subject has failed - examine the data')
+    else:
+        return slope, offset
+
+
