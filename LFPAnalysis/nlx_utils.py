@@ -79,7 +79,8 @@ def parse_header(raw_hdr):
         hdr[u'FileName']  = ' '.join(hdr_lines[1].split()[3:])
         # hdr['save_path'] = hdr['FileName']
     except:
-        warnings.warn('Unable to parse original file path from Neuralynx header: ' + hdr_lines[1])
+        # warnings.warn('Unable to parse original file path from Neuralynx header: ' + hdr_lines[1])
+        pass
 
     # Process lines with file opening and closing times
     hdr[u'TimeOpened'] = hdr_lines[2][3:]
@@ -93,7 +94,9 @@ def parse_header(raw_hdr):
             name, value = line[1:].split()  # Ignore the dash and split PARAM_NAME and PARAM_VALUE
             hdr[name] = value
         except:
-            warnings.warn('Unable to parse parameter line from Neuralynx header: ' + line)
+            # warnings.warn('Unable to parse parameter line from Neuralynx header: ' + line)
+
+            return hdr
 
     return hdr
 
@@ -131,7 +134,7 @@ def parse_neuralynx_time_string(time_string):
         tmp_time = [int(x) for x in time_string.split()[-1].replace('.', ':').split(':')]
         tmp_microsecond = tmp_time[3] * 1000
     except:
-        warnings.warn('Unable to parse time string from Neuralynx header: ' + time_string)
+        # warnings.warn('Unable to parse time string from Neuralynx header: ' + time_string)
         return None
     else:
         return datetime.datetime(tmp_date[2], tmp_date[0], tmp_date[1],  # Year, month, day

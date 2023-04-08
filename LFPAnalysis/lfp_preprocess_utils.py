@@ -774,17 +774,20 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         ch_name = [] 
         ch_type = []
         if site == 'MSSM': 
-            # per Shawn, MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of real data
+            # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. Sometimes, this is the real data file
             pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
-            ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
-            # just in case this changes in the future: 
-            if len(ncs_files) == 0: 
-                ncs_files = glob(f'{load_path}/*.ncs')
-                if not seeg_names:
-                    seeg_names = [x.split('/')[-1].replace('.ncs','') for x in glob(f'{load_path}/[R,L]*.ncs')]
-            else:
-                if not seeg_names:
-                    seeg_names = [x.split('/')[-1].replace('.ncs','').split('_')[0] for x in glob(f'{load_path}/[R,L]*.ncs') if re.search(pattern, x)]
+            ncs_files = [x for x in glob(f'{load_path}/*.ncs') if not re.search(pattern, x)]
+            numbered_ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
+            if not seeg_names:
+                seeg_names = [x.split('/')[-1].replace('.ncs','') for x in glob(f'{load_path}/[R,L]*.ncs') if not re.search(pattern, x)]
+            try: 
+                test_load = nlx_utils.load_ncs(ncs_files[0])
+            except: 
+                print('Data in numbered files')
+                # This means that we need to load the the files with the numbers appended
+                pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
+                ncs_files = numbered_ncs_files
+                seeg_names = [x.split('/')[-1].replace('.ncs','').split('_')[0] for x in glob(f'{load_path}/[R,L]*.ncs') if re.search(pattern, x)]
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
@@ -803,7 +806,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             try:
                 fdata = nlx_utils.load_ncs(chan_path)
             except IndexError: 
-                print(f'No data in channel {chan_name}')
+                print(f'No data in channel {chan_path}')
                 continue
             #  scalp eeg
             if eeg_names:
