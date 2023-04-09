@@ -528,7 +528,7 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     # 
     return bad_channels
 
-def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
+def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2): 
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
@@ -537,7 +537,7 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
     2. Rectify. 
     3. Find filtered envelope > 3. 
     4. Eliminate events with peaks with unfiltered envelope < 3. 
-    5. Eliminate close IEDs (peaks within 500 ms). 
+    5. Eliminate close IEDs (peaks within 250 ms). 
     6. Eliminate IEDs that are not present on at least 4 electrodes. 
     (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
 
