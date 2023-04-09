@@ -215,7 +215,7 @@ def FOOOF_continuous(signal):
     pass 
 
 
-def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, picks=None, **kwargs):
+def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
     """
 
     This function is meant to enable easy computation of FOOOF. 
