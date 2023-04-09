@@ -163,7 +163,7 @@ def zscore_TFR_across_trials(data, baseline_mne, mode='zscore', baseline_only=Fa
     
     return baseline_corrected 
 
-def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, average=False):
+def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site=None, average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
 
@@ -207,6 +207,8 @@ def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, av
         list of white matter channels which were not used for reference and now serve no purpose 
 
     """
+
+    elec_data = load_elec(elec_path)
 
     if site == 'MSSM': 
         # Drop the micros and unmatched seeg from here for now....
@@ -308,7 +310,7 @@ def wm_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None, av
         return anode_list, cathode_list, drop_wm_channels
 
 
-def laplacian_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=None):
+def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for laplacian referencing.
 
@@ -318,9 +320,11 @@ def laplacian_ref(mne_data, elec_data, bad_channels, unmatched_seeg=None, site=N
 
     """
 
+    elec_data = load_elec(elec_data)
+
     pass
 
-def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
+def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
 
@@ -343,9 +347,7 @@ def bipolar_ref(elec_data, bad_channels, unmatched_seeg=None, site=None):
         list of channels to subtract
     """
 
-    if 'NMMlabel' in elec_data.keys(): 
-        # This is an annoying naming convention but also totally my fault lol
-        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+    elec_data = load_elec(elec_path)
 
     # helper function to perform sort for bipolar electrodes:
     def num_sort(string):
@@ -665,7 +667,27 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def make_mne(load_path=None, elec_data=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
+def load_elec(elec_path=None):
+    """
+    Load the electrode data, correct for small idiosyncracies, and return as a pandas dataframe
+    """
+
+    # Load electrode data (should already be manually localized!)
+    if elec_path.split('.')[-1] =='csv':
+        elec_data = pd.read_csv(elec_path)
+    elif elec_path.split('.')[-1] =='xlsx': 
+        elec_data = pd.read_excel(elec_path)
+
+    # Sometimes there's extra columns with no entries: 
+    elec_data = elec_data[elec_data.columns.drop(list(elec_data.filter(regex='Unnamed')))]
+
+    if 'NMMlabel' in elec_data.keys(): 
+        # This is an annoying naming convention but also totally my fault lol
+        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
+    return elec_data
+
+def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
@@ -701,9 +723,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         mne object
     """
 
-    if 'NMMlabel' in elec_data.keys(): 
-        # This is an annoying naming convention but also totally my fault lol
-        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+    elec_data = load_elec(elec_path)
 
     if not photodiode_name:
         warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
@@ -941,7 +961,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         return mne_data
 
 
-def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
+def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
     """
     Following this step, you can indicate IEDs manually.
 
@@ -962,16 +982,14 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
         mne object with re-referenced data
     """
 
-    if 'NMMlabel' in elec_data.keys(): 
-        # This is an annoying naming convention but also totally my fault lol
-        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+    elec_data = load_elec(elec_path)
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
     _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
 
     if method=='wm':
         anode_list, cathode_list, drop_wm_channels, oob_channels = wm_ref(mne_data=mne_data, 
-                                                                                       elec_data=elec_data, 
+                                                                                       elec_path=elec_path, 
                                                                                        bad_channels=mne_data.info['bads'], 
                                                                                        unmatched_seeg=unmatched_seeg,
                                                                                        site=site)
@@ -994,7 +1012,7 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None,
+def make_epochs(load_path=None, elec_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
 ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     """
 
@@ -1043,9 +1061,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
         mne Epoch object with re-referenced data
     """
 
-    if 'NMMlabel' in elec_data.keys(): 
-        # This is an annoying naming convention but also totally my fault lol
-        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+    elec_data = load_elec(elec_path)
 
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
