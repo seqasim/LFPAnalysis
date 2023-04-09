@@ -57,8 +57,7 @@ def mean_baseline_time(data, baseline, mode='zscore'):
 def zscore_TFR_average(data, baseline, mode='zscore'): 
     
     """
-    Meant to mimic the mne baseline (specifically just the zscore for now) 
-    for TFR but when the specific baseline period might change across trials. 
+    Meant to mimic the mne baseline when the specific baseline period might change across trials. 
 
     This presumes you're using trial-averaged data (check dimensions)
     
@@ -100,7 +99,7 @@ def zscore_TFR_average(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
-def zscore_TFR_across_trials(data, baseline, mode='zscore'): 
+def zscore_TFR_across_trials(data, baseline_mne, mode='zscore', baseline_only=False): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -121,20 +120,33 @@ def zscore_TFR_across_trials(data, baseline, mode='zscore'):
     baseline_corrected : 2d numpy array
         baselined data 
     """
-    
-    # Create an array of the mean and standard deviation of the power values across the session
-    # 1. Compute the mean for every electrode, at every frequency 
-    m = np.mean(np.mean(baseline, axis=3) ,axis=0)
-    # 2. Expand the array
-    m = np.expand_dims(np.expand_dims(m, axis=0),axis=3)
-    # 3. Copy the data to every event and time-point
-    m = np.repeat(np.repeat(m, data.shape[0],axis=0), 
-                  data.shape[-1],axis=3)
 
-    std = np.std(np.mean(baseline, axis=3),axis=0)
-    std = np.expand_dims(np.expand_dims(std, axis=0),axis=3)
-    std = np.repeat(np.repeat(std, data.shape[0], axis=0), 
-                   data.shape[-1],axis=3)
+    if baseline_only==False:
+        baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
+    else: 
+        # Beware - this is super vulnerable to contamination by artifacts/outliers: https://www.sciencedirect.com/science/article/abs/pii/S1053811913009919
+        baseline_data = baseline_mne.data
+
+    elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
+    freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
+    ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
+    time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
+
+    # Create an array of the mean and standard deviation of the power values across the session
+    # 1. Compute the mean across time points and across trials 
+    m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
+        # 2. Expand the array
+    m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
+    # 3. Copy the data to every time-point
+    m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+    # 1. Compute the std across time points for every trial
+    std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
+    # 2. Expand the array
+    std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
+    # 3. Copy the data to every time-point
+    std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
 
     if mode == 'mean':
         baseline_corrected = data - m
@@ -982,9 +994,8 @@ def ref_mne(mne_data=None, elec_data=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None, 
-baseline_times=None, baseline_dur=0.5, fixed_baseline=(-1.0, 0),
-buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
+def make_epochs(load_path=None, elec_data=None, slope=None, offset=None, behav_name=None, behav_times=None,
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     """
 
     TODO: allow for a dict of pre and post times so they can vary across evs 
@@ -1007,23 +1018,20 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
     behav_name : str
         what event are we epoching to? 
     behav_times : dict 
-        format {'event_name': np.array([times])}
+        format 
     baseline_times : dict 
-        format {'event_name': np.array([times])}
+        format 
+    ev_start_s:
+
+    ev_end_s: 
+
     method : str 
         how should we reference the data ['wm', 'bipolar']
     site : str 
         where was this data collected? Options: ['MSSM', 'UI', 'Davis']
-    baseline_dur : float
-        only to be used if baseline_times is not None 
-    fixed_baseline : tuple 
-        time to use for baselining , only to be used if baseline_times is None 
+
     buf_s : float 
         time to add as buffer in epochs 
-    pre_s : float 
-        time to add before baseline event if baseline_times is not None 
-    post_d : float 
-        time to add after baseline event if baseline_times is not None 
     downsamp_factor : float 
         factor by which to downsample the data 
     IED_args: dict 
@@ -1063,58 +1071,57 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
     mne_data_reref.set_annotations(annot)
     events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
 
-    if baseline_times is not None: 
-        ev_epochs = mne.Epochs(mne_data_reref, 
-            events_from_annot, 
-            event_id=event_dict, 
-            baseline=None, 
-            tmin=pre_s - buf_s, 
-            tmax=post_s + buf_s, 
-            reject=None, 
-            reject_by_annotation=False,
-            preload=True)
+    ev_epochs = mne.Epochs(mne_data_reref, 
+        events_from_annot, 
+        event_id=event_dict, 
+        baseline=None, 
+        tmin=ev_start_s - buf_s, 
+        tmax=ev_end_s + buf_s, 
+        reject=None, 
+        reject_by_annotation=False,
+        preload=True)
 
-        # Make baseline epochs to use for baselining 
-        baseline_ts = [(x*slope + offset) for x in baseline_times]
-        # Make events 
-        evs = baseline_ts
-        durs = np.zeros_like(baseline_ts).tolist()
-        descriptions = ['baseline']*len(baseline_ts)
-        # Make mne annotations based on these descriptions
-        annot = mne.Annotations(onset=evs,
-                                duration=durs,
-                                description=descriptions)
-        mne_data_reref.set_annotations(annot)
-        events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
-        rm_baseline_epochs = mne.Epochs(mne_data_reref, 
-            events_from_annot, 
-            event_id=event_dict, 
-            baseline=None, 
-            tmin=-buf_s, 
-            tmax=baseline_dur+buf_s, 
-            reject=None, 
-            preload=True)
+    # # Make baseline epochs to use for baselining 
+    # baseline_ts = [(x*slope + offset) for x in baseline_times]
+    # # Make events 
+    # evs = baseline_ts
+    # durs = np.zeros_like(baseline_ts).tolist()
+    # descriptions = ['baseline']*len(baseline_ts)
+    # # Make mne annotations based on these descriptions
+    # annot = mne.Annotations(onset=evs,
+    #                         duration=durs,
+    #                         description=descriptions)
+    # mne_data_reref.set_annotations(annot)
+    # events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
+    # rm_baseline_epochs = mne.Epochs(mne_data_reref, 
+    #     events_from_annot, 
+    #     event_id=event_dict, 
+    #     baseline=None, 
+    #     tmin=base_start_s-buf_s, 
+    #     tmax=base_end_s+buf_s, 
+    #     reject=None, 
+    #     preload=True)
 
-        buf_ix = int(buf_s*ev_epochs.info['sfreq'])
-        time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
-        # Subtract the mean of the baseline data from our data 
-        ev_epochs._data = lfp_preprocess_utils.mean_baseline_time(ev_epochs._data, time_baseline, mode='mean')
-    else: 
-        # Then baseline according to fixed baseline
-        ev_epochs = mne.Epochs(mne_data_reref, 
-                    events_from_annot, 
-                    event_id=event_dict, 
-                    baseline=fixed_baseline, 
-                    tmin=pre_s - buf_s, 
-                    tmax=post_s + buf_s, 
-                    reject=None, 
-                    reject_by_annotation=False,
-                    preload=True)
+    # buf_ix = int(buf_s*ev_epochs.info['sfreq'])
+    # time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
+
+    # else: 
+    #     # Then baseline according to fixed baseline
+    #     ev_epochs = mne.Epochs(mne_data_reref, 
+    #                 events_from_annot, 
+    #                 event_id=event_dict, 
+    #                 baseline=fixed_baseline, 
+    #                 tmin=pre_s - buf_s, 
+    #                 tmax=post_s + buf_s, 
+    #                 reject=None, 
+    #                 reject_by_annotation=False,
+    #                 preload=True)
         
 
     # Filter and downsample the epochs 
     if downsamp_factor is not None:
         ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
+        # rm_baseline_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
 
     IED_times_s = lfp_preprocess_utils.detect_IEDs(ev_epochs, 
                                                peak_thresh=IED_args['peak_thresh'], 
@@ -1134,6 +1141,7 @@ buf_s=1.0, pre_s=-1.0, post_s=1.5, downsamp_factor=None, IED_args=None):
                     event_metadata[ch].loc[ev] = val
         
     ev_epochs.metadata = event_metadata
+    # rm_baseline_epochs.metadata = event_metadata
     # event_metadata
 
     return ev_epochs
