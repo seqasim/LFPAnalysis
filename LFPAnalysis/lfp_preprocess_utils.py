@@ -748,20 +748,6 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             while (not photodiode_name) & (iteration<len(photodiode_options)-1):
                 photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
                 iteration += 1
-            # #There's a few possible names for the sync pulse:
-            # for x in mne_data.ch_names:
-            #     if 'photodiode' in x.lower():
-            #         photodiode_name = x 
-            #     elif 'research' in x.lower():
-            #         photodiode_name = x
-            #     elif 'trig' in x.lower(): 
-            #         photodiode_name = x 
-            #     elif 'stim' in x.lower(): 
-            #         photodiode_name = x 
-            #     elif 'sync' in x.lower():
-            #         photodiode_name = x 
-            #     else: 
-            #         photodiode_name = 'dc1'
 
         # Save out the photodiode channel separately
         mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
@@ -823,6 +809,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
+            
         
         if not seeg_names: 
             raise ValueError('no seeg channels specified')
