@@ -215,7 +215,7 @@ def FOOOF_continuous(signal):
     pass 
 
 
-def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, picks=None, **kwargs):
+def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
     """
 
     This function is meant to enable easy computation of FOOOF. 
@@ -247,6 +247,8 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, picks=None, **kwargs):
         mne object with re-referenced data
     """
 
+    bands = fooof.bands.Bands(band_dict)
+
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
                                                 tmax=tmax)
@@ -266,13 +268,48 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, picks=None, **kwargs):
     # Fit the FOOOF object 
     FOOOFGroup_res.fit(freqs, psd_trial_avg, kwargs['freq_range'])
 
-    return FOOOFGroup_res
+    all_chan_dfs = []
+    # Go through individual channels
+    for chan in range(len(epochs.ch_names)):
+
+        ind_fits = FOOOFGroup_res.get_fooof(ind=chan, regenerate=True)
+        ind_fits.fit()
+
+        # Create a dataframe to store results 
+        chan_data_df = pd.DataFrame(columns=['exp_diff', 'peak_pow_diff', 'band_pow_diff', 'band_pow_diff_flat', 'band'])
+
+        # Compute contrast between conditions
+        exp = ind_fits.get_params('aperiodic_params', 'exponent')
+
+        band_labels = []
+        peak_pow = [] 
+        band_pow = []
+        band_pow_flats = []
+
+        for label, definition in bands:
+            band_labels.append(label)
+            peak_pow.append(fooof.analysis.get_band_peak_fm(ind_fits, definition)[1])
+            band_pow.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits.power_spectrum, definition)[1]))
+            band_pow_flats.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits._spectrum_flat, definition)[1]))
+
+        chan_data_df['peak_pow'] = peak_pow
+        chan_data_df['band_pow'] = band_pow
+        chan_data_df['band_pow_flat'] = band_pow_flats
+        chan_data_df['band'] = band_labels
+        chan_data_df['exp'] = exp
+        chan_data_df['channel'] = epochs.ch_names[chan]
+        chan_data_df['region'] = epochs.metadata.region.unique()[0]
+
+        all_chan_dfs.append(chan_data_df)
+
+
+    return FOOOFGroup_res, pd.concat(all_chan_dfs)
 
 
 def FOOOF_compare_epochs(epochs_with_metadata, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
 file_path=None, plot=True, **kwargs):
     """
-    Function for comparing conditions, 
+    Function for comparing conditions.
     """
     # Helper functions for computing and analyzing differences between power spectra. 
 
@@ -318,6 +355,8 @@ file_path=None, plot=True, **kwargs):
     all_chan_dfs = [] 
 
     fooof_groups_cond = {f'{x}': np.nan for x in conditions}
+
+    all_cond_df = []
     for cond in conditions: 
         # check that this is an appropriate parsing (is it in the metadata?)
         try:
@@ -325,9 +364,13 @@ file_path=None, plot=True, **kwargs):
         except pd.errors.UndefinedVariableError:
             raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
     
-        FOOOFGroup_res = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, **kwargs)
+        FOOOFGroup_res, cond_df = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, band_dict=band_dict, **kwargs)
 
         fooof_groups_cond[cond] = FOOOFGroup_res
+
+        cond_df['condition'] = cond
+
+        all_cond_df.append(cond_df)
 
     # Go through individual channels
     for chan in range(len(epochs_with_metadata.ch_names)):
@@ -391,7 +434,7 @@ file_path=None, plot=True, **kwargs):
                 pdf.savefig()
                 plt.close(f)
 
-    return pd.concat(all_chan_dfs)
+    return pd.concat(all_chan_dfs), pd.concat(all_cond_df)
 
 def detect_oscillation_evs(signal, method=None): 
     """
