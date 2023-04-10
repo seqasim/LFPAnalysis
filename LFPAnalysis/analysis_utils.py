@@ -368,6 +368,7 @@ file_path=None, plot=True, **kwargs):
 
         fooof_groups_cond[cond] = FOOOFGroup_res
 
+
         cond_df['condition'] = cond
 
         all_cond_df.append(cond_df)
