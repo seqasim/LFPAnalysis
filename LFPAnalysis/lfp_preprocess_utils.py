@@ -688,9 +688,9 @@ def load_elec(elec_path=None):
     return elec_data
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
-include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, seeg_names=None):
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None):
     """
-    Make a mne object from the data and electrode files, and save out the photodiode. 
+    Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
 
     This function requires users to input the file format of the raw data, and the location the data was recorded for site-specific steps.
@@ -723,7 +723,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
     ekg_names : list
         list of channel names that pertain to the EKG in case the hardcoded options don't work
     sync_name : str
-        provide the photodiode name in case the hardcoded options don't work
+        provide the sync name in case the hardcoded options don't work
 
     Returns
     -------
@@ -734,7 +734,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
     elec_data = load_elec(elec_path)
 
     if not sync_name:
-        warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved by this code')
+        warnings.warn(f'No sync name specified - if using an audiovisual sync signal please check load_path to make sure a valid sync was saved out')
 
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
@@ -750,15 +750,27 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
 
         if not sync_name:
-            # Search for photodiode names if need be
-            iteration = 0
-            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
-            while (not sync_name) & (iteration<len(photodiode_options)-1):
-                sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
-                iteration += 1
+            if sync_type == 'photodiode':
+                # Search for photodiode names if need be
+                iteration = 0
+                photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+                while (not sync_name) & (iteration<len(photodiode_options)-1):
+                    sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                    iteration += 1
+            elif sync_type == 'audio':
+                # If/when we implement audio synchronization
+                pass
+            elif sync_type == 'ttl':
+                pass
 
-        # Save out the photodiode channel separately
-        mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
+        if sync_type == 'photodiode':
+            # Save out the photodiode channel separately
+            mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
+        elif sync_type == 'audio':
+            pass 
+        elif sync_type == 'ttl': 
+            print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
+
 
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
@@ -794,7 +806,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
         mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     elif format =='nlx': 
-        # This is a pre-split data. Have to specifically load the sEEG and photodiode individually.
+        # This is a pre-split data. Have to specifically load the sEEG and sync individually.
         signals = [] 
         srs = [] 
         ch_name = [] 
@@ -828,10 +840,9 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             eeg_names = [x.lower() for x in connect_table[connect_table.Code=='Scalp']['Contact Location'].tolist()[0][7:].split(', ')]
             resp_names = ['can', 'therm', 'belt']
             ekg_names = ['ekg']
-            
-            # Note: if not using a photodiode, I want to pull the TTLs from the .nev file...
-            sync_name = 'ttl'
+            sync_name = 'ttl' 
 
+            pass
         
         if not seeg_names: 
             raise NameError('no seeg channels specified')
@@ -910,23 +921,35 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
 
             mne_data.add_channels(mne_data_resampled)
 
-            # Search for photodiode names if need be
-            iteration = 0
-            photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
-            while (not sync_name) & (iteration<len(photodiode_options)-1):
-                sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
-                iteration += 1
+            # Search for sync names if need be
+            if not sync_name: 
+                if sync_type == 'photodiode':
+                    iteration = 0
+                    photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+                    while (not sync_name) & (iteration<len(photodiode_options)-1):
+                        sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                        iteration += 1
+                elif sync_type == 'audio': 
+                    pass 
+                elif sync_type == 'ttl': 
+                    pass
+
                 
             if not sync_name:
-                raise ValueError('Could not find a photodiode')
+                raise ValueError('Could not find a sync channel')
 
             mne_data.info['line_freq'] = 60
             # Notch out 60 Hz noise and harmonics 
             mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
-            # Save out the photodiode channel separately
-            print(f'Saving photodiode data to {load_path}/photodiode.fif')
-            mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
+            if sync_type == 'photodiode':
+                # Save out the photodiode channel separately
+                print(f'Saving photodiode data to {load_path}/photodiode.fif')
+                mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
+            elif sync_type == 'audio':
+                pass
+            elif sync_type == 'ttl':
+                print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
 
             new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
             mne_data.rename_channels(new_name_dict)
