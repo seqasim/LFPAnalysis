@@ -688,7 +688,7 @@ def load_elec(elec_path=None):
     return elec_data
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
-include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiode_name=None, seeg_names=None):
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, seeg_names=None):
     """
     Make a mne object from the data and electrode files, and save out the photodiode. 
     Following this step, you can indicate bad electrodes manually.
@@ -716,6 +716,14 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         whether to actually return the data or just save it in the directory 
     include_micros : bool
         whether to include the microwire LFP in the LFP data object or not 
+    eeg_names : list
+        list of channel names that pertain to scalp EEG in case the hardcoded options don't work
+    resp_names : list 
+        list of channel names that pertain to respiration in case the hardcoded options don't work
+    ekg_names : list
+        list of channel names that pertain to the EKG in case the hardcoded options don't work
+    sync_name : str
+        provide the photodiode name in case the hardcoded options don't work
 
     Returns
     -------
@@ -725,8 +733,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
     elec_data = load_elec(elec_path)
 
-    if not photodiode_name:
-        warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved')
+    if not sync_name:
+        warnings.warn(f'No photodiode channel specified - please check {load_path}/photodiode.fif to make sure a valid sync signal was saved by this code')
 
     if site == 'MSSM':
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
@@ -741,16 +749,16 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
 
-        if not photodiode_name:
+        if not sync_name:
             # Search for photodiode names if need be
             iteration = 0
             photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
-            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
-                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+            while (not sync_name) & (iteration<len(photodiode_options)-1):
+                sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
                 iteration += 1
 
         # Save out the photodiode channel separately
-        mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
+        mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
 
         # The electrode names read out of the edf file do not always match those 
         # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
@@ -809,10 +817,24 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
+
+            # load the connection table .csv
+            connect_table_path = glob(f'{elec_path}/*Connection_Table*.csv') 
+            if not connect_table: 
+                print('Manually enter the path to the Iowa connection table:')
+                connect_table_path = glob(input())
+            connect_table = pd.read_csv(connect_table_path)
+
+            eeg_names = [x.lower() for x in connect_table[connect_table.Code=='Scalp']['Contact Location'].tolist()[0][7:].split(', ')]
+            resp_names = ['can', 'therm', 'belt']
+            ekg_names = ['ekg']
             
+            # Note: if not using a photodiode, I want to pull the TTLs from the .nev file...
+            sync_name = 'ttl'
+
         
         if not seeg_names: 
-            raise ValueError('no seeg channels specified')
+            raise NameError('no seeg channels specified')
         else:
             # standardize to lower
             seeg_names = [x.lower() for x in seeg_names]
@@ -891,11 +913,11 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
             # Search for photodiode names if need be
             iteration = 0
             photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
-            while (not photodiode_name) & (iteration<len(photodiode_options)-1):
-                photodiode_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+            while (not sync_name) & (iteration<len(photodiode_options)-1):
+                sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
                 iteration += 1
                 
-            if not photodiode_name:
+            if not sync_name:
                 raise ValueError('Could not find a photodiode')
 
             mne_data.info['line_freq'] = 60
@@ -904,7 +926,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, photodiod
 
             # Save out the photodiode channel separately
             print(f'Saving photodiode data to {load_path}/photodiode.fif')
-            mne_data.save(f'{load_path}/photodiode.fif', picks=photodiode_name, overwrite=overwrite)
+            mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
 
             new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
             mne_data.rename_channels(new_name_dict)
@@ -1120,6 +1142,8 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     #                 reject_by_annotation=False,
     #                 preload=True)
         
+    # NOTE: I don't demean the data for DC offsets. This is mainly because a large artifact (i.e IEDs) would skew and screw us 
+    # before any of the following pre-processing steps, which would be hard to detect later.
 
     # Filter and downsample the epochs 
     if downsamp_factor is not None:
