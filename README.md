@@ -33,7 +33,7 @@ Some important misc notes if you're on MINERVA (I will compile here as I go and 
 ## Installation
 
 ```
-conda create --name lfp_env pip python=3.10.8
+conda create --name lfp_env pip requests python=3.10.8
 conda activate lfp_env
 pip install git+https://github.com/seqasim/LFPAnalysis.git
 ```
