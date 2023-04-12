@@ -16,12 +16,15 @@ authors = [f"{c['login']}" for c in contributors]
 with open("README.md", "r") as fh:
     __long_description__ = fh.read()
 
+# Get requirements
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
+
 setup(
     name='LFPAnalysis',
     version='1.0.0',
     description='Package to process LFP data',
     url=github_url,
     author=', '.join(authors),    
-    packages=find_packages(),
-        install_requires=open('requirements.txt').readlines(),
+    install_requires=required,
 )
