@@ -1,7 +1,5 @@
     pandas==1.5.3
-    numpy==1.21.6
     seaborn==0.12.1
-    scipy==1.10.0
     mne-base==1.2.3
     ca-certificates==2022.12.7
     certifi==2022.12.7
