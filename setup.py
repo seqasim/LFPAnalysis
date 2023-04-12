@@ -10,7 +10,7 @@ response = requests.get(f'https://api.github.com/repos/{owner}/{repo}/contributo
 contributors = response.json()
 
 # Create a list of author strings in the format "Name <email>"
-authors = [f"{c['login']} <{c['email']}>" for c in contributors]
+authors = [f"{c['login']}" for c in contributors]
 
 # Get long description
 with open("README.md", "r") as fh:
