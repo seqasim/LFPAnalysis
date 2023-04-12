@@ -25,6 +25,7 @@ setup(
     version='1.0.0',
     description='Package to process LFP data',
     url=github_url,
-    author=', '.join(authors),    
+    author=', '.join(authors), 
+    packages=find_packages(),   
     install_requires=required,
 )
