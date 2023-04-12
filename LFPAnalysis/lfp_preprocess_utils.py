@@ -837,12 +837,45 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
                 connect_table_path = glob(input())
             connect_table = pd.read_csv(connect_table_path)
 
-            eeg_names = [x.lower() for x in connect_table[connect_table.Code=='Scalp']['Contact Location'].tolist()[0][7:].split(', ')]
-            resp_names = ['can', 'therm', 'belt']
-            ekg_names = ['ekg']
+            eegCode =['Scalp']
+            eeg_labels = [x.lower() for x in connect_table[connect_table.Code==eegCode[0]]['Contact Location'].tolist()[0][7:].split(', ')]
+            # NOTE: The following names are set MANUALLY upon data UPLOAD. In the original table they read as "BP" which is not informative.
+            respCode = ['CAN', 'THERM', 'BELT']
+            ekgCode = ['EKG']
+            unusedCode = ['Unused']
             sync_name = 'ttl' 
 
-            pass
+            starts = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
+            ends = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            seeg_chs = [] 
+            for a,b in zip(starts, ends):
+                seeg_chs += np.arange(a, b).tolist()
+                
+            seeg_names = [f'LFPx{ch}' for ch in seeg_chs]
+
+            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
+            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            resp_chs = [] 
+            for a,b in zip(starts, ends):
+                resp_chs += np.arange(a, b).tolist()
+                
+            resp_names = [f'LFPx{ch}' for ch in resp_chs]
+
+            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
+            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            ekg_chs = [] 
+            for a,b in zip(starts, ends):
+                ekg_chs += np.arange(a, b).tolist()
+                
+            ekg_names = [f'LFPx{ch}' for ch in ekg_chs]
+
+            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
+            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            eeg_chs = [] 
+            for a,b in zip(starts, ends):
+                eeg_chs += np.arange(a, b).tolist()
+                
+            eeg_names = [f'LFPx{ch}' for ch in eeg_chs]
         
         if not seeg_names: 
             raise NameError('no seeg channels specified')
