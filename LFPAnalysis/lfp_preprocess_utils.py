@@ -838,7 +838,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             if not connect_table_path: 
                 print('Manually enter the path to the Iowa connection table:')
                 connect_table_path = glob(input())
-                
+
             eeg_names, resp_names, ekg_names, seeg_names, drop_names = iowa_utils.extract_names_connect_table(connect_table_path)
         
         if not seeg_names: 
@@ -847,51 +847,13 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             # standardize to lower
             seeg_names = [x.lower() for x in seeg_names]
 
-        for chan_path in ncs_files:
-            chan_name = chan_path.split('/')[-1].replace('.ncs','')
-            # strip the file type off the end if needed 
-            if '_' in chan_name:
-                chan_name = chan_name.split('_')[0]
-            try:
-                fdata = nlx_utils.load_ncs(chan_path)
-            except IndexError: 
-                print(f'No data in channel {chan_path}')
-                continue
-            #  scalp eeg
-            if drop_names: 
-                drop_names = [x.lower() for x in drop_names]
-                if chan_name.lower() in drop_names:
-                    print(f'Channel selected to skip (bad or empty) {chan_path}')
-                    continue
-            if eeg_names:
-                eeg_names = [x.lower() for x in eeg_names]
-                if chan_name.lower() in eeg_names:
-                    ch_type.append('eeg')
-            if resp_names:
-                resp_names = [x.lower() for x in resp_names]
-                if chan_name.lower() in resp_names:
-                    ch_type.append('bio')
-            if ekg_names:
-                ekg_names = [x.lower() for x in ekg_names]
-                if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
-                    ch_type.append('ecg') 
-            if seeg_names: 
-                seeg_names = [x.lower() for x in seeg_names]
-                if chan_name.lower() in seeg_names:
-                    ch_type.append('seeg')  
-                elif (chan_name.lower()[0] == 'u') | (chan_name.lower()[:3] == 'pde'):
-                    # microwire data
-                    if include_micros==True:
-                        ch_type.append('seeg')  
-                    else: # skip
-                        continue
-            signals.append(fdata['data'])
-            srs.append(fdata['sampling_rate'])
-            ch_name.append(chan_name)
-            if len(ch_type) < len(ch_name):
-                # This means we were unable to assign tha channel a type
-                ch_type.append('misc')
-                print(f'Unidentified data type in {chan_name}')
+        # Go through every ncs file and parse the useful data based on the extracted channel names and channel types from above
+        signals, srs, ch_name, ch_type = nlx_utils.parse_subject_nlx_data(ncs_files,
+        eeg_names=eeg_names, 
+        resp_names=resp_names, 
+        ekg_names=ekg_names, 
+        seeg_names=seeg_names, 
+        drop_names=drop_names)
 
         if np.unique(srs).shape[0] == 1:
             # all the sampling rates match:
