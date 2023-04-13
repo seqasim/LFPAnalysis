@@ -834,58 +834,80 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             ncs_files = glob(f'{load_path}/LFP*.ncs')
 
             # load the connection table .csv
-            connect_table_path = glob(f'{os.path.split(elec_path)[0]}/*Connection_Table*.csv')[0]
+            connect_table_path = glob(f'{os.path.split(elec_path)[0]}/*Connection*Table*.csv')[0]
             if not connect_table_path: 
                 print('Manually enter the path to the Iowa connection table:')
                 connect_table_path = glob(input())
             connect_table = pd.read_csv(connect_table_path)
 
-            eegCode =['Scalp']
+            eegCode =['SCALP']
             eeg_labels = [x.lower() for x in connect_table[connect_table.Code==eegCode[0]]['Contact Location'].tolist()[0][7:].split(', ')]
             # NOTE: The following names are set MANUALLY upon data UPLOAD. In the original table they read as "BP" which is not informative.
             respCode = ['CAN', 'THERM', 'BELT']
             ekgCode = ['EKG']
-            unusedCode = ['Unused']
+            unusedCode = ['UNUSED']
+            refCode = ['REF']
             sync_name = 'ttl' 
 
-            starts = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
-            ends = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            # The relevant channels could vary in length: 
             seeg_chs = [] 
+            relevant_rows = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode+refCode)].dropna()
+            # single channels 
+            seeg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
+            # channel range:
+            starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
+            ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
             for a,b in zip(starts, ends):
                 seeg_chs += np.arange(a, b).tolist()
-                
             seeg_names = [f'LFPx{ch}' for ch in seeg_chs]
 
-            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
-            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            # The relevant channels could vary in length: 
             resp_chs = [] 
+            relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna()
+            # single channels 
+            resp_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
+            # channel range:
+            starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
+            ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
             for a,b in zip(starts, ends):
                 resp_chs += np.arange(a, b).tolist()
-                
             resp_names = [f'LFPx{ch}' for ch in resp_chs]
 
-            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
-            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            # The relevant channels could vary in length: 
             ekg_chs = [] 
+            relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna()
+            # single channels 
+            ekg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
+            # channel range:
+            starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
+            ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
             for a,b in zip(starts, ends):
                 ekg_chs += np.arange(a, b).tolist()
-                
             ekg_names = [f'LFPx{ch}' for ch in ekg_chs]
 
-            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
-            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            # The relevant channels could vary in length: 
             eeg_chs = [] 
+            relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna()
+            # single channels 
+            eeg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
+            # channel range:
+            starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
+            ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
             for a,b in zip(starts, ends):
                 eeg_chs += np.arange(a, b).tolist()
-                
+
             eeg_names = [f'LFPx{ch}' for ch in eeg_chs]
 
-            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
-            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            # The relevant channels could vary in length: 
             drop_chs = [] 
+            relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna()
+            # single channels 
+            drop_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
+            # channel range:
+            starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
+            ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
             for a,b in zip(starts, ends):
                 drop_chs += np.arange(a, b).tolist()
-                
             drop_names = [f'LFPx{ch}' for ch in drop_chs]
         
         if not seeg_names: 
