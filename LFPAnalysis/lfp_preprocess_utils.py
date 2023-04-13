@@ -689,7 +689,8 @@ def load_elec(elec_path=None):
     return elec_data
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
-include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None):
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
+seeg_only=True):
     """
     Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
@@ -727,6 +728,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
         provide the sync name in case the hardcoded options don't work
     drop_names: str
         provide the drop names in case you know certain channels that should be thrown out asap
+    seeg_only: bool  (default=True)
+        indicate whether you want non seeg channels included
 
     Returns
     -------
@@ -935,8 +938,9 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
                 print(f'Saving EKG data to {load_path}/ekg_data.fif')
                 mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
-            drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
-            mne_data.drop_channels(drop_chans)
+            if seeg_only == True:
+                drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
+                mne_data.drop_channels(drop_chans)
 
             # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
             new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
