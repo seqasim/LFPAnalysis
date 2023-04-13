@@ -12,6 +12,7 @@ import pandas as pd
 from mne.filter import next_fast_len
 from scipy.signal import hilbert, find_peaks, peak_widths
 import Levenshtein as lev
+import os
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     
@@ -688,7 +689,7 @@ def load_elec(elec_path=None):
     return elec_data
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
-include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None):
+include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None):
     """
     Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
@@ -724,6 +725,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
         list of channel names that pertain to the EKG in case the hardcoded options don't work
     sync_name : str
         provide the sync name in case the hardcoded options don't work
+    drop_names: str
+        provide the drop names in case you know certain channels that should be thrown out asap
 
     Returns
     -------
@@ -831,8 +834,8 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             ncs_files = glob(f'{load_path}/LFP*.ncs')
 
             # load the connection table .csv
-            connect_table_path = glob(f'{elec_path}/*Connection_Table*.csv') 
-            if not connect_table: 
+            connect_table_path = glob(f'{os.path.split(elec_path)[0]}/*Connection_Table*.csv')[0]
+            if not connect_table_path: 
                 print('Manually enter the path to the Iowa connection table:')
                 connect_table_path = glob(input())
             connect_table = pd.read_csv(connect_table_path)
@@ -876,6 +879,14 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
                 eeg_chs += np.arange(a, b).tolist()
                 
             eeg_names = [f'LFPx{ch}' for ch in eeg_chs]
+
+            starts = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna().apply(lambda x: x.split(':')[0]).astype(int)
+            ends = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna().apply(lambda x: x.split(':')[1]).astype(int) + 1
+            drop_chs = [] 
+            for a,b in zip(starts, ends):
+                drop_chs += np.arange(a, b).tolist()
+                
+            drop_names = [f'LFPx{ch}' for ch in drop_chs]
         
         if not seeg_names: 
             raise NameError('no seeg channels specified')
@@ -894,6 +905,11 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
                 print(f'No data in channel {chan_path}')
                 continue
             #  scalp eeg
+            if drop_names: 
+                drop_names = [x.lower() for x in drop_names]
+                if chan_name.lower() in drop_names:
+                    print(f'Channel selected to skip (bad or empty) {chan_path}')
+                    continue
             if eeg_names:
                 eeg_names = [x.lower() for x in eeg_names]
                 if chan_name.lower() in eeg_names:
@@ -907,9 +923,10 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
                 if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
                     ch_type.append('ecg') 
             if seeg_names: 
+                seeg_names = [x.lower() for x in seeg_names]
                 if chan_name.lower() in seeg_names:
                     ch_type.append('seeg')  
-                elif chan_name.lower()[0] == 'u':
+                elif (chan_name.lower()[0] == 'u') | (chan_name.lower()[:3] == 'pde'):
                     # microwire data
                     if include_micros==True:
                         ch_type.append('seeg')  
@@ -919,6 +936,7 @@ include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name
             srs.append(fdata['sampling_rate'])
             ch_name.append(chan_name)
             if len(ch_type) < len(ch_name):
+                # This means we were unable to assign tha channel a type
                 ch_type.append('misc')
                 print(f'Unidentified data type in {chan_name}')
 
