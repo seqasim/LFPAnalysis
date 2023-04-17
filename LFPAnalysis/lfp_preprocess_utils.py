@@ -247,7 +247,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
             elec_loc = elec_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
             elec_name = elec_data.loc[elec_ix, 'label'].lower()
             # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['x', 'y', 'z']].values - elec_loc, axis=1)
+            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['x', 'y', 'z']].values.astype(float) - elec_loc, axis=1)
             # get the 3 closest wm electrodes
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
@@ -289,7 +289,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
             elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
             elec_name = elec_data.loc[elec_ix, 'Channel'].lower()
             # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values - elec_loc, axis=1)
+            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
             # get the 3 closest wm electrodes
             wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
             # only keep the ones in the same hemisphere: 
