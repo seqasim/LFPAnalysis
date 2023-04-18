@@ -564,7 +564,7 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
     if type(mne_data) == mne.epochs.Epochs:
         data_type = 'epoch'
         n_times = mne_data._data.shape[-1]
-    elif type(mne_data) == mne.io.fif.raw.Raw: 
+    elif type(mne_data) in [mne.io.fiff.raw.Raw, mne.io.edf.edf.RawEDF]: 
         data_type = 'continuous'
         n_times = mne_data._data.shape[1]
     else: 
