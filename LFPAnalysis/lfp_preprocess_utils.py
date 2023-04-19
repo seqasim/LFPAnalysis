@@ -813,10 +813,6 @@ seeg_only=True):
 
     elif format =='nlx': 
         # This is a pre-split data. Have to specifically load the sEEG and sync individually.
-        signals = [] 
-        srs = [] 
-        ch_name = [] 
-        ch_type = []
         if site == 'MSSM': 
             # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. Sometimes, this is the real data file
             pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"

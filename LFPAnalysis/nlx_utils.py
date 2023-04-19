@@ -233,6 +233,11 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
     Iterate through a list of ncs files and extract the relevant data: signal, sr, channel type and channel name
     """
 
+    signals = [] 
+    srs = [] 
+    ch_name = [] 
+    ch_type = []
+
     for chan_path in ncs_files:
         chan_name = chan_path.split('/')[-1].replace('.ncs','')
         # strip the file type off the end if needed 
