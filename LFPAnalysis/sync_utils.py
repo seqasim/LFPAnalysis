@@ -100,7 +100,7 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
     return slope, offset, rval
 
 
-def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=1):
+def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
     """
 
     Input the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
