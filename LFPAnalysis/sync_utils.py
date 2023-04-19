@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats
+import warnings
 
 # Utility functions for synchronization
 
@@ -115,6 +116,14 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
     
     neural_ts = timestamp[trig_ix]
     neural_ts = np.array(neural_ts)
+
+    # Optional warnings for height threshold to maximize success rate of finding a match
+    if len(neural_ts) < (len(beh_ts)//2): 
+        warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
+
+   if len(neural_ts) <>(len(beh_ts)*2): 
+        warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
+
 
     rval = 0 
 
