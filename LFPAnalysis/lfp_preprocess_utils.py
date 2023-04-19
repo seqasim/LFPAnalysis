@@ -833,8 +833,10 @@ seeg_only=True):
     elif format =='nlx': 
         # This is a pre-split data. Have to specifically load the sEEG and sync individually.
         if site == 'MSSM': 
-            # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. Sometimes, this is the real data file
-            pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
+            # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. 
+            # This is dumb. We should sort them, load the ones that load (some don't have data), and concatenate them all. Once again, stupid.
+
+            # First, let's load the file wihout a number attached. This always comes first: 
             ncs_files = [x for x in glob(f'{load_path}/*.ncs') if not re.search(pattern, x)]
             numbered_ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
             if not seeg_names:
