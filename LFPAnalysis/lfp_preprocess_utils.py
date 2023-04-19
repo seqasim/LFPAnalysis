@@ -272,43 +272,45 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
         return anode_list, cathode_list, drop_wm_channels, oob_channels
 
-    elif site == 'UI':
-        wm_elec_ix = [ind for ind, data in elec_data['region_1'].str.lower().items() if 'white' in data and elec_data['Channel'][ind] not in mne_data.info['bads']]
-        all_ix = elec_data.index.values
-        gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
-        wm_elec_ix = np.array(wm_elec_ix)
+    # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
 
-        cathode_list = []
-        anode_list = []
-        drop_wm_channels = []
-        # reference is anode - cathode, so here wm is cathode
+    # elif site == 'UI':
+    #     wm_elec_ix = [ind for ind, data in elec_data['DesikanKilliany'].str.lower().items() if 'white' in data and elec_data['Channel'][ind] not in mne_data.info['bads']]
+    #     all_ix = elec_data.index.values
+    #     gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
+    #     wm_elec_ix = np.array(wm_elec_ix)
 
-        # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
-        for elec_ix in gm_elec_ix:
-            # get the electrode location
-            elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
-            elec_name = elec_data.loc[elec_ix, 'Channel'].lower()
-            # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
-            # get the 3 closest wm electrodes
-            wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
-            # only keep the ones in the same hemisphere: 
-            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
-            # get the variance of the 3 closest wm electrodes
-            wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'Channel'].str.lower().tolist())._data
-            wm_elec_var = wm_data.var(axis=1)
-            # get the index of the lowest variance electrode
-            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
-            # get the name of the lowest amplitude electrode
-            wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'Channel'].lower()
-            # get the electrode name
-            anode_list.append(elec_name)
-            cathode_list.append(wm_elec_name)
+    #     cathode_list = []
+    #     anode_list = []
+    #     drop_wm_channels = []
+    #     # reference is anode - cathode, so here wm is cathode
 
-        # Also collect the wm electrodes that are not used for referencing and drop them later
-        drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'Channel'].str.lower() if x not in cathode_list]
+    #     # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
+    #     for elec_ix in gm_elec_ix:
+    #         # get the electrode location
+    #         elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+    #         elec_name = elec_data.loc[elec_ix, 'label'].lower()
+    #         # compute the distance to all wm electrodes
+    #         wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
+    #         # get the 3 closest wm electrodes
+    #         wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+    #         # only keep the ones in the same hemisphere: 
+    #         wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
+    #         # get the variance of the 3 closest wm electrodes
+    #         wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+    #         wm_elec_var = wm_data.var(axis=1)
+    #         # get the index of the lowest variance electrode
+    #         wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
+    #         # get the name of the lowest amplitude electrode
+    #         wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
+    #         # get the electrode name
+    #         anode_list.append(elec_name)
+    #         cathode_list.append(wm_elec_name)
 
-        return anode_list, cathode_list, drop_wm_channels
+    #     # Also collect the wm electrodes that are not used for referencing and drop them later
+    #     drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
+
+    #     return anode_list, cathode_list, drop_wm_channels
 
 
 def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=None):
@@ -679,12 +681,29 @@ def load_elec(elec_path=None):
     elif elec_path.split('.')[-1] =='xlsx': 
         elec_data = pd.read_excel(elec_path)
 
+    # Strip spaces from column headers if they have them: 
+    elec_data.columns = elec_data.columns.str.replace(' ', '')
+
     # Sometimes there's extra columns with no entries: 
     elec_data = elec_data[elec_data.columns.drop(list(elec_data.filter(regex='Unnamed')))]
 
     if 'NMMlabel' in elec_data.keys(): 
         # This is an annoying naming convention but also totally my fault lol
         elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+
+    # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
+    # if 'Channel' in elec_data.keys():
+    #     # This is an annoying naming convention for UIowa data
+    #     elec_data['label'] = [f'LFPx{ch}' for ch in elec_data.Channel.values]
+    
+    # if 'mni_x' not in elec_data.keys(): 
+    #     # Check for weird naming of the mni coordinate columns (UIowa)
+    #     elec_data.rename(columns={elec_data.keys()[elec_data.keys().str.lower().str.contains('mnix')].values[0]: 'mni_x',
+    #     elec_data.keys()[elec_data.keys().str.lower().str.contains('mniy')].values[0]: 'mni_y', 
+    #     elec_data.keys()[elec_data.keys().str.lower().str.contains('mniz')].values[0]: 'mni_z'}, inplace=True)
+
+    # if 'Desikan-Killianylabel' in elec_data.keys(): 
+        elec_data.rename(columns={'Desikan-Killianylabel':'DesikanKilliany'}, inplace=True)
 
     return elec_data
 
@@ -984,7 +1003,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
     _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
-
+  
     if method=='wm':
         anode_list, cathode_list, drop_wm_channels, oob_channels = wm_ref(mne_data=mne_data, 
                                                                                        elec_path=elec_path, 
