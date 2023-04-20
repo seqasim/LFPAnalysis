@@ -211,7 +211,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
     elec_data = load_elec(elec_path)
 
-    if site == 'MSSM': 
+    if site == 'MSSM' or site=='UCD': 
         # Drop the micros and unmatched seeg from here for now....
         drop_from_locs = []
         for ind, data in elec_data['label'].str.lower().items(): 
@@ -273,7 +273,9 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         # anode_list = np.hstack(anode_list)
 
         return anode_list, cathode_list, drop_wm_channels, oob_channels
+    
 
+    
     # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
 
     # elif site == 'UI':
@@ -361,7 +363,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     cathode_list = [] 
     anode_list = [] 
 
-    if site=='MSSM':
+    if site=='MSSM' or site == 'UCD':
 
         for bundle in elec_data.bundle.unique():
             if bundle[0] == 'u':
@@ -731,8 +733,7 @@ seeg_only=True):
     format : str 
         how was this data collected? options: ['edf', 'nlx]
     site: str
-        where was the data collected? options: ['UI', 'MSSM'].
-        TODO: add site specificity for UC Davis
+        where was the data collected? options: ['UI', 'MSSM', 'UCD'].
     overwrite: bool 
         whether to overwrite existing data for this person if it exists 
     return_data: bool 
@@ -798,22 +799,45 @@ seeg_only=True):
         elif sync_type == 'ttl': 
             print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
 
-
-        # The electrode names read out of the edf file do not always match those 
-        # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
-        # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
         
-        # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
-        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
-        # Rename the mne data according to the localization data
-        new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
-        mne_data.rename_channels(new_name_dict)
+        
+        if site=='MSSM':
 
-        if not seeg_names:
-            seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
-        sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+            # The electrode names read out of the edf file do not always match those 
+            # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
+            # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
+            
+            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+            # Rename the mne data according to the localization data
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            mne_data.rename_channels(new_name_dict)
 
-        mne_data.set_channel_types(sEEG_mapping_dict)
+            if not seeg_names:
+                seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+
+            mne_data.set_channel_types(sEEG_mapping_dict)
+
+
+
+        elif site=='UCD':
+            
+            #updating function for davis edf files - naming scheme is different from mssm 
+            mne_names = [x.replace('EEG ','').replace('-REF','') for x in mne_data.ch_names]
+            mne_names = [i for i in mne_names if ((i.startswith('R')) | (i.startswith('L')))]
+
+            #calling match_elec_names to make sure channel names in anat recon and mne_data are the same
+            new_mne_names, unmatched_names, unmatched_seeg = match_elec_names(mne_names, elec_data.label)
+            #new_mne_names, unmatched_names, unmatched_seeg = match_elec_names(mne_names, loc_names)
+            #getting dictionary of new names - names are changed to all lowercase
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            #updating mne_data.ch_names to be all lowercase and match elec labels 
+            mne_data.rename_channels(new_name_dict)
+            seeg_names = [i for i in mne_data.ch_names if ((i.startswith('l')) | (i.startswith('r')))]
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+            mne_data.set_channel_types(sEEG_mapping_dict)
+
 
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
@@ -834,10 +858,10 @@ seeg_only=True):
 
     elif format =='nlx': 
         # This is a pre-split data. Have to specifically load the sEEG and sync individually.
-        if site == 'MSSM': 
+        if site == 'MSSM' or site == 'UCD': 
             # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. 
             # This is dumb. We should sort them, load the ones that load (some don't have data), and concatenate them all. Once again, stupid.
-
+            pattern = re.compile(r"_\d{4}\.ncs")
             # First, let's load the file wihout a number attached. This always comes first: 
             ncs_files = [x for x in glob(f'{load_path}/*.ncs') if not re.search(pattern, x)]
             numbered_ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
@@ -851,6 +875,8 @@ seeg_only=True):
                 pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
                 ncs_files = numbered_ncs_files
                 seeg_names = [x.split('/')[-1].replace('.ncs','').split('_')[0] for x in glob(f'{load_path}/[R,L]*.ncs') if re.search(pattern, x)]
+        
+        
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
@@ -862,7 +888,8 @@ seeg_only=True):
                 connect_table_path = glob(input())
 
             eeg_names, resp_names, ekg_names, seeg_names, drop_names = iowa_utils.extract_names_connect_table(connect_table_path)
-        
+
+
         if not seeg_names: 
             raise NameError('no seeg channels specified')
         else:
@@ -995,7 +1022,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
     method : str 
         how should we reference the data ['wm', 'bipolar']
     site : str 
-        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+        where was this data collected? Options: ['MSSM', 'UI', 'UCD']
 
     Returns
     -------
@@ -1067,7 +1094,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     method : str 
         how should we reference the data ['wm', 'bipolar']
     site : str 
-        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
+        where was this data collected? Options: ['MSSM', 'UI', 'UCD']
 
     buf_s : float 
         time to add as buffer in epochs 
