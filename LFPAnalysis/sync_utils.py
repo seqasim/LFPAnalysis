@@ -121,7 +121,7 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
     if len(neural_ts) < (len(beh_ts)//2): 
         warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
 
-   if len(neural_ts) > (len(beh_ts)*2): 
+    if len(neural_ts) > (len(beh_ts)*2): 
         warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
 
 
