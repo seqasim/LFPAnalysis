@@ -7,7 +7,7 @@ from scipy.stats import kurtosis, zscore
 import neurodsp
 import mne
 from glob import glob
-from LFPAnalysis import nlx_utils, lfp_preprocess_utils, iowa_utils
+from LFPAnalysis import nlx_utils, lfp_preprocess_utils, iowa_utils, davis_utils
 import pandas as pd
 from mne.filter import next_fast_len
 from scipy.signal import hilbert, find_peaks, peak_widths
@@ -823,21 +823,21 @@ seeg_only=True):
 
         elif site=='UCD':
             
-            #updating function for davis edf files - naming scheme is different from mssm 
-            mne_names = [x.replace('EEG ','').replace('-REF','') for x in mne_data.ch_names]
-            mne_names = [i for i in mne_names if ((i.startswith('R')) | (i.startswith('L')))]
-
-            #calling match_elec_names to make sure channel names in anat recon and mne_data are the same
+            #UCD sometimes has messy naming conventions - before checking if mne names match recon labels, clean mne names 
+            mne_names = davis_utils.UCD_check_edf_names(mne_data.ch_names) #output is lowercase
+            # calling match_elec_names to make sure channel names in anat recon and mne_data are the same
             new_mne_names, unmatched_names, unmatched_seeg = match_elec_names(mne_names, elec_data.label)
-            #new_mne_names, unmatched_names, unmatched_seeg = match_elec_names(mne_names, loc_names)
-            #getting dictionary of new names - names are changed to all lowercase
-            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            new_name_dict = {x:y for (x,y) in zip(mne_names, new_mne_names)}
             #updating mne_data.ch_names to be all lowercase and match elec labels 
             mne_data.rename_channels(new_name_dict)
-            seeg_names = [i for i in mne_data.ch_names if ((i.startswith('l')) | (i.startswith('r')))]
+
+            if not seeg_names:
+                seeg_names = [i for i in clean_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
+            else:
+                seeg_names = og_names
+                seeg_names = [elec for elec in mne_data.ch_names if any(seeg in elec for seeg in og_names)]  
             sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
             mne_data.set_channel_types(sEEG_mapping_dict)
-
 
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
