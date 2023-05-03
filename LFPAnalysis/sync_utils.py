@@ -70,7 +70,6 @@ def pulsealign(beh_ms, pulses, windSize=30):
             r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
             if r[i] > 1: 
                 # failure mode
-                corrThresh = 0.95
                 res = spearmanr(eeg_d[:length], beh_d[i:i+length])
                 r[i] = res[0]
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
