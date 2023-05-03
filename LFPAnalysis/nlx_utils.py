@@ -79,7 +79,8 @@ def parse_header(raw_hdr):
         hdr[u'FileName']  = ' '.join(hdr_lines[1].split()[3:])
         # hdr['save_path'] = hdr['FileName']
     except:
-        warnings.warn('Unable to parse original file path from Neuralynx header: ' + hdr_lines[1])
+        # warnings.warn('Unable to parse original file path from Neuralynx header: ' + hdr_lines[1])
+        pass
 
     # Process lines with file opening and closing times
     hdr[u'TimeOpened'] = hdr_lines[2][3:]
@@ -93,7 +94,9 @@ def parse_header(raw_hdr):
             name, value = line[1:].split()  # Ignore the dash and split PARAM_NAME and PARAM_VALUE
             hdr[name] = value
         except:
-            warnings.warn('Unable to parse parameter line from Neuralynx header: ' + line)
+            # warnings.warn('Unable to parse parameter line from Neuralynx header: ' + line)
+
+            return hdr
 
     return hdr
 
@@ -131,7 +134,7 @@ def parse_neuralynx_time_string(time_string):
         tmp_time = [int(x) for x in time_string.split()[-1].replace('.', ':').split(':')]
         tmp_microsecond = tmp_time[3] * 1000
     except:
-        warnings.warn('Unable to parse time string from Neuralynx header: ' + time_string)
+        # warnings.warn('Unable to parse time string from Neuralynx header: ' + time_string)
         return None
     else:
         return datetime.datetime(tmp_date[2], tmp_date[0], tmp_date[1],  # Year, month, day
@@ -223,3 +226,62 @@ def load_nev(file_path):
     nev['events'] = records[['pkt_id', 'TimeStamp', 'event_id', 'ttl', 'Extra', 'EventString']]
 
     return nev
+
+
+def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names=None, seeg_names=None, drop_names=None):
+    """
+    Iterate through a list of ncs files and extract the relevant data: signal, sr, channel type and channel name
+    """
+
+    signals = [] 
+    srs = [] 
+    ch_name = [] 
+    ch_type = []
+
+    for chan_path in ncs_files:
+        chan_name = chan_path.split('/')[-1].replace('.ncs','')
+        # strip the file type off the end if needed 
+        if '_' in chan_name:
+            chan_name = chan_name.split('_')[0]
+        try:
+            fdata = load_ncs(chan_path)
+        except IndexError: 
+            print(f'No data in channel {chan_path}')
+            continue
+        if drop_names: 
+            drop_names = [x.lower() for x in drop_names]
+            if chan_name.lower() in drop_names:
+                print(f'Channel selected to skip (bad or empty) {chan_path}')
+                continue
+        #  scalp eeg
+        if eeg_names:
+            eeg_names = [x.lower() for x in eeg_names]
+            if chan_name.lower() in eeg_names:
+                ch_type.append('eeg')
+        if resp_names:
+            resp_names = [x.lower() for x in resp_names]
+            if chan_name.lower() in resp_names:
+                ch_type.append('bio')
+        if ekg_names:
+            ekg_names = [x.lower() for x in ekg_names]
+            if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
+                ch_type.append('ecg') 
+        if seeg_names: 
+            seeg_names = [x.lower() for x in seeg_names]
+            if chan_name.lower() in seeg_names:
+                ch_type.append('seeg')  
+            elif (chan_name.lower()[0] == 'u') | (chan_name.lower()[:3] == 'pde'):
+                # microwire data
+                if include_micros==True:
+                    ch_type.append('seeg')  
+                else: # skip
+                    continue
+        signals.append(fdata['data'])
+        srs.append(fdata['sampling_rate'])
+        ch_name.append(chan_name)
+        if len(ch_type) < len(ch_name):
+            # This means we were unable to assign tha channel a type
+            ch_type.append('misc')
+            print(f'Unidentified data type in {chan_name}')
+
+    return signals, srs, ch_name, ch_type

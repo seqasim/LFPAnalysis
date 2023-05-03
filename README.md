@@ -1,6 +1,5 @@
 # LFPAnalysis
 
-
 The general motivation for this package is that any member of the Saez or Gu lab should be able to load their raw EDF or NLX LFP data into mne, 
 preprocess it, sync it to their behavioral task, and perform spectral analyses with minimal confusion. 
 
@@ -31,3 +30,16 @@ Some important misc notes if you're on MINERVA (I will compile here as I go and 
 
 2. If you want to run batch jobs in Jupyter on Minerva: https://labs.icahn.mssm.edu/minervalab/documentation/python-and-jupyter-notebook/
 
+## Installation
+
+```
+conda create --name lfp_env pip requests git python=3.10.8
+conda activate lfp_env
+pip install git+https://github.com/seqasim/LFPAnalysis.git
+```
+
+## Updating
+
+```
+pip install --upgrade git+https://github.com/seqasim/LFPAnalysis.git
+```
