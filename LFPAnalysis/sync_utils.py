@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats
 import warnings
-from scipy.stats import pearsonr 
+from scipy.stats import spearmanr 
 
 # Utility functions for synchronization
 
@@ -69,7 +69,7 @@ def pulsealign(beh_ms, pulses, windSize=30):
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
             # r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
-            res = pearsonr(eeg_d[:length], beh_d[i:i+length])
+            res = spearmanr(eeg_d[:length], beh_d[i:i+length])
             r[1] = res[0]
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
