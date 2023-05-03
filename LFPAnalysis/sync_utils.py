@@ -111,9 +111,12 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
 
     """
 
+
     sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
     timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
     sig = scipy.stats.zscore(sig)
+    # Sometimes the signal polarity is inverted 
+    sig = np.abs(sig)
 
     trig_ix = np.where((sig[:-1]<=height)*(sig[1:]>height))[0] # rising edge of trigger
     
