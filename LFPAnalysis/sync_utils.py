@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats
 import warnings
+from scipy.stats import pearsonr 
 
 # Utility functions for synchronization
 
@@ -37,12 +38,12 @@ def pulsealign(beh_ms, pulses, windSize=30):
     
     # note that sampling rate never comes in here. this is how alignment should work---it should be entirely sampling-rate independent....
     
-    
-    def fastCorr(x, y):
-        # faster version of corr
-        c = np.cov(x, y)
-        r = c[0, 1] / (np.std(x) * np.std(y))
-        return r
+    # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
+    # def fastCorr(x, y):
+    #     # faster version of corr
+    #     c = np.cov(x, y)
+    #     r = c[0, 1] / (np.std(x) * np.std(y))
+    #     return r
 
     # these are parameters that one could potentially tweak....
     corrThresh = 0.99
@@ -66,8 +67,10 @@ def pulsealign(beh_ms, pulses, windSize=30):
         for i in range(len(beh_d) - len(eeg_d)):
             # sometimes the lengths mismatch by one entry if we are by an edge: 
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
-            r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
+            # r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
+            res = pearsonr(eeg_d[:length], beh_d[i:i+length])
+            r[1] = res[0]
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
     print("\n")
@@ -108,9 +111,12 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
 
     """
 
+
     sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
     timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
     sig = scipy.stats.zscore(sig)
+    # Sometimes the signal polarity is inverted 
+    sig = np.abs(sig)
 
     trig_ix = np.where((sig[:-1]<=height)*(sig[1:]>height))[0] # rising edge of trigger
     

@@ -285,3 +285,22 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
             print(f'Unidentified data type in {chan_name}')
 
     return signals, srs, ch_name, ch_type
+
+
+def merge_multiple_ncs_files(ncs_files): 
+    """
+    TODO
+
+    Merge multiple ncs files. Usually done if recording was paused for whatever reason. 
+    """
+
+    merged_ncs_dict = {}
+
+    path_dir_ncs = os.path.split(ncs_files[0])[0]
+    chan_name = os.path.split(ncs_files[0])[-1][:-4]
+    
+    # Make a filepath for this  
+    merged_ncs_dict['file_path'] = f'{path_dir_ncs}/{chan_name}_merged.ncs'
+
+
+    pass
