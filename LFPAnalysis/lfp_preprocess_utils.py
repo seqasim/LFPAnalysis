@@ -836,14 +836,29 @@ seeg_only=True):
         # This is a pre-split data. Have to specifically load the sEEG and sync individually.
         if site == 'MSSM': 
             # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. 
-            # This is dumb. We should sort them, load the ones that load (some don't have data), and concatenate them all. Once again, stupid.
+            pattern = re.compile(r"_\d{4}\.ncs") 
+            # This is dumb. It happens for one of two reasons: 
+            # 1. Recording is paused. When restarted, NLX generates a new file 
+            # 2. Separate recordings are being split due to length (several hours)
 
-            # First, let's load the file wihout a number attached. This always comes first: 
+
+            # If it's the latter, something got screwed up - no tasks are that long. 
+            # TODO 
+            # -----
+            # If it's the former, we EITHER need to concatenate multiple, real data files, 
+            # DONE 
+            # -----
+            # OR need to select the file that actually has data in it. 
+
+
+            # First, let's list the file wihout a number attached. This always comes first: 
             ncs_files = [x for x in glob(f'{load_path}/*.ncs') if not re.search(pattern, x)]
+            # Second, let's account for all variants 
             numbered_ncs_files = [x for x in glob(f'{load_path}/*.ncs') if re.search(pattern, x)]
             if not seeg_names:
                 seeg_names = [x.split('/')[-1].replace('.ncs','') for x in glob(f'{load_path}/[R,L]*.ncs') if not re.search(pattern, x)]
             try: 
+                # Let's see if the original files have the data or the numbered variant: 
                 test_load = nlx_utils.load_ncs(ncs_files[0])
             except: 
                 print('Data in numbered files')
