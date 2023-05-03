@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats
 import warnings
-from scipy.stats import spearmanr 
+from scipy.stats import pearsonr 
 
 # Utility functions for synchronization
 
@@ -39,11 +39,11 @@ def pulsealign(beh_ms, pulses, windSize=30):
     # note that sampling rate never comes in here. this is how alignment should work---it should be entirely sampling-rate independent....
     
     # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
-    # def fastCorr(x, y):
-    #     # faster version of corr
-    #     c = np.cov(x, y)
-    #     r = c[0, 1] / (np.std(x) * np.std(y))
-    #     return r
+    def fastCorr(x, y):
+        # faster version of corr
+        c = np.cov(x, y)
+        r = c[0, 1] / (np.std(x) * np.std(y))
+        return r
 
     # these are parameters that one could potentially tweak....
     corrThresh = 0.99
@@ -67,10 +67,12 @@ def pulsealign(beh_ms, pulses, windSize=30):
         for i in range(len(beh_d) - len(eeg_d)):
             # sometimes the lengths mismatch by one entry if we are by an edge: 
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
-            # r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
+            r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
+            if r[i] > 1: 
+                # failure mode
+                res = pearsonr(eeg_d[:length], beh_d[i:i+length])
+                r[i] = res[0]
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
-            res = spearmanr(eeg_d[:length], beh_d[i:i+length])
-            r[1] = res[0]
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
     print("\n")
