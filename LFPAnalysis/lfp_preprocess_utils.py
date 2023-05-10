@@ -211,7 +211,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
     elec_data = load_elec(elec_path)
 
-    if site == 'MSSM': 
+    if site == 'MSSM' or site=='UCD': 
         # Drop the micros and unmatched seeg from here for now....
         drop_from_locs = []
         for ind, data in elec_data['label'].str.lower().items(): 
@@ -361,7 +361,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     cathode_list = [] 
     anode_list = [] 
 
-    if site=='MSSM':
+    if site=='MSSM' or site == 'UCD':
 
         for bundle in elec_data.bundle.unique():
             if bundle[0] == 'u':
@@ -711,7 +711,7 @@ def load_elec(elec_path=None):
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
-seeg_only=True):
+seeg_only=True,save_path=None):
     """
     Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
@@ -798,22 +798,43 @@ seeg_only=True):
         elif sync_type == 'ttl': 
             print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
 
-
-        # The electrode names read out of the edf file do not always match those 
-        # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
-        # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
         
-        # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
-        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
-        # Rename the mne data according to the localization data
-        new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
-        mne_data.rename_channels(new_name_dict)
+        if site=='MSSM':
 
-        if not seeg_names:
-            seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
-        sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+            # The electrode names read out of the edf file do not always match those 
+            # in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
+            # or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I'.
+            
+            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+            # Rename the mne data according to the localization data
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            mne_data.rename_channels(new_name_dict)
 
-        mne_data.set_channel_types(sEEG_mapping_dict)
+            if not seeg_names:
+                seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+
+            mne_data.set_channel_types(sEEG_mapping_dict)
+            
+        elif site=='UCD':
+            
+            #UCD sometimes has messy naming conventions - before checking if mne names match recon labels, clean mne names 
+            mne_names = davis_utils.UCD_check_edf_names(mne_data.ch_names) #output is lowercase
+            # calling match_elec_names to make sure channel names in anat recon and mne_data are the same
+            new_mne_names, unmatched_names, unmatched_seeg = match_elec_names(mne_names, elec_data.label)
+            new_name_dict = {x:y for (x,y) in zip(mne_names, new_mne_names)}
+            #updating mne_data.ch_names to be all lowercase and match elec labels 
+            mne_data.rename_channels(new_name_dict)
+
+            if not seeg_names:
+                seeg_names = [i for i in mne_data.ch_names if (((i.startswith('l')) | (i.startswith('r'))) & (i!='research'))]
+            else:
+                seeg_names = og_names
+                seeg_names = [elec for elec in mne_data.ch_names if any(seeg in elec for seeg in og_names)]  
+            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+            mne_data.set_channel_types(sEEG_mapping_dict)
+
 
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
@@ -834,7 +855,7 @@ seeg_only=True):
 
     elif format =='nlx': 
         # This is a pre-split data. Have to specifically load the sEEG and sync individually.
-        if site == 'MSSM': 
+        if site == 'MSSM' or site == 'UCD': 
             # MSSM data seems to sometime have a "_0000.ncs" to "_9999.ncs" appended to the end of the data. 
             pattern = re.compile(r"_\d{4}\.ncs") 
             # This is dumb. It happens for one of two reasons: 
@@ -988,10 +1009,16 @@ seeg_only=True):
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
+            
+
             if resample_sr is not None: 
                 mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
-            print(f'Saving LFP data to {load_path}/lfp_data.fif')
-            mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
+            if save_path is not None:
+                print(f'Saving LFP data to {save_path}/lfp_data.fif')
+                mne_data.save(f'{save_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
+            else:
+                print(f'Saving LFP data to {load_path}/lfp_data.fif')
+                mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     if return_data==True:
         return mne_data
