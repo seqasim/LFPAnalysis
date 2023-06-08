@@ -55,7 +55,7 @@ def mean_baseline_time(data, baseline, mode='zscore'):
 
     return baseline_corrected 
 
-def zscore_TFR_average(data, baseline, mode='zscore'): 
+def baseline_avg_TFR(data, baseline, mode='zscore'): 
     
     """
     Meant to mimic the mne baseline when the specific baseline period might change across trials. 
@@ -101,8 +101,9 @@ def zscore_TFR_average(data, baseline, mode='zscore'):
     return baseline_corrected 
 
 
-def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', 
-                            trialwise=True, baseline_only=False, ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
+def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', 
+                            trialwise=True, baseline_only=False, 
+                            ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -152,7 +153,7 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore',
         freq_axis = freq_axis
         time_axis = time_axis
 
-    if trialwise==False:
+    if (trialwise==False) & (baseline_only==False):
         # We can compute the mean and std by concatenating all of our baseline data! 
 
         # Start by reshaping baseline data so that we horizontally concatentaae all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
@@ -164,7 +165,8 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore',
         # Now we can compute the mean and std across trials and time points all at once 
         m = np.nanmean(baseline_data, axis=-1)
         std = np.nanstd(baseline_data, axis=-1)
-    else: 
+
+    elif (trialwise==True): 
         if baseline_data.shape[0] != data.shape[0]:
             return print('Baseline data and data must have the same number of trials')
             
