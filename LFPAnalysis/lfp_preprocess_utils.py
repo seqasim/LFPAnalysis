@@ -153,14 +153,17 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         freq_axis = freq_axis
         time_axis = time_axis
 
-    if (trialwise==False) & (baseline_only==True):
+    if trialwise:
+        if baseline_data.shape[0] != data.shape[0]:
+            return print('Baseline data and data must have the same number of trials')
+            
+        # Create an array of the mean and standard deviation of the power values across the session
+        # 1. Compute the mean across time points and across trials 
+        m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
+        # 1. Compute the std across time points for every trial
+        std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
+    elif baseline_only:
         # We can compute the mean and std by concatenating all of our baseline data! 
-
-        # Start by reshaping baseline data so that we stack all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
-        # baseline_data = np.reshape(baseline_data, 
-        # (baseline_data.shape[elec_axis], 
-        # baseline_data.shape[freq_axis], 
-        # baseline_data.shape[ev_axis]*baseline_data.shape[time_axis]))
 
         # manually reshape
         baseline_data_reshaped = np.zeros([baseline_data.shape[1], baseline_data.shape[2], baseline_data.shape[-1]*baseline_data.shape[0]])
@@ -173,19 +176,8 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         # Now we can compute the mean and std across trials and time points all at once 
         m = np.nanmean(baseline_data_reshaped, axis=-1)
         std = np.nanstd(baseline_data_reshaped, axis=-1)
-
-    elif (trialwise==False) & (baseline_only==False):
+    else:
         raise ValueError('If baselining across a session then you dont want to concatenate baseline and data. Set baseline_only=True or trialwise=True')
-
-    if trialwise==True: 
-        if baseline_data.shape[0] != data.shape[0]:
-            return print('Baseline data and data must have the same number of trials')
-            
-        # Create an array of the mean and standard deviation of the power values across the session
-        # 1. Compute the mean across time points and across trials 
-        m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
-        # 1. Compute the std across time points for every trial
-        std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
 
     # 2. Expand the array
     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
