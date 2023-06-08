@@ -132,7 +132,10 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
             baseline_data = np.concatenate((baseline_mne, data), axis=-1)
     else: 
         # Beware - this is super vulnerable to contamination by artifacts/outliers: https://www.sciencedirect.com/science/article/abs/pii/S1053811913009919
-        baseline_data = baseline_mne.data
+        if type(baseline_mne) == mne.epochs.Epochs:
+            baseline_data = baseline_mne.data
+        else:
+            baseline_data = baseline_mne
 
     if baseline_data.shape[0] != data.shape[0]:
         return print('Baseline data and data must have the same number of trials')
