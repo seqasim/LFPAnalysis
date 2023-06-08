@@ -60,13 +60,6 @@ def lfp_sta(ev_times, signal, sr, pre, post):
     ste = np.nanstd(lfp_pre_avg, 0) / np.sqrt(len(sta))
     return sta, ste
 
-def plot_ERP(data, pre_win, post_win, sr, title):
-    """
-
-    """
-    pass
-
-
 
 def plot_TFR(data, freqs, pre_win, post_win, sr, title):
     """

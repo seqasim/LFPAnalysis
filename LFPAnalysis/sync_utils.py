@@ -20,23 +20,22 @@ def moving_average(a, n=11) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def pulsealign(beh_ms, pulses, windSize=30):
+def pulsealign(beh_ms: np.ndarray, pulses: np.ndarray, windSize: int = 30) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Aligns the behavioral timestamps with the EEG pulses by finding the chunks of behavioral pulse times where the inter-pulse intervals are correlated with the EEG pulses.
 
-    # FUNCTION:
-    #   function [beh_ms, eeg_offset] = pulsealign2(beh_ms, pulses, pulseIsMS)
-    #
-    # INPUT ARGS:
-    #   beh_ms = beh_ms;   % A vector of ms times extracted from the
-    #                      %  log file
-    #   pulses = pulses;   % Vector of eeg pulses extracted from the eeg
-    #
-    # OUTPUT ARGS:
-    #   beh_ms- The truncated beh_ms values that match the eeg_offset
-    #   eeg_offset- The trucated pulses that match the beh_ms
-    
-    #  Step through the recorded sync pulses in chunks of  windsize.  Use corr to find the chunks of behavioral pulse times where the inter-pulse intervals are correlated.  When the maximum correlation is greater than corrThresh, then it indicates that the pairs match.
-    
-    # note that sampling rate never comes in here. this is how alignment should work---it should be entirely sampling-rate independent....
+    Parameters
+    ----------
+    beh_ms (np.ndarray): A vector of ms times extracted from the log file.
+    pulses (np.ndarray): Vector of EEG pulses extracted from the EEG.
+    windSize (int): The size of the chunks to step through the recorded sync pulses. Default is 30.
+
+    Returns
+    -------
+    A tuple of two np.ndarrays:
+        - beh_ms: The truncated beh_ms values that match the eeg_offset.
+        - eeg_offset: The truncated pulses that match the beh_ms.
+    """
     
     # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
     def fastCorr(x, y):
