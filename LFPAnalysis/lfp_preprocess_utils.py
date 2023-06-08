@@ -101,7 +101,8 @@ def zscore_TFR_average(data, baseline, mode='zscore'):
     return baseline_corrected 
 
 
-def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseline_only=False): 
+def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', 
+                            trialwise=True, baseline_only=False, ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
     Meant to mimic the mne baseline (specifically just the zscore for now) 
@@ -137,9 +138,6 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
         else:
             baseline_data = baseline_mne
 
-    if baseline_data.shape[0] != data.shape[0]:
-        return print('Baseline data and data must have the same number of trials')
-
     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
     # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
 
@@ -149,27 +147,42 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
         freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
         time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
     else:
-        # hardcode - ew 
-        ev_axis = 0
-        elec_axis = 1
-        freq_axis = 2
-        time_axis = 3
+        ev_axis = ev_axis
+        elec_axis = elec_axis
+        freq_axis = freq_axis
+        time_axis = time_axis
 
-    # Create an array of the mean and standard deviation of the power values across the session
-    # 1. Compute the mean across time points and across trials 
-    m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
+    if trialwise==False:
+        # We can compute the mean and std by concatenating all of our baseline data! 
+
+        # Start by reshaping baseline data so that we horizontally concatentaae all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
+        baseline_data = np.reshape(baseline_data, 
+        (baseline_data.shape[elec_axis], 
+        baseline_data.shape[freq_axis], 
+        baseline_data.shape[ev_axis]*baseline_data.shape[time_axis]))
+
+        # Now we can compute the mean and std across trials and time points all at once 
+        m = np.nanmean(baseline_data, axis=-1)
+        std = np.nanstd(baseline_data, axis=-1)
+    else: 
+        if baseline_data.shape[0] != data.shape[0]:
+            return print('Baseline data and data must have the same number of trials')
+            
+        # Create an array of the mean and standard deviation of the power values across the session
+        # 1. Compute the mean across time points and across trials 
+        m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
+            # 1. Compute the std across time points for every trial
+        std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
+
     # 2. Expand the array
     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
     # 3. Copy the data to every time-point
     m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
 
-    # 1. Compute the std across time points for every trial
-    std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
     # 2. Expand the array
     std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
     # 3. Copy the data to every time-point
     std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
-
 
     if mode == 'mean':
         baseline_corrected = data - m
@@ -185,15 +198,6 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
         baseline_corrected = np.log10(data / m) / std
     
     return baseline_corrected 
-
-def flexible_baseline(data=None, baseline=None, baseline_ix=None, mode='zscore', baseline_only=False):
-    """
-    TODO: 
-    A flexible function for baselining which does not rely on making baseline epochs with mne. 
-    This means the length of the baseline period can vary across trials, and you don't need the same # of baselines as trials.
-
-    I think the key for this is using a dictionary to keep track of which baseline data corresponds to which trial, allowing for varying sizes and even repeated data across trials.
-    """
 
 def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site=None, average=False):
     """
