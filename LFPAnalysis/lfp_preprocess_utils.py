@@ -153,7 +153,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         freq_axis = freq_axis
         time_axis = time_axis
 
-    if (trialwise==False) & (baseline_only==False):
+    if (trialwise==False) & (baseline_only==True):
         # We can compute the mean and std by concatenating all of our baseline data! 
 
         # Start by reshaping baseline data so that we stack all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
@@ -163,20 +163,21 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         # baseline_data.shape[ev_axis]*baseline_data.shape[time_axis]))
 
         # manually reshape
-        baseline_data_reshaped = np.zeros([baseline_data.shape[1], 
-        baseline_data.shape[2], 
-        baseline_data.shape[-1]*baseline_data.shape[0]])
-
+        baseline_data_reshaped = np.zeros([baseline_data.shape[1], baseline_data.shape[2], baseline_data.shape[-1]*baseline_data.shape[0]])
+        
         for ev in range(baseline_data.shape[0]):
             ix1 = baseline_data.shape[-1]*ev 
             ix2 = ix1 + baseline_data.shape[-1]
             baseline_data_reshaped[:, :, ix1:ix2] = baseline_data[ev, : ,: ,:]
 
         # Now we can compute the mean and std across trials and time points all at once 
-        m = np.nanmean(baseline_data, axis=-1)
-        std = np.nanstd(baseline_data, axis=-1)
+        m = np.nanmean(baseline_data_reshaped, axis=-1)
+        std = np.nanstd(baseline_data_reshaped, axis=-1)
 
-    elif (trialwise==True): 
+    elif (trialwise==False) & (baseline_only==False):
+        raise ValueError('If baselining across a session then you dont want to concatenate baseline and data. Set baseline_only=True or trialwise=True')
+
+    if trialwise==True: 
         if baseline_data.shape[0] != data.shape[0]:
             return print('Baseline data and data must have the same number of trials')
             
