@@ -166,6 +166,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         baseline_data_reshaped = np.zeros([baseline_data.shape[1], 
         baseline_data.shape[2], 
         baseline_data.shape[-1]*baseline_data.shape[0]])
+
         for ev in range(baseline_data.shape[0]):
             ix1 = baseline_data.shape[-1]*ev 
             ix2 = ix1 + baseline_data.shape[-1]
@@ -182,7 +183,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         # Create an array of the mean and standard deviation of the power values across the session
         # 1. Compute the mean across time points and across trials 
         m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
-            # 1. Compute the std across time points for every trial
+        # 1. Compute the std across time points for every trial
         std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
 
     # 2. Expand the array
@@ -474,6 +475,17 @@ def match_elec_names(mne_names, loc_names, method='levenshtein'):
     # put loc_names in lower case
     loc_names = loc_names.str.lower()
 
+    # check if the number of electrodes in the csv file matches the number of electrodes in the mne file. 
+    # it is ok if there are, but we 
+    if len(mne_names) > len(loc_names):
+        print('Number of electrodes in the mne file is greater than the number of electrodes in the localization file')
+        diff_elec_count = True
+    elif len(mne_names) < len(loc_names):
+        print('Number of electrodes in the mne file is less than the number of electrodes in the localization file')
+        diff_elec_count = True
+    else: 
+        diff_elec_count = False
+
     # Check which electrode names are in the loc but not the mne
     unmatched_names = list(set(loc_names) - set(mne_names))
 
@@ -498,13 +510,27 @@ def match_elec_names(mne_names, loc_names, method='levenshtein'):
             ix = -1
             while int(list(filter(str.isdigit, elec))[0])  != int(list(filter(str.isdigit, match_name))[0]): 
                 ix -= 1
-                match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                try:
+                    match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                except IndexError:
+                    if diff_elec_count:
+                        print('Could not find a match for this electrode. It is likely that the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
+                        break
+                    else:
+                        return IndexError('Could not find a match for this electrode, and its not because the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
                 match_name = match[0]
             # Make sure we aren't replacing a legit channel name: 
             ix = -1
             while match_name in list(loc_names):
                 ix -= 1
-                match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                try:
+                    match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
+                except IndexError:
+                    if diff_elec_count:
+                        print('Could not find a match for this electrode. It is likely that the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
+                        break
+                    else:
+                        return IndexError('Could not find a match for this electrode, and its not because the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
                 match_name = match[0]
             if match[1] < cutoff: 
                 print(f"Could not find a match for {elec}.")
