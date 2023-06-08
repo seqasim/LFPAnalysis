@@ -100,6 +100,7 @@ def zscore_TFR_average(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
+
 def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseline_only=False): 
     
     """
@@ -146,8 +147,8 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
         time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
     else:
         # hardcode - ew 
-        elec_axis = 0
-        ev_axis = 1
+        ev_axis = 0
+        elec_axis = 1
         freq_axis = 2
         time_axis = 3
 
@@ -181,6 +182,15 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
         baseline_corrected = np.log10(data / m) / std
     
     return baseline_corrected 
+
+def flexible_baseline(data=None, baseline=None, baseline_ix=None, mode='zscore', baseline_only=False):
+    """
+    TODO: 
+    A flexible function for baselining which does not rely on making baseline epochs with mne. 
+    This means the length of the baseline period can vary across trials, and you don't need the same # of baselines as trials.
+
+    I think the key for this is using a dictionary to keep track of which baseline data corresponds to which trial, allowing for varying sizes and even repeated data across trials.
+    """
 
 def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site=None, average=False):
     """
