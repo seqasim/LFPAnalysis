@@ -156,11 +156,20 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     if (trialwise==False) & (baseline_only==False):
         # We can compute the mean and std by concatenating all of our baseline data! 
 
-        # Start by reshaping baseline data so that we horizontally concatentaae all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
-        baseline_data = np.reshape(baseline_data, 
-        (baseline_data.shape[elec_axis], 
-        baseline_data.shape[freq_axis], 
-        baseline_data.shape[ev_axis]*baseline_data.shape[time_axis]))
+        # Start by reshaping baseline data so that we stack all trials (ev_axis) so we now have a 3 dimensionsal array of size (elec_axis, freq_axis, trials*times)
+        # baseline_data = np.reshape(baseline_data, 
+        # (baseline_data.shape[elec_axis], 
+        # baseline_data.shape[freq_axis], 
+        # baseline_data.shape[ev_axis]*baseline_data.shape[time_axis]))
+
+        # manually reshape
+        baseline_data_reshaped = np.zeros([baseline_data.shape[1], 
+        baseline_data.shape[2], 
+        baseline_data.shape[-1]*baseline_data.shape[0]])
+        for ev in range(baseline_data.shape[0]):
+            ix1 = baseline_data.shape[-1]*ev 
+            ix2 = ix1 + baseline_data.shape[-1]
+            baseline_data_reshaped[:, :, ix1:ix2] = baseline_data[ev, : ,: ,:]
 
         # Now we can compute the mean and std across trials and time points all at once 
         m = np.nanmean(baseline_data, axis=-1)
