@@ -154,7 +154,7 @@ def zscore_TFR_across_trials(data=None, baseline_mne=None, mode='zscore', baseli
     # Create an array of the mean and standard deviation of the power values across the session
     # 1. Compute the mean across time points and across trials 
     m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
-        # 2. Expand the array
+    # 2. Expand the array
     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
     # 3. Copy the data to every time-point
     m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
@@ -1066,8 +1066,10 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
     return mne_data_reref
 
 
-def make_epochs(load_path=None, elec_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
+def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
 ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
+
+    # elec_path=None,
     """
 
     TODO: allow for a dict of pre and post times so they can vary across evs 
@@ -1076,13 +1078,13 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     baseline_times: dict with format {'event_name': np.array([times])}
     IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
 
+    elec_data : pandas df 
+        dataframe with all the electrode localization information
 
     Parameters
     ----------
     load_path : str
         path to the re-referenced neural data
-    elec_data : pandas df 
-        dataframe with all the electrode localization information
     slope : float 
         slope used for syncing behavioral and neural data 
     offset : float 
@@ -1115,16 +1117,19 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
         mne Epoch object with re-referenced data
     """
 
-    elec_data = load_elec(elec_path)
+    # elec_data = load_elec(elec_path)
 
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
-    # Reconstruct the anode list 
-    anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
+    # # Reconstruct the anode list 
+    # anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
 
-    # Filter the list 
-    elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
-    elec_df['label'] = mne_data_reref.ch_names
+    # # Filter the list 
+    # elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
+
+    # # TODO: Shawn noticed that if the electrodes are not in the same order as the MNE data then you're labeling the wrong electrodes! 
+    # # elec_df['label'] = mne_data_reref.ch_names
+    # elec_df['label'] = elec_df['label'].apply(lambda x: next((string for string in mne_data_reref.ch_names if x in string), np.nan))
 
     # all behavioral times of interest 
     beh_ts = [(x*slope + offset) for x in behav_times]
