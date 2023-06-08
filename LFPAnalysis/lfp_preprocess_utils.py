@@ -113,16 +113,29 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     
     Parameters
     ----------
-    data : 2d numpy array
-        original data
-    baseline : 2d numpy array
-        baseline data 
-    mode : str
-        choice of baseline mode
+    data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The original time-frequency data.
+    baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
+    mode : str, optional
+        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
+    trialwise : bool, optional
+        Whether to baseline each trial separately. Default is True.
+    baseline_only : bool, optional
+        Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
+    ev_axis : int, optional
+        The axis corresponding to the event dimension. Default is 0.
+    elec_axis : int, optional
+        The axis corresponding to the electrode dimension. Default is 1.
+    freq_axis : int, optional
+        The axis corresponding to the frequency dimension. Default is 2.
+    time_axis : int, optional
+        The axis corresponding to the time dimension. Default is 3.
+
     Returns
     -------
-    baseline_corrected : 2d numpy array
-        baselined data 
+    baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The baseline-corrected time-frequency data.
     """
 
 
@@ -314,45 +327,43 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
         return anode_list, cathode_list, drop_wm_channels, oob_channels
 
-    # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
+    elif site == 'UI':
+        wm_elec_ix = [ind for ind, data in elec_data['DesikanKilliany'].str.lower().items() if 'white' in data and elec_data['Channel'][ind] not in mne_data.info['bads']]
+        all_ix = elec_data.index.values
+        gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
+        wm_elec_ix = np.array(wm_elec_ix)
 
-    # elif site == 'UI':
-    #     wm_elec_ix = [ind for ind, data in elec_data['DesikanKilliany'].str.lower().items() if 'white' in data and elec_data['Channel'][ind] not in mne_data.info['bads']]
-    #     all_ix = elec_data.index.values
-    #     gm_elec_ix = np.array([x for x in all_ix if x not in wm_elec_ix])
-    #     wm_elec_ix = np.array(wm_elec_ix)
+        cathode_list = []
+        anode_list = []
+        drop_wm_channels = []
+        # reference is anode - cathode, so here wm is cathode
 
-    #     cathode_list = []
-    #     anode_list = []
-    #     drop_wm_channels = []
-    #     # reference is anode - cathode, so here wm is cathode
+        # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
+        for elec_ix in gm_elec_ix:
+            # get the electrode location
+            elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+            elec_name = elec_data.loc[elec_ix, 'label'].lower()
+            # compute the distance to all wm electrodes
+            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
+            # get the 3 closest wm electrodes
+            wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+            # only keep the ones in the same hemisphere: 
+            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
+            # get the variance of the 3 closest wm electrodes
+            wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+            wm_elec_var = wm_data.var(axis=1)
+            # get the index of the lowest variance electrode
+            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
+            # get the name of the lowest amplitude electrode
+            wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
+            # get the electrode name
+            anode_list.append(elec_name)
+            cathode_list.append(wm_elec_name)
 
-    #     # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
-    #     for elec_ix in gm_elec_ix:
-    #         # get the electrode location
-    #         elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
-    #         elec_name = elec_data.loc[elec_ix, 'label'].lower()
-    #         # compute the distance to all wm electrodes
-    #         wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
-    #         # get the 3 closest wm electrodes
-    #         wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
-    #         # only keep the ones in the same hemisphere: 
-    #         wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
-    #         # get the variance of the 3 closest wm electrodes
-    #         wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
-    #         wm_elec_var = wm_data.var(axis=1)
-    #         # get the index of the lowest variance electrode
-    #         wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
-    #         # get the name of the lowest amplitude electrode
-    #         wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
-    #         # get the electrode name
-    #         anode_list.append(elec_name)
-    #         cathode_list.append(wm_elec_name)
+        # Also collect the wm electrodes that are not used for referencing and drop them later
+        drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
 
-    #     # Also collect the wm electrodes that are not used for referencing and drop them later
-    #     drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
-
-    #     return anode_list, cathode_list, drop_wm_channels
+        return anode_list, cathode_list, drop_wm_channels
 
 
 def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=None):
@@ -361,13 +372,86 @@ def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=N
 
     In this case, the cathode is the average of the surrounding electrodes. If an edge electrode, it's just bipolar. 
 
-    From here: https://doi.org/10.1016/j.neuroimage.2018.08.020
+    Parameters
+    ----------
+    mne_data : MNE Raw object
+        MNE Raw object containing the EEG data
+    elec_path : str
+        Path to the electrode localization file
+    bad_channels : list 
+        List of bad channels 
+    unmatched_seeg : list 
+        List of channels that were not in the edf file 
+    site : str
+        Hospital where the recording took place 
 
+    Returns
+    -------
+    anode_list : list 
+        List of channels to subtract from
+    cathode_list : list 
+        List of channels to subtract
     """
 
-    elec_data = load_elec(elec_data)
+    elec_data = load_elec(elec_path)
 
-    pass
+    # helper function to perform sort for bipolar electrodes:
+    def num_sort(string):
+        return list(map(int, re.findall(r'\d+', string)))[0]
+
+    cathode_list = [] 
+    anode_list = [] 
+
+    if site=='MSSM':
+
+        for bundle in elec_data.bundle.unique():
+            if bundle[0] == 'u':
+                print('this is a microwire, pass')
+                continue         
+            # Isolate the electrodes in each bundle 
+            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
+            all_elecs = elec_data.label.tolist()
+            # Sort them by number 
+            all_elecs.sort(key=num_sort)
+            # make sure these are not bad channels 
+            all_elecs = [x for x in all_elecs if x not in bad_channels]
+            # Set the cathodes and anodes 
+            for i, elec in enumerate(all_elecs):
+                if i == 0 or i == len(all_elecs) - 1:
+                    cathode_list.append(elec)
+                    anode_list.append(elec)
+                else:
+                    neighbors = [all_elecs[i-1], all_elecs[i+1]]
+                    if neighbors[0] in bad_channels or neighbors[1] in bad_channels:
+                        cathode_list.append(elec)
+                        anode_list.append(elec)
+                    else:
+                        cathode_list.append(np.mean(mne_data._data[mne_data.ch_names.index(neighbors), :], axis=0))
+                        anode_list.append(elec)
+
+    elif site=='UI':
+
+        for bundle in elec_data.bundle.unique():
+            # Isolate the electrodes in each bundle 
+            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
+            all_elecs = bundle_df.Channel.tolist()
+            # make sure these are not bad channels 
+            all_elecs = [x for x in all_elecs if x not in bad_channels]
+            # Set the cathodes and anodes 
+            for i, elec in enumerate(all_elecs):
+                if i == 0 or i == len(all_elecs) - 1:
+                    cathode_list.append(elec)
+                    anode_list.append(elec)
+                else:
+                    neighbors = [all_elecs[i-1], all_elecs[i+1]]
+                    if neighbors[0] in bad_channels or neighbors[1] in bad_channels:
+                        cathode_list.append(elec)
+                        anode_list.append(elec)
+                    else:
+                        cathode_list.append(np.mean(mne_data._data[mne_data.ch_names.index(neighbors), :], axis=0))
+                        anode_list.append(elec)
+
+    return anode_list, cathode_list
 
 def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     """
