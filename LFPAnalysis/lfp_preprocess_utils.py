@@ -843,17 +843,17 @@ def load_elec(elec_path=None):
         elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
 
     # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
-    # if 'Channel' in elec_data.keys():
-    #     # This is an annoying naming convention for UIowa data
-    #     elec_data['label'] = [f'LFPx{ch}' for ch in elec_data.Channel.values]
+    if 'Channel' in elec_data.keys():
+        # This is an annoying naming convention for UIowa data
+        elec_data['label'] = [f'LFPx{ch}' for ch in elec_data.Channel.values]
     
-    # if 'mni_x' not in elec_data.keys(): 
-    #     # Check for weird naming of the mni coordinate columns (UIowa)
-    #     elec_data.rename(columns={elec_data.keys()[elec_data.keys().str.lower().str.contains('mnix')].values[0]: 'mni_x',
-    #     elec_data.keys()[elec_data.keys().str.lower().str.contains('mniy')].values[0]: 'mni_y', 
-    #     elec_data.keys()[elec_data.keys().str.lower().str.contains('mniz')].values[0]: 'mni_z'}, inplace=True)
+    if 'mni_x' not in elec_data.keys(): 
+        # Check for weird naming of the mni coordinate columns (UIowa)
+        elec_data.rename(columns={elec_data.keys()[elec_data.keys().str.lower().str.contains('mnix')].values[0]: 'mni_x',
+        elec_data.keys()[elec_data.keys().str.lower().str.contains('mniy')].values[0]: 'mni_y', 
+        elec_data.keys()[elec_data.keys().str.lower().str.contains('mniz')].values[0]: 'mni_z'}, inplace=True)
 
-    # if 'Desikan-Killianylabel' in elec_data.keys(): 
+    if 'Desikan-Killianylabel' in elec_data.keys(): 
         elec_data.rename(columns={'Desikan-Killianylabel':'DesikanKilliany'}, inplace=True)
 
     return elec_data
@@ -916,7 +916,7 @@ seeg_only=True):
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
             eeg_names = ['fp1', 'f7', 't3', 't5', 'o1', 'f3', 'c3', 'p3', 'fp2', 'f8', 't4', 't6', 'o2', 'f4', 'c4', 'p4', 'fz', 'cz', 'pz']
     
-    # 1) load the data:
+    # 1. load the data:
     if format=='edf':
         # MAKE SURE ALL THE EDF CHANNELS HAVE THE SAME SR! See: https://github.com/mne-tools/mne-python/issues/10635
         # EDF data always comes from MSSM AFAIK. Modify this if that changes.
