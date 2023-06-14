@@ -20,7 +20,9 @@ def moving_average(a, n=11) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def pulsealign(beh_ms: np.ndarray, pulses: np.ndarray, windSize: int = 30) -> Tuple[np.ndarray, np.ndarray]:
+def pulsealign(beh_ms=None,
+               pulses=None, 
+               windSize=15):
     """
     Aligns the behavioral timestamps with the EEG pulses by finding the chunks of behavioral pulse times where the inter-pulse intervals are correlated with the EEG pulses.
 
@@ -28,7 +30,7 @@ def pulsealign(beh_ms: np.ndarray, pulses: np.ndarray, windSize: int = 30) -> Tu
     ----------
     beh_ms (np.ndarray): A vector of ms times extracted from the log file.
     pulses (np.ndarray): Vector of EEG pulses extracted from the EEG.
-    windSize (int): The size of the chunks to step through the recorded sync pulses. Default is 30.
+    windSize (int): The size of the chunks to step through the recorded sync pulses. Default is 15.
 
     Returns
     -------
