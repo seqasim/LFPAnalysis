@@ -330,7 +330,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         anode_list = elec_data.loc[gm_elec_ix, 'label'].str.lower().tolist()
         cathode_list = wm_elec_name.tolist()
 
-        # # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
+        # # DEPRECATED: This loop is SLOW AF: is there a way to vectorize this for speed?
         # for elec_ix in gm_elec_ix:
         #     # get the electrode location
         #     elec_loc = elec_data.loc[elec_ix, ['x', 'y', 'z']].values.astype(float)
@@ -373,28 +373,54 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         anode_list = []
         drop_wm_channels = []
         # reference is anode - cathode, so here wm is cathode
+        elec_locs = elec_data.loc[gm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+        wm_locs = elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+        dists = np.linalg.norm(elec_locs[:, None, :] - wm_locs[None, :, :], axis=-1)
+
+        # only keep the ones in the same hemisphere
+        hemi_mask = np.stack([(elec_data.loc[wm_elec_ix, 'label'].str.lower().str[0]==x).values for x in elec_data.loc[gm_elec_ix, 'label'].str.lower().str[0]])
+        dists[hemi_mask==False] = np.nan
+
+        # get the 3 closest wm electrodes for each gm electrode
+        closest_wm_elec_ix = np.argpartition(dists, 3, axis=1)[:, :3]
+        # closest_wm_elec_dist = np.take_along_axis(dists, closest_wm_elec_ix, axis=1)
+
+        # get the variance of the 3 closest wm electrodes
+        wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist())._data
+        
+        wm_vars = wm_data.var(axis=1)
+        wm_elec_var = []
+        for wm_ix in closest_wm_elec_ix:
+            wm_elec_var.append(wm_vars[wm_ix])
+
+        # get the index of the lowest variance electrode
+        wm_elec_ix_lowest = np.argmin(wm_elec_var, axis=1)
+
+        # get the name of the lowest amplitude electrode
+        wm_elec_name = elec_data.loc[wm_elec_ix[closest_wm_elec_ix[np.arange(len(gm_elec_ix)), wm_elec_ix_lowest]], 'label'].str.lower()
+
 
         # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
-        for elec_ix in gm_elec_ix:
-            # get the electrode location
-            elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
-            elec_name = elec_data.loc[elec_ix, 'label'].lower()
-            # compute the distance to all wm electrodes
-            wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
-            # get the 3 closest wm electrodes
-            wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
-            # only keep the ones in the same hemisphere: 
-            wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
-            # get the variance of the 3 closest wm electrodes
-            wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
-            wm_elec_var = wm_data.var(axis=1)
-            # get the index of the lowest variance electrode
-            wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
-            # get the name of the lowest amplitude electrode
-            wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
-            # get the electrode name
-            anode_list.append(elec_name)
-            cathode_list.append(wm_elec_name)
+        # for elec_ix in gm_elec_ix:
+        #     # get the electrode location
+        #     elec_loc = elec_data.loc[elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float)
+        #     elec_name = elec_data.loc[elec_ix, 'label'].lower()
+        #     # compute the distance to all wm electrodes
+        #     wm_elec_dist = np.linalg.norm(elec_data.loc[wm_elec_ix, ['mni_x', 'mni_y', 'mni_z']].values.astype(float) - elec_loc, axis=1)
+        #     # get the 3 closest wm electrodes
+        #     wm_elec_ix_closest = wm_elec_ix[np.argsort(wm_elec_dist)[:4]]
+        #     # only keep the ones in the same hemisphere: 
+        #     wm_elec_ix_closest = [x for x in wm_elec_ix_closest if elec_data.loc[x, 'label'].lower()[0]==elec_data.loc[elec_ix, 'label'].lower()[0]]
+        #     # get the variance of the 3 closest wm electrodes
+        #     wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix_closest, 'label'].str.lower().tolist())._data
+        #     wm_elec_var = wm_data.var(axis=1)
+        #     # get the index of the lowest variance electrode
+        #     wm_elec_ix_lowest = wm_elec_ix_closest[np.argmin(wm_elec_var)]
+        #     # get the name of the lowest amplitude electrode
+        #     wm_elec_name = elec_data.loc[wm_elec_ix_lowest, 'label'].lower()
+        #     # get the electrode name
+        #     anode_list.append(elec_name)
+        #     cathode_list.append(wm_elec_name)
 
         # Also collect the wm electrodes that are not used for referencing and drop them later
         drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
