@@ -398,7 +398,10 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
         # get the name of the lowest amplitude electrode
         wm_elec_name = elec_data.loc[wm_elec_ix[closest_wm_elec_ix[np.arange(len(gm_elec_ix)), wm_elec_ix_lowest]], 'label'].str.lower()
-
+        
+        # get the electrode name
+        anode_list = elec_data.loc[gm_elec_ix, 'label'].str.lower().tolist()
+        cathode_list = wm_elec_name.tolist()
 
         # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
         # for elec_ix in gm_elec_ix:
