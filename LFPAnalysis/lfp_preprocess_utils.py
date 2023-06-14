@@ -15,23 +15,26 @@ import Levenshtein as lev
 import os
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
-    
     """
-    Meant to mimic the mne baseline for time-series but when the specific baseline period might change across trials, as 
-    mne doesn't allow baseline period to vary. 
+    Baselines time-series data (i.e the iEEG signal) using a mean baseline period. This function is meant to mimic the MNE baseline function 
+    when the specific baseline period might change across trials, as MNE doesn't allow baseline period to vary. 
+
+    Note: Your probably won't use this much!! 
 
     Parameters
     ----------
-    data : 2d numpy array
-        original data
-    baseline : 2d numpy array
-        baseline data 
-    mode : str
-        choice of baseline mode
+    data : numpy.ndarray, shape (n_channels, n_times)
+        The original time-series data.
+    baseline : numpy.ndarray, shape (n_channels, n_baseline_times)
+        The baseline data.
+    mode : str, optional
+        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', 
+        and 'zlogratio'. Default is 'zscore'.
+
     Returns
     -------
-    baseline_corrected : 2d numpy array
-        baselined data 
+    baseline_corrected : numpy.ndarray, shape (n_channels, n_times)
+        The baseline-corrected time-series data.
     """
     
     baseline_mean =  baseline.mean(axis=-1)
@@ -56,26 +59,26 @@ def mean_baseline_time(data, baseline, mode='zscore'):
     return baseline_corrected 
 
 def baseline_avg_TFR(data, baseline, mode='zscore'): 
-    
     """
-    Meant to mimic the mne baseline when the specific baseline period might change across trials. 
+    Baselines time-frequency data (TFR) using a mean baseline period. 
 
-    This presumes you're using trial-averaged data (check dimensions)
-    
+    This function presumes you're using trial-averaged data. The baseline data should have the same number of channels and frequencies as the original data.
+
     Parameters
     ----------
-    data : 2d numpy array
-        original data
-    baseline : 2d numpy array
-        baseline data 
-    mode : str
-        choice of baseline mode
+    data : numpy.ndarray, shape (n_channels, n_freqs, n_times)
+        The original time-frequency data.
+    baseline : numpy.ndarray, shape (n_channels, n_freqs, n_baseline_times)
+        The baseline data.
+    mode : str, optional
+        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', 
+        and 'zlogratio'. Default is 'zscore'.
+
     Returns
     -------
-    baseline_corrected : 2d numpy array
-        baselined data 
+    baseline_corrected : numpy.ndarray, shape (n_channels, n_freqs, n_times)
+        The baseline-corrected time-frequency data.
     """
-    
 
     m = baseline.mean(axis=-1)
     m = np.expand_dims(m, axis=2)
@@ -106,7 +109,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
-    Meant to mimic the mne baseline (specifically just the zscore for now) 
+    Meant to mimic the mne baseline
     for TFR but when the specific baseline period might change across trials. 
 
     This presumes you're using trial-level data (check dimensions)
@@ -293,6 +296,35 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         anode_list = []
         drop_wm_channels = []
         # reference is anode - cathode, so here wm is cathode
+        # Potential vectorized speedup: 
+        
+        # compute the distance between all electrodes and white matter electrodes
+        
+        # elec_locs = elec_data.loc[gm_elec_ix, ['x', 'y', 'z']].values.astype(float)
+        # wm_locs = elec_data.loc[wm_elec_ix, ['x', 'y', 'z']].values.astype(float)
+        # dists = np.linalg.norm(elec_locs[:, None, :] - wm_locs[None, :, :], axis=-1)
+
+        # # only keep the ones in the same hemisphere
+        # hemi_mask = elec_data.loc[gm_elec_ix, 'label'].str.lower().str[0] == elec_data.loc[wm_elec_ix, 'label'].str.lower().str[0]
+        # dists = np.where(hemi_mask[:, None], dists, np.inf)
+
+        # # get the 3 closest wm electrodes for each gm electrode
+        # closest_wm_elec_ix = np.argpartition(dists, 3, axis=1)[:, :3]
+        # closest_wm_elec_dist = np.take_along_axis(dists, closest_wm_elec_ix, axis=1)
+
+        # # get the variance of the 3 closest wm electrodes
+        # wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist())._data
+        # wm_elec_var = np.take_along_axis(wm_data.var(axis=1), closest_wm_elec_ix, axis=0)
+
+        # # get the index of the lowest variance electrode
+        # wm_elec_ix_lowest = np.argmin(wm_elec_var, axis=1)
+
+        # # get the name of the lowest amplitude electrode
+        # wm_elec_name = elec_data.loc[wm_elec_ix[closest_wm_elec_ix[np.arange(len(gm_elec_ix)), wm_elec_ix_lowest]], 'label'].str.lower()
+
+        # # get the electrode name
+        # anode_list = elec_data.loc[gm_elec_ix, 'label'].str.lower().tolist()
+        # cathode_list = wm_elec_name.tolist()
 
         # NOTE: This loop is SLOW AF: is there a way to vectorize this for speed?
         for elec_ix in gm_elec_ix:
@@ -823,7 +855,15 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
 
 def load_elec(elec_path=None):
     """
-    Load the electrode data, correct for small idiosyncracies, and return as a pandas dataframe
+    Load the electrode data from a CSV or Excel file, correct for small idiosyncracies, and return as a pandas dataframe.
+
+    Parameters
+    ----------
+    elec_path (str): Path to the electrode data file. The file should be in CSV or Excel format.
+
+    Returns
+    ----------
+    pandas.DataFrame: A dataframe containing the electrode data. The dataframe has columns for the electrode label, the x, y, and z coordinates in MNI space, and any other metadata associated with the electrodes.
     """
 
     # Load electrode data (should already be manually localized!)
