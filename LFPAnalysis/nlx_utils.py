@@ -228,7 +228,7 @@ def load_nev(file_path):
     return nev
 
 
-def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names=None, seeg_names=None, drop_names=None):
+def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names=None, seeg_names=None, drop_names=None, include_micros=False):
     """
     Iterate through a list of ncs files and extract the relevant data: signal, sr, channel type and channel name
     """

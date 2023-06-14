@@ -1112,7 +1112,8 @@ seeg_only=True):
         resp_names=resp_names, 
         ekg_names=ekg_names, 
         seeg_names=seeg_names, 
-        drop_names=drop_names)
+        drop_names=drop_names,
+        include_micros=include_micros)
 
         if np.unique(srs).shape[0] == 1:
             # all the sampling rates match:
