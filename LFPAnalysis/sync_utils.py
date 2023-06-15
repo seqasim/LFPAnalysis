@@ -5,16 +5,28 @@ from scipy.stats import spearmanr
 
 # Utility functions for synchronization
 
-def get_behav_ts(logfile, format='old'): 
+def get_behav_ts(logfile): 
     """
-    Gets the timestamps from the behavioral logfile depending on the format of the task (old? or new?)
+    Insert custom function to extract the behavioral timestamps from the logfile for your task. 
     """
     pass
     
 
 def moving_average(a, n=11) :
     """
-    Clean up the sync channel a bit. 
+    Computes the moving average of a given array a with a window size of n.
+
+    Parameters
+    ----------
+    a : np.ndarray
+        The input array to compute the moving average on.
+    n : int, optional
+        The window size of the moving average. Default is 11.
+
+    Returns
+    -------
+    np.ndarray
+        The moving average of the input array a.
     """
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
@@ -95,7 +107,17 @@ def pulsealign(beh_ms=None,
 
 def sync_matched_pulses(beh_pulse, neural_pulse):
     """
-    Idea is similar to this: https://github.com/mne-tools/mne-python/blob/main/mne/preprocessing/realign.py#L13-L111
+    Compute the slope and offset of the linear regression between two sets of pulse timestamps.
+
+    Parameters:
+    beh_pulse (array-like): The timestamps of the behavioral pulses.
+    neural_pulse (array-like): The timestamps of the neural pulses.
+
+    Returns:
+    tuple: A tuple containing the slope, offset, and correlation coefficient of the linear regression.
+
+    Note:     Idea is similar to this: https://github.com/mne-tools/mne-python/blob/main/mne/preprocessing/realign.py#L13-L111
+
     """
     bfix = beh_pulse[0]
     res = scipy.stats.linregress(beh_pulse-bfix, neural_pulse)
@@ -109,40 +131,49 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
 
 def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
     """
+    Synchronize the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
 
-    Input the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
+    Parameters:
+    beh_ts (array-like): The timestamps of the behavioral events.
+    mne_sync (MNE object): The MNE photodiode data.
+    smoothSize (int): The size of the smoothing window for the photodiode data.
+    windSize (int): The size of the window for pulse alignment.
+    height (float): The threshold for detecting the rising edge of the photodiode signal.
 
-    TODO: Jing noticed that if the height is too low, and the noise level is high, then you can return a different (wrong) offset. 
-    By using min-max scaling we can maybe account for this with a high height percentage, i.e. 0.9
-    
+    Returns:
+    tuple: A tuple containing the slope and offset of the linear regression between the behavioral and neural timestamps.
 
+    Raises:
+    ValueError: If the synchronization fails.
+
+    Note: 
+    - The function uses a moving average filter to smooth the photodiode data.
+    - The function uses a z-score normalization for the photodiode data.
+    - The function uses a threshold to detect the rising edge of the photodiode signal.
+    - The function uses pulse alignment to match the behavioral and neural timestamps.
+    - The function uses linear regression to compute the slope and offset of the synchronization.
+    - The function increases the window size for pulse alignment until the correlation coefficient of the linear regression is greater than or equal to 0.99.
+    - The function raises a ValueError if the synchronization fails.
     """
-
-
+    
     sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
     timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
     sig = scipy.stats.zscore(sig)
-    # sig = (sig - np.nanmin(sig)) / (np.nanmax(sig) - np.nanmin(sig)) 
-    # height = 0.9
-
 
     trig_ix = np.where((sig[:-1]<=height)*(sig[1:]>height))[0] # rising edge of trigger
     
     neural_ts = timestamp[trig_ix]
     neural_ts = np.array(neural_ts)
 
-    # Optional warnings for height threshold to maximize success rate of finding a match
     if len(neural_ts) < (len(beh_ts)//1.5): 
         warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
 
     if len(neural_ts) > (len(beh_ts)*1.5): 
         warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
 
-
     rval = 0 
     while (rval<0.99) & (windSize < 60):
         if len(beh_ts)!=len(neural_ts):
-            # Do regression to find neural timestamps for each event type
             good_beh_ts, good_neural_ts = pulsealign(beh_ts, neural_ts, windSize=windSize)
             slope, offset, rval = sync_matched_pulses(good_beh_ts, good_neural_ts)
         else:
