@@ -433,6 +433,7 @@ file_path=None, plot=True, **kwargs):
 
 def detect_oscillation_evs(signal, method=None): 
     """
+    Eventually could port: https://github.com/neurofractal/fBOSC
     """
     pass 
 
@@ -450,8 +451,7 @@ def sliding_FOOOF(signal):
     """
     Implement time-resolved FOOOF: 
     https://github.com/lucwilson/SPRiNT now has a python implementation we can borrow from! 
-    or: 
-    https://github.com/neurofractal/fBOSC
+    
 
     """
     pass
