@@ -449,7 +449,9 @@ def empirical_mode_decomposition(signal):
 def sliding_FOOOF(signal): 
     """
     Implement time-resolved FOOOF: 
-    https://github.com/lucwilson/SPRiNT
+    https://github.com/lucwilson/SPRiNT now has a python implementation we can borrow from! 
+    or: 
+    https://github.com/neurofractal/fBOSC
 
     """
     pass
