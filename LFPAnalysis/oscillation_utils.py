@@ -1,4 +1,5 @@
 """
+IN PROGRESS: 
 
 Pulled largely from Julian Q. Kosciessa at
 https://github.com/jkosciessa/eBOSC_py 
@@ -112,29 +113,20 @@ def BOSC_tf(eegsignal,F,Fsample,wavenumber):
 
 def BOSC_detect(b,powthresh,durthresh,Fsample):
     """
-    detected=BOSC_detect(b,powthresh,durthresh,Fsample)
-    This function detects oscillations based on a wavelet power
-    timecourse, b, a power threshold (powthresh) and duration
-    threshold (durthresh) returned from BOSC_thresholds.m.
-    
-    It now returns the detected vector which is already episode-detected.
-    
-    b - the power timecourse (at one frequency of interest)
-    
-    durthresh - duration threshold in  required to be deemed oscillatory
-    powthresh - power threshold
-    
-    returns:
-    detected - a binary vector containing the value 1 for times at
-               which oscillations (at the frequency of interest) were
-               detected and 0 where no oscillations were detected.
-    
-    note: Remember to account for edge effects by including
-    "shoulder" data and accounting for it afterwards!
-    
-    To calculate Pepisode:
-    Pepisode=length(find(detected))/(length(detected));
-    """                           
+    Detect oscillations based on a wavelet power timecourse, `b`, a power threshold (`powthresh`) and duration threshold (`durthresh`)
+
+    Args:
+    - b (numpy.ndarray): The power timecourse (at one frequency of interest).
+    - powthresh (float): The power threshold.
+    - durthresh (float): The duration threshold required to be deemed oscillatory.
+    - Fsample (float): The sampling frequency.
+
+    Returns:
+    - detected (numpy.ndarray): A binary vector containing the value 1 for times at which oscillations (at the frequency of interest) were detected and 0 where no oscillations were detected.
+
+    Note:
+    - To calculate Pepisode: Pepisode = length(find(detected)) / (length(detected)).
+    """
 
     # number of time points
     nT=len(b)
@@ -952,11 +944,11 @@ def eBOSC_wrapper(cfg_eBOSC, data):
     # alternatively: create a new time vector that is non-continuous and starts at zero
     # np.arange(0, 1/cfg_eBOSC['fsample']*(n_time_total) , 1/cfg_eBOSC['fsample'])
     # get timing and info for post-TFR padding removal
-    tfr_time2extract = np.arange(cfg_eBOSC['pad.tfr_sample']+1, n_time_total-cfg_eBOSC['pad.tfr_sample']+1,1)
+    tfr_time2extract = np.arange(cfg_eBOSC['pad.tfr_sample'], n_time_total-cfg_eBOSC['pad.tfr_sample'],1)
     cfg_eBOSC['time.time_tfr'] = cfg_eBOSC['time.time_total'][tfr_time2extract]
     n_time_tfr = len(cfg_eBOSC['time.time_tfr'])
     # get timing and info for post-detected padding removal
-    det_time2extract = np.arange(cfg_eBOSC['pad.detection_sample']+1, n_time_tfr-cfg_eBOSC['pad.detection_sample']+1,1)
+    det_time2extract = np.arange(cfg_eBOSC['pad.detection_sample'], n_time_tfr-cfg_eBOSC['pad.detection_sample'],1)
     cfg_eBOSC['time.time_det'] = cfg_eBOSC['time.time_tfr'][det_time2extract]
     n_time_det = len(cfg_eBOSC['time.time_det'])
         
