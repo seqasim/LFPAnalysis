@@ -577,7 +577,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
                 continue         
             # Isolate the electrodes in each bundle 
             bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-            all_elecs = bundle_df.label.tolist()
+            all_elecs = bundle_df.label.str.lower().tolist()
             # Sort them by number 
             all_elecs = sort_strings(all_elecs)
             # make sure these are not bad channels 
@@ -1292,8 +1292,14 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
                           anode=anode_list, 
                           cathode=cathode_list,
                           copy=True)
-    mne_data_reref.drop_channels(drop_wm_channels)
-    mne_data_reref.drop_channels(oob_channels)
+    
+    # drop the unreferenced channels (oob or bad or wm)
+    mne_data_reref.drop_channels([x for x in mne_data_reref.ch_names if '-' not in x])
+
+    # # drop the white matter channels
+    # mne_data_reref.drop_channels(drop_wm_channels)
+    # mne_data_reref.drop_channels(oob_channels)
+
 
     right_seeg_names = [i for i in mne_data_reref.ch_names if i.startswith('r')]
     left_seeg_names = [i for i in mne_data_reref.ch_names if i.startswith('l')]
