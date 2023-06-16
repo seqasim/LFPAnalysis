@@ -458,65 +458,53 @@ def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=N
         List of channels to subtract
     """
 
-    elec_data = load_elec(elec_path)
+    # TODO: for someone clever. Note that you have to bypass the mne reference script because that specific a single reference for each electrode.
 
-    # helper function to perform sort for bipolar electrodes:
-    def num_sort(string):
-        return list(map(int, re.findall(r'\d+', string)))[0]
+    # elec_data = load_elec(elec_path)
+    # elec_data['bundle'] = np.nan
+    # elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
 
-    cathode_list = [] 
-    anode_list = [] 
 
-    if site=='MSSM':
+    # # helper function to perform sort for bipolar electrodes:
+    # def sort_strings(strings):
+    #     # Create a regular expression pattern to extract the number at the end of each string
+    #     pattern = re.compile(r'\d+$')
 
-        for bundle in elec_data.bundle.unique():
-            if bundle[0] == 'u':
-                print('this is a microwire, pass')
-                continue         
-            # Isolate the electrodes in each bundle 
-            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-            all_elecs = elec_data.label.tolist()
-            # Sort them by number 
-            all_elecs.sort(key=num_sort)
-            # make sure these are not bad channels 
-            all_elecs = [x for x in all_elecs if x not in bad_channels]
-            # Set the cathodes and anodes 
-            for i, elec in enumerate(all_elecs):
-                if i == 0 or i == len(all_elecs) - 1:
-                    cathode_list.append(elec)
-                    anode_list.append(elec)
-                else:
-                    neighbors = [all_elecs[i-1], all_elecs[i+1]]
-                    if neighbors[0] in bad_channels or neighbors[1] in bad_channels:
-                        cathode_list.append(elec)
-                        anode_list.append(elec)
-                    else:
-                        cathode_list.append(np.mean(mne_data._data[mne_data.ch_names.index(neighbors), :], axis=0))
-                        anode_list.append(elec)
+    #     # Sort the strings using a custom key function
+    #     sorted_strings = sorted(strings, key=lambda x: int(pattern.search(x).group()), reverse=False)
 
-    elif site=='UI':
+    #     return sorted_strings
 
-        for bundle in elec_data.bundle.unique():
-            # Isolate the electrodes in each bundle 
-            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
-            all_elecs = bundle_df.Channel.tolist()
-            # make sure these are not bad channels 
-            all_elecs = [x for x in all_elecs if x not in bad_channels]
-            # Set the cathodes and anodes 
-            for i, elec in enumerate(all_elecs):
-                if i == 0 or i == len(all_elecs) - 1:
-                    cathode_list.append(elec)
-                    anode_list.append(elec)
-                else:
-                    neighbors = [all_elecs[i-1], all_elecs[i+1]]
-                    if neighbors[0] in bad_channels or neighbors[1] in bad_channels:
-                        cathode_list.append(elec)
-                        anode_list.append(elec)
-                    else:
-                        cathode_list.append(np.mean(mne_data._data[mne_data.ch_names.index(neighbors), :], axis=0))
-                        anode_list.append(elec)
+    # cathode_list = [] 
+    # anode_list = [] 
 
-    return anode_list, cathode_list
+    # if site=='MSSM':
+
+    #     for bundle in elec_data.bundle.unique():
+    #         if bundle[0] == 'u':
+    #             print('this is a microwire, pass')
+    #             continue         
+    #         # Isolate the electrodes in each bundle 
+    #         bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
+    #         all_elecs = bundle_df.label.tolist()
+    #         # Sort them by number 
+    #         all_elecs = sort_strings(all_elecs)
+    #         # make sure these are not bad channels 
+    #         all_elecs = [x for x in all_elecs if x not in bad_channels]
+    #         # Set the cathodes and anodes 
+    #         for i, elec in enumerate(all_elecs):
+    #             # Set the bipolar conditions
+    #             if i == 0:
+    #                 cathode_list.append(elec)
+    #                 anode_list.append((all_elecs[i+1])
+    #             elif i == len(all_elecs) - 1:
+    #                 cathode_list.append(elec)
+    #                 anode_list.append((all_elecs[i-1])  
+    #             # Set the laplace conditions 
+    #             # else:
+    #             # TODO: add laplace conditions here
+
+    # return anode_list, cathode_list
 
 def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     """
@@ -542,13 +530,44 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     """
 
     elec_data = load_elec(elec_path)
+    elec_data['bundle'] = np.nan
+    elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
+
+    drop_from_locs = []
+    for ind, data in elec_data['label'].str.lower().items(): 
+        if data in unmatched_seeg:
+            drop_from_locs.append(ind)
+        elif data[0] == 'u':
+            drop_from_locs.append(ind)
+
+    elec_data = elec_data.drop(index=drop_from_locs).reset_index(drop=True)
+
+    # get the white matter electrodes and make sure they are note in the bad channel list
+    wm_elec_ix_manual = [] 
+    wm_elec_ix_auto = []
+    if 'Manual Examination' in elec_data.keys():
+        wm_elec_ix_manual = wm_elec_ix_manual + [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='wm' and elec_data['label'].str.lower()[ind] not in bad_channels]
+        oob_elec_ix = [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='oob']
+    else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
+        wm_elec_ix_auto = wm_elec_ix_auto + [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
+        oob_elec_ix = [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
+
+    wm_channels = elec_data['label'].str.lower()[wm_elec_ix_manual + wm_elec_ix_auto].tolist()
+    oob_channels = elec_data['label'].str.lower()[oob_elec_ix].tolist()
 
     # helper function to perform sort for bipolar electrodes:
-    def num_sort(string):
-        return list(map(int, re.findall(r'\d+', string)))[0]
+    def sort_strings(strings):
+        # Create a regular expression pattern to extract the number at the end of each string
+        pattern = re.compile(r'\d+$')
+
+        # Sort the strings using a custom key function
+        sorted_strings = sorted(strings, key=lambda x: int(pattern.search(x).group()), reverse=False)
+
+        return sorted_strings
 
     cathode_list = [] 
     anode_list = [] 
+    drop_wm_channels = [] 
 
     if site=='MSSM':
 
@@ -558,32 +577,41 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
                 continue         
             # Isolate the electrodes in each bundle 
             bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-            all_elecs = elec_data.label.tolist()
+            all_elecs = bundle_df.label.tolist()
             # Sort them by number 
-            all_elecs.sort(key=num_sort)
+            all_elecs = sort_strings(all_elecs)
             # make sure these are not bad channels 
             all_elecs = [x for x in all_elecs if x not in bad_channels]
             # Set the cathodes and anodes 
             cath = all_elecs[1:]
             an = all_elecs[:-1]
-            cathode_list = cathode_list + cath
-            anode_list = anode_list + an
+            # I need to make sure I drop any channels where both electrodes are in the wm
+            if cath in wm_channels and an in wm_channels:
+                drop_wm_channels.append(cath)
+                drop_wm_channels.append(an)
+                continue
+            # I need to make sure I drop any channels where either electrode is out of the brain
+            elif cath in oob_channels or an in oob_channels:
+                continue
+            else:
+                cathode_list = cathode_list + cath
+                anode_list = anode_list + an
 
-    elif site=='UI':
+    # elif site=='UI':
 
-        for bundle in elec_data.bundle.unique():
-            # Isolate the electrodes in each bundle 
-            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
-            all_elecs = bundle_df.Channel.tolist()
-            # make sure these are not bad channels 
-            all_elecs = [x for x in all_elecs if x not in bad_channels]
-            # Set the cathodes and anodes 
-            cath = all_elecs[1:]
-            an = all_elecs[:-1]
-            cathode_list = cathode_list + cath
-            anode_list = anode_list + an
+    #     for bundle in elec_data.bundle.unique():
+    #         # Isolate the electrodes in each bundle 
+    #         bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
+    #         all_elecs = bundle_df.Channel.tolist()
+    #         # make sure these are not bad channels 
+    #         all_elecs = [x for x in all_elecs if x not in bad_channels]
+    #         # Set the cathodes and anodes 
+    #         cath = all_elecs[1:]
+    #         an = all_elecs[:-1]
+    #         cathode_list = cathode_list + cath
+    #         anode_list = anode_list + an
 
-    return anode_list, cathode_list
+    return anode_list, cathode_list, drop_wm_channels, oob_channels
 
 
 def match_elec_names(mne_names, loc_names, method='levenshtein'):
@@ -1253,7 +1281,11 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
                                                                                        unmatched_seeg=unmatched_seeg,
                                                                                        site=site)
     elif method=='bipolar':
-        pass
+        anode_list, cathode_list, drop_wm_channels, oob_channels = bipolar_ref(elec_path=elec_path, 
+                                               bad_channels=mne_data.info['bads'], 
+                                               unmatched_seeg=unmatched_seeg,
+                                               site=site)
+        
     
     # Note that, despite the name, the following function lets you manually set what is being subtracted from what:
     mne_data_reref = mne.set_bipolar_reference(mne_data, 
