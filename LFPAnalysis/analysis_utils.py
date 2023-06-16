@@ -9,6 +9,7 @@ import fooof
 from fooof import FOOOFGroup
 from matplotlib.backends.backend_pdf import PdfPages
 import os
+import pycatch22
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 
@@ -459,3 +460,11 @@ def hctsa_signal_features(signal):
     Implement https://github.com/DynamicsAndNeuralSystems/catch22
     """
 
+    signal_features = pycatch22.catch22_all(signal)
+
+    # Data organization
+    df = pd.DataFrame.from_dict(signal_features, orient='index')
+    df.columns = df.iloc[0]
+    df.reset_index(inplace=True, drop=True)
+
+    return df 
