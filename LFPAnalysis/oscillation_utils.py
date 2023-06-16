@@ -113,20 +113,29 @@ def BOSC_tf(eegsignal,F,Fsample,wavenumber):
 
 def BOSC_detect(b,powthresh,durthresh,Fsample):
     """
-    Detect oscillations based on a wavelet power timecourse, `b`, a power threshold (`powthresh`) and duration threshold (`durthresh`)
-
-    Args:
-    - b (numpy.ndarray): The power timecourse (at one frequency of interest).
-    - powthresh (float): The power threshold.
-    - durthresh (float): The duration threshold required to be deemed oscillatory.
-    - Fsample (float): The sampling frequency.
-
-    Returns:
-    - detected (numpy.ndarray): A binary vector containing the value 1 for times at which oscillations (at the frequency of interest) were detected and 0 where no oscillations were detected.
-
-    Note:
-    - To calculate Pepisode: Pepisode = length(find(detected)) / (length(detected)).
-    """
+    detected=BOSC_detect(b,powthresh,durthresh,Fsample)
+    This function detects oscillations based on a wavelet power
+    timecourse, b, a power threshold (powthresh) and duration
+    threshold (durthresh) returned from BOSC_thresholds.m.
+    
+    It now returns the detected vector which is already episode-detected.
+    
+    b - the power timecourse (at one frequency of interest)
+    
+    durthresh - duration threshold in  required to be deemed oscillatory
+    powthresh - power threshold
+    
+    returns:
+    detected - a binary vector containing the value 1 for times at
+               which oscillations (at the frequency of interest) were
+               detected and 0 where no oscillations were detected.
+    
+    note: Remember to account for edge effects by including
+    "shoulder" data and accounting for it afterwards!
+    
+    To calculate Pepisode:
+    Pepisode=length(find(detected))/(length(detected));
+    """                           
 
     # number of time points
     nT=len(b)
@@ -214,7 +223,7 @@ def eBOSC_getThresholds(cfg_eBOSC, TFR, eBOSC):
     
     trial2extract = cfg_eBOSC['trial_background']
     # remove BGpad at beginning and end to avoid edge artifacts
-    time2extract = np.arange(cfg_eBOSC['pad.background_sample']+1, TFR.shape[2]-cfg_eBOSC['pad.background_sample']+1,1)
+    time2extract = np.arange(cfg_eBOSC['pad.background_sample'], TFR.shape[2]-cfg_eBOSC['pad.background_sample'],1)
     # index both trial and time dimension simultaneously
     TFR = TFR[np.ix_(trial2extract,range(TFR.shape[1]),time2extract)]
     # concatenate trials in time dimension: permute dimensions, then reshape
@@ -277,7 +286,7 @@ def eBOSC_getThresholds(cfg_eBOSC, TFR, eBOSC):
 
     # save multiple time-invariant estimates that could be of interest:
     # overall wavelet power spectrum (NOT only background)
-    time2encode = np.arange(cfg_eBOSC['pad.total_sample']+1, BG.shape[1]-cfg_eBOSC['pad.total_sample']+1,1)
+    time2encode = np.arange(cfg_eBOSC['pad.total_sample'], BG.shape[1]-cfg_eBOSC['pad.total_sample'],1)
     eBOSC['static.bg_pow'].loc[cfg_eBOSC['tmp_channel'],:] = BG[:,time2encode].mean(1)
     # eBOSC[cfg_eBOSC['tmp_channelID']] = {'static.bg_pow': BG[:,time2encode].mean(1)}
     # log10-transformed wavelet power spectrum (NOT only background)
@@ -846,6 +855,7 @@ def eBOSC_episode_create(cfg_eBOSC,TFR,detected,eBOSC):
     # temporarily pass on power threshold for easier access
     cfg_eBOSC['tmp.pt'] = eBOSC['static.pt'].loc[cfg_eBOSC['tmp_channel']].values
     
+    # SQ note: This doesn't work too well so fuck it 
     # only do this if there are any episodes to fine-tune
     if cfg_eBOSC['postproc.use'] == 'yes' and len(episodesTable['Trial']) > 0:
         if cfg_eBOSC['postproc.method'] == 'FWHM':
@@ -907,7 +917,7 @@ def eBOSC_wrapper(cfg_eBOSC, data):
 
     channelNames = list(data.columns.values)
     channelNames.remove('time')
-    # channelNames.remove('condition')
+    channelNames.remove('condition')
     channelNames.remove('epoch')
 
     # %% define some defaults for included channels and trials, if not specified
@@ -1019,7 +1029,7 @@ def eBOSC_wrapper(cfg_eBOSC, data):
             # transform. Note that a padding fpr detection remains attached so that there
             # is no problems with too few sample points at the edges to
             # fulfill the duration criterion.         
-            time2extract = np.arange(cfg_eBOSC['pad.tfr_sample']+1, TFR.shape[2]-cfg_eBOSC['pad.tfr_sample']+1,1)
+            time2extract = np.arange(cfg_eBOSC['pad.tfr_sample'], TFR.shape[2]-cfg_eBOSC['pad.tfr_sample'],1)
             TFR_ = np.transpose(TFR[trial,:,time2extract],[1,0])
             
             # %% Step 3: detect rhythms and calculate Pepisode
