@@ -6,6 +6,7 @@ https://github.com/jkosciessa/eBOSC_py
 """
 
 import numpy as np
+import pandas as pd
 import numpy.matlib
 import scipy.io as sio
 from pathlib import Path
@@ -76,6 +77,20 @@ and Clayton T. Dickson.
 """
 
 def BOSC_tf(eegsignal,F,Fsample,wavenumber):
+    """
+    Computes the Better Oscillation Detection (BOSC) time-frequency matrix for a given LFP signal.
+
+    Args:
+    - eegsignal (numpy.ndarray): The LFP signal to compute the BOSC time-frequency matrix for.
+    - F (numpy.ndarray): The frequency range to compute the BOSC time-frequency matrix over.
+    - Fsample (float): The sampling frequency of the LFP signal.
+    - wavenumber (float): The wavenumber to use for the Morlet wavelet.
+
+    Returns:
+    - B (numpy.ndarray): The BOSC time-frequency matrix.
+    - T (numpy.ndarray): The time vector corresponding to the BOSC time-frequency matrix.
+    - F (numpy.ndarray): The frequency vector corresponding to the BOSC time-frequency matrix.
+    """
 
     st=1./(2*np.pi*(F/wavenumber))
     A=1./np.sqrt(st*np.sqrt(np.pi))
@@ -896,17 +911,11 @@ def eBOSC_wrapper(cfg_eBOSC, data):
             cfg | config structure (see input)
     """
 
-    import pandas as pd
-    import numpy as np
-    # import matplotlib.pyplot as plt
-    from ebosc.BOSC import BOSC_tf, BOSC_detect
-    from ebosc.eBOSC import eBOSC_getThresholds, eBOSC_episode_create 
-    
     # %% get list of channel names (very manual solution, replace if possible)
 
     channelNames = list(data.columns.values)
     channelNames.remove('time')
-    channelNames.remove('condition')
+    # channelNames.remove('condition')
     channelNames.remove('epoch')
 
     # %% define some defaults for included channels and trials, if not specified
@@ -1055,3 +1064,59 @@ def eBOSC_wrapper(cfg_eBOSC, data):
 
     # %% return dictionaries back to caller script
     return eBOSC, cfg_eBOSC
+
+
+# # USAGE example from: https://github.com/jkosciessa/eBOSC_py/blob/main/examples/eBOSC_example_empirical.ipynb
+# pn = dict()
+# pn['root']  = os.path.join(os.getcwd(),'..')
+# pn['examplefile'] = os.path.join(pn['root'],'data','1160_rest_EEG_Rlm_Fhl_rdSeg_Art_EC.csv')
+# pn['outfile'] = os.path.join(pn['root'],'data','example_out.npy')
+
+# cfg_eBOSC = dict()
+# cfg_eBOSC['F'] = 2 ** np.arange(1,6,.125)   # frequency sampling
+# cfg_eBOSC['wavenumber'] = 6                 # wavelet parameter (time-frequency tradeoff)
+# cfg_eBOSC['fsample'] = 500                  # current sampling frequency of EEG data
+# cfg_eBOSC['pad.tfr_s'] = 1                  # padding following wavelet transform to avoid edge artifacts in seconds (bi-lateral)
+# cfg_eBOSC['pad.detection_s'] = .5           # padding following rhythm detection in seconds (bi-lateral); 'shoulder' for BOSC eBOSC.detected matrix to account for duration threshold
+# cfg_eBOSC['pad.background_s'] = 1           # padding of segments for BG (only avoiding edge artifacts)
+
+# cfg_eBOSC['threshold.excludePeak'] = np.array([[8,15]])   # lower and upper bound of frequencies to be excluded during background fit (Hz) (previously: LowFreqExcludeBG HighFreqExcludeBG)
+# cfg_eBOSC['threshold.duration'] = np.kron(np.ones((1,len(cfg_eBOSC['F']))),3) # vector of duration thresholds at each frequency (previously: ncyc)
+# cfg_eBOSC['threshold.percentile'] = .95    # percentile of background fit for power threshold
+
+# cfg_eBOSC['postproc.use'] = 'yes'           # Post-processing of rhythmic eBOSC.episodes, i.e., wavelet 'deconvolution' (default = 'no')
+# cfg_eBOSC['postproc.method'] = 'FWHM'       # Deconvolution method (default = 'MaxBias', FWHM: 'FWHM')
+# cfg_eBOSC['postproc.edgeOnly'] = 'yes'      # Deconvolution only at on- and offsets of eBOSC.episodes? (default = 'yes')
+# cfg_eBOSC['postproc.effSignal'] = 'PT'      # Power deconvolution on whole signal or signal above power threshold
+
+# cfg_eBOSC['channel'] = ['Oz']            # select posterior channels (default: all)
+# cfg_eBOSC['trial'] = []                  # select trials (default: all, indicate in natural trial number (not zero-starting))
+# cfg_eBOSC['trial_background'] = []       # select trials for background (default: all, indicate in natural trial
+
+# # Either concatenate all epochs or use with continuous data: 
+# [eBOSC, cfg] = eBOSC_wrapper(cfg_eBOSC, data)
+
+# # Plot: 
+# detected_avg = eBOSC['detected'].mean(level=['frequency', 'time'])
+# detected_avg = detected_avg.pivot_table(index=['frequency'], columns='time')
+# cur_multiindex = eBOSC['detected'].index
+# cur_time = cur_multiindex.get_level_values('time').unique()
+# cur_freq = cur_multiindex.get_level_values('frequency').unique()
+
+# fig, ax = plt.subplots(nrows=1, ncols=1)
+# im = ax.imshow(detected_avg, aspect = 'auto')
+# [x0, x1] = ax.get_xlim()
+# [y0, y1] = ax.get_ylim()
+# xticks_loc = [t for t in ax.get_xticks() if t>=x0 and t<=x1]
+# yticks_loc = [t for t in ax.get_yticks() if t>=y1 and t<=y0]
+# x_label_list = np.round(cur_time[np.int_(xticks_loc)],1).tolist()
+# y_label_list = np.round(cur_freq[np.int_(yticks_loc)],1).tolist()
+# ax.set_xticks(xticks_loc)
+# ax.set_xticklabels(x_label_list)
+# ax.set_yticks(yticks_loc)
+# ax.set_yticklabels(y_label_list)
+# plt.colorbar(im, label='Proportion detected across trials')
+# plt.xlabel('Time [s]')
+# plt.ylabel('Frequency [Hz]')
+# plt.title('Avg. detected rhythms across trials', fontsize=12)
+# plt.show()
