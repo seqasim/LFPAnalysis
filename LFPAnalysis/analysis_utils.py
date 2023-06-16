@@ -468,5 +468,6 @@ def hctsa_signal_features(signal):
     df = pd.DataFrame.from_dict(signal_features, orient='index')
     df.columns = df.iloc[0]
     df.reset_index(inplace=True, drop=True)
+    df = df.drop(labels=0, axis=0).reset_index(drop=True)
 
     return df 
