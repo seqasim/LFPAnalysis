@@ -18,20 +18,26 @@ def time_resolved_regression(timeseries=None, regressors=None, win_len=200, slid
     regressors: pandas df, index = trials, columns = regressors
     """
 
+    # Check the length of your time window: 
+    if timeseries.shape[1] % slide_len > 0: 
+        print('need to trim your timeseries or pick a neatly divisible window length')
+        return
+
     # Smooth the timeseries 
-    smoothed_data = np.zeros([timeseries.shape[0], (len(timeseries) / slide_len)])
-    for trial in timeseries.shape[0]:
-        smoothed_data[trial, :] = [np.nanmean(timeseries[:, i:i+win_len]) for i in range(0, len(timeseries), slide_len) if i+win_len <= len(timeseries)]
+    smoothed_data = np.zeros([timeseries.shape[0], (timeseries.shape[1] // slide_len) - (win_len//slide_len - 1)])
+    for trial in range(timeseries.shape[0]):
+        smoothed_data[trial, :] = [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
 
     # Run the regression
     models = []
-    for ts in smoothed_data.shape[1]: 
+    for ts in range(smoothed_data.shape[1]): 
         model_df = regressors.copy() 
         model_df['dv'] = smoothed_data[:, ts]
         formula = f'dv ~ 1+'+'+'.join(regressors.columns)
         mod = smf.glm(formula=formula, data=model_df, family=sm.families.Gaussian()).fit()
-        models.append(mod)
+        models.append(pd.DataFrame(mod.params).T)
 
+    models = pd.concat(models)
     return models 
 
 def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=200, slide_len=50):
@@ -39,7 +45,7 @@ def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=200,
     models = time_resolved_regression(timeseries, regressors, win_len, slide_len, nsurr)
 
     # Generate permuted timeseries 
-    shuffles = np.random.randint(1, len(timeseries), nsurr)
+    shuffles = np.random.randint(1, timeseries.shape[1], nsurr)
     all_surrs = []
     for surr in range(nsurr): 
         # shuffle in time
@@ -50,9 +56,9 @@ def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=200,
         surr_models = time_resolved_regression(surr_ts, regressors, win_len, slide_len)
         all_surrs.append(surr_models)
 
-    # Detect significant timepoints 
-    # TODO: 
-    pass 
+    all_surrs = pd.concat(all_surrs)
+
+    return all_surrs
 
     
 
