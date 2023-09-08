@@ -668,8 +668,17 @@ def match_elec_names(mne_names, loc_names, method='levenshtein'):
     if method=='levenshtein':
         for elec in unmatched_seeg:
             all_lev_ratios = [(x, lev.ratio(elec, x)) for x in mne_names]
-            match = sorted(all_lev_ratios, key=lambda x: x[1])[-1] # Get the tuples back sorted by highest lev ratio, and pick the first tuple
-            match_name = match[0] # Get the actual matched name back 
+            # 9/8/23: Sometimes this algo fails and returns multiple matches with equal distances from the real name: MANUALLY DO THE TIEBREAKER
+            lev_df = pd.DataFrame(sorted(all_lev_ratios, key=lambda x: x[1]), columns=['name', 'lev_score'])
+            max_lev = lev_df.loc[lev_df['lev_score']==lev_df['lev_score'].max()]
+            if max_lev.shape[0] > 1:
+                # change all non-leading l's to 'i's and 
+                print(max_lev)       
+                match_name = input(f'We have too many possible matches for {elec}! Select one manually from these candidates:')
+                match = [x for x in all_lev_ratios if x[0]==match_name][0]
+            else: 
+                match = sorted(all_lev_ratios, key=lambda x: x[1])[-1] # Get the tuples back sorted by highest lev ratio, and pick the first tuple
+                match_name = match[0] # Get the actual matched name back 
             # # Make sure the string length matches 
             # ix = -1
             # while len(elec) != len(match_name):
