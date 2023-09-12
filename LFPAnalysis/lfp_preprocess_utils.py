@@ -1369,19 +1369,8 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
         mne Epoch object with re-referenced data
     """
 
-    # elec_data = load_elec(elec_path)
-
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
-    # # Reconstruct the anode list 
-    # anode_list = [x.split('-')[0] for x in mne_data_reref.ch_names]
-
-    # # Filter the list 
-    # elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
-
-    # # TODO: Shawn noticed that if the electrodes are not in the same order as the MNE data then you're labeling the wrong electrodes! 
-    # # elec_df['label'] = mne_data_reref.ch_names
-    # elec_df['label'] = elec_df['label'].apply(lambda x: next((string for string in mne_data_reref.ch_names if x in string), np.nan))
 
     # all behavioral times of interest 
     beh_ts = [(x*slope + offset) for x in behav_times]
@@ -1476,3 +1465,15 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     return ev_epochs
 
 
+def rename_elec_df_reref(reref_labels, elec_path):
+
+    """
+    Sometimes we want to filter and relabel our electrode dataframe based on the renamed channels from the re-referenced data 
+    """
+    elec_data = load_elec(elec_path)
+    anode_list = [x.split('-')[0] for x in reref_labels]
+    elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
+    elec_df['label'] =  elec_df.label.apply(lambda x: [a for a in anode_list if str(x).lower() in a][0])
+
+    return elec_df
+#

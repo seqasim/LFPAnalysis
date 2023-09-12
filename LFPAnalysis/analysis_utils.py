@@ -218,22 +218,18 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
     ----------
     epochs : mne Epochs object 
         mne object
-    elec_data : pandas df 
-        dataframe with all the electrode localization information
-    roi : str 
-        region that we care to look into. should at least somewhat correspond to atlas labels of interest
-    conditions : list
-        list of pandas queries that correspond to specific trial conditions to pull for FOOOF 
-    method : str 
-        how should we reference the data ['wm', 'bipolar']
-    band_dict : dict 
-        frequency bands with corresponding names 
-    filepath : string
-        filepath for saving plots (or other data if need be)
-    plot : bool 
-        should we or should we not lpo
-    *kwargs : dict 
-        FOOOF arguments 
+
+    tmin : time to start (s) 
+        float
+
+    tmax : time to end (s) 
+        float
+
+    band_dict : definitions of the bands of interest
+        dict
+
+    kwargs : input arguments to the FOOOFGroup function, including: 'min_peak_height', 'peak_threshold', 'max_n_peaks'
+        dict 
 
     Returns
     -------
