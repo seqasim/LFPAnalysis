@@ -18,11 +18,32 @@ def select_picks_rois(elec_data, roi=None):
     Grab specific electrodes that you care about 
     """
 
+    # Site specific processing: 
+    if roi == 'anterior_cingulate':
+        # here is my approximation of anterior cingulate in the YBA atlas
+        # TODO improve this
+        roi = ['cingulate gyrus a', 'cingulate gyrus b', 'cingulate gyrus c']
+
+    if roi == 'entorhinal': 
+        # entorhinal is not in the YBA atlas
+        picks = elec_data[elec_data.NMM.str.lower().str.contains(roi)].label.tolist()
+        return picks
+
     if isinstance(roi, str):
         picks = elec_data[elec_data.YBA_1.str.lower().str.contains(roi)].label.tolist()
     elif isinstance(roi, list):
         # then assume the user wants to group several regions
+        picks_ec = None
+        if 'anterior_cingulate' in roi: 
+            roi.remove('anterior_cingulate')
+            roi += ['cingulate gyrus a', 'cingulate gyrus b', 'cingulate gyrus c']
+        elif entorhinal in roi: 
+            roi.remove('entorhinal')
+            picks_ec =  elec_data[elec_data.NMM.str.lower().str.contains('entorhinal')].label.tolist()
         picks = elec_df[elec_df.YBA_1.str.lower().str.contains('|'.join(roi))].label.tolist()
+        if picks_ec is not None: 
+            picks += picks_ec
+
     else:
         # Just grab everything 
         picks = elec_df.label.tolist()
