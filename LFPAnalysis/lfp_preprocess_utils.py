@@ -970,7 +970,7 @@ def load_elec(elec_path=None):
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
-seeg_only=True):
+seeg_only=True, check_bad=True):
     """
     Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
@@ -1082,8 +1082,9 @@ seeg_only=True):
         drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
         mne_data.drop_channels(drop_chans)
 
-        bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
-        mne_data.info['bads'] = bads
+        if check_bad = True:
+            bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+            mne_data.info['bads'] = bads
 
         # Resample
         if resample_sr is not None: 
@@ -1245,8 +1246,9 @@ seeg_only=True):
             seeg_names = new_mne_names
             sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
-            bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
-            mne_data.info['bads'] = bads
+            if check_bad == True:
+                bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+                mne_data.info['bads'] = bads
 
             if resample_sr is not None: 
                 mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)

@@ -928,13 +928,13 @@ def eBOSC_wrapper(cfg_eBOSC, data):
     if not cfg_eBOSC['trial']:
         # remember to count trial 1 as zero
         cfg_eBOSC['trial'] = list(np.arange(0,len(pd.unique(data['epoch']))))
-    else: # this ensures the zero count
-        cfg_eBOSC['trial'] = list(np.array(cfg_eBOSC['trial']) - 1)
+    # else: # this ensures the zero count
+    #     cfg_eBOSC['trial'] = list(np.array(cfg_eBOSC['trial']))
         
     if not cfg_eBOSC['trial_background']:
         cfg_eBOSC['trial_background'] = list(np.arange(0,len(pd.unique(data['epoch']))))
-    else: # this ensures the zero count
-        cfg_eBOSC['trial_background'] = list(np.array(cfg_eBOSC['trial_background']) - 1)
+    # else: # this ensures the zero count
+    #     cfg_eBOSC['trial_background'] = list(np.array(cfg_eBOSC['trial_background']) - 1)
 
     # %% calculate the sample points for paddding
     
