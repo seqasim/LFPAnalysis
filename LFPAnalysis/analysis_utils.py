@@ -230,7 +230,7 @@ def FOOOF_continuous(signal):
     pass 
 
 
-def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
+def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
     """
 
     This function is meant to enable easy computation of FOOOF. 
@@ -258,7 +258,7 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
         mne object with re-referenced data
     """
 
-    bands = fooof.bands.Bands(band_dict)
+    # bands = fooof.bands.Bands(band_dict)
 
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
@@ -287,27 +287,69 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
         ind_fits.fit()
 
         # Create a dataframe to store results 
-        chan_data_df = pd.DataFrame(columns=['exp_diff', 'peak_pow_diff', 'band_pow_diff', 'band_pow_diff_flat', 'band'])
+        chan_data_df = pd.DataFrame(columns=['channel', 'region', 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'peak_freq', 'peak_height', 'PSD_exp'])
 
-        # Compute contrast between conditions
+        chan_data_df['frequency'] = ind_fits.freqs.tolist()
+        chan_data_df['PSD_raw'] = ind_fits.power_spectrum.tolist()
+        chan_data_df['PSD_corrected'] = ind_fits._spectrum_flat.tolist()
+
+        # Get aperiodic exponent
         exp = ind_fits.get_params('aperiodic_params', 'exponent')
+        chan_data_df['PSD_exp'] = exp
 
-        band_labels = []
-        peak_pow = [] 
-        band_pow = []
-        band_pow_flats = []
+        # Get peak info
+        peaks = fooof.analysis.get_band_peak_fm(ind_fits, band=(1, 30), select_highest=False)
+        in_FOOOF_peaks = [] 
+        peak_freqs = []
+        peak_heights = []
+        # in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
+        # peak_freq = np.ones_like(ind_fits.freqs) * np.nan
+        # peak_height = np.ones_like(ind_fits.freqs) * np.nan
+        for ix, pk in enumerate(peaks):
+            center_pk = pk[0]
+            low_freq = pk[0] - (pk[2]/2)
+            high_freq = pk[0] + (pk[2]/2)
+            pk_height = pk[1]
+            in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
+            in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = ix + 1
+            peak_freq = np.zeros_like(ind_fits.freqs)
+            peak_freq[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = center_pk
+            peak_height = np.zeros_like(ind_fits.freqs)
+            peak_height[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = pk_height
 
-        for label, definition in bands:
-            band_labels.append(label)
-            peak_pow.append(fooof.analysis.get_band_peak_fm(ind_fits, definition)[1])
-            band_pow.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits.power_spectrum, definition)[1]))
-            band_pow_flats.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits._spectrum_flat, definition)[1]))
+            in_FOOOF_peaks.append(in_FOOOF_peak)
+            peak_freqs.append(peak_freq)
+            peak_heights.append(peak_height)
 
-        chan_data_df['peak_pow'] = peak_pow
-        chan_data_df['band_pow'] = band_pow
-        chan_data_df['band_pow_flat'] = band_pow_flats
-        chan_data_df['band'] = band_labels
-        chan_data_df['exp'] = exp
+        if peaks is not None:
+            in_FOOOF_peaks = sum(in_FOOOF_peaks)
+            peak_freqs = sum(peak_freqs)
+            peak_heights = sum(peak_heights)
+
+        chan_data_df['in_FOOOF_peak'] = in_FOOOF_peaks
+        chan_data_df['peak_freq'] = peak_freqs
+        chan_data_df['peak_height'] = peak_heights
+
+        # , 'peak_pow', 'band_pow', 'band_pow_flat', 'band', 'exp'
+
+        # 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'PSD_exp'  
+
+        # band_labels = []
+        # peak_pow = [] 
+        # band_pow = []
+        # band_pow_flats = []
+
+        # for label, definition in bands:
+        #     band_labels.append(label)
+        #     peak_pow.append(fooof.analysis.get_band_peak_fm(ind_fits, definition)[1])
+        #     band_pow.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits.power_spectrum, definition)[1]))
+        #     band_pow_flats.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits._spectrum_flat, definition)[1]))
+
+        # chan_data_df['peak_pow'] = peak_pow
+        # chan_data_df['band_pow'] = band_pow
+        # chan_data_df['band_pow_flat'] = band_pow_flats
+        # chan_data_df['band'] = band_labels
+        # chan_data_df['exp'] = exp
         chan_data_df['channel'] = epochs.ch_names[chan]
         chan_data_df['region'] = epochs.metadata.region.unique()[0]
 
@@ -317,136 +359,136 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, band_dict=None, **kwargs):
     return FOOOFGroup_res, pd.concat(all_chan_dfs)
 
 
-def FOOOF_compare_epochs(epochs_with_metadata, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
-file_path=None, plot=True, **kwargs):
-    """
-    Function for comparing conditions.
-    """
-    # Helper functions for computing and analyzing differences between power spectra. 
+# def FOOOF_compare_epochs(epochs_with_metadata, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
+# file_path=None, plot=True, **kwargs):
+#     """
+#     Function for comparing conditions.
+#     """
+#     # Helper functions for computing and analyzing differences between power spectra. 
 
-    t_settings = {'fontsize' : 24, 'fontweight' : 'bold'}
-    # If the path doesn't exist, make it:
-    if not os.path.exists(file_path): 
-        os.makedirs(file_path)
+#     t_settings = {'fontsize' : 24, 'fontweight' : 'bold'}
+#     # If the path doesn't exist, make it:
+#     if not os.path.exists(file_path): 
+#         os.makedirs(file_path)
 
-    def _compare_exp(fm1, fm2):
-        """Compare exponent values."""
+#     # def _compare_exp(fm1, fm2):
+#     #     """Compare exponent values."""
 
-        exp1 = fm1.get_params('aperiodic_params', 'exponent')
-        exp2 = fm2.get_params('aperiodic_params', 'exponent')
+#     #     exp1 = fm1.get_params('aperiodic_params', 'exponent')
+#     #     exp2 = fm2.get_params('aperiodic_params', 'exponent')
 
-        return exp1 - exp2
+#     #     return exp1 - exp2
 
-    def _compare_peak_pw(fm1, fm2, band_def):
-        """Compare the power of detected peaks."""
+#     # def _compare_peak_pw(fm1, fm2, band_def):
+#     #     """Compare the power of detected peaks."""
 
-        pw1 = fooof.analysis.get_band_peak_fm(fm1, band_def)[1]
-        pw2 = fooof.analysis.get_band_peak_fm(fm2, band_def)[1]
+#     #     pw1 = fooof.analysis.get_band_peak_fm(fm1, band_def)[1]
+#     #     pw2 = fooof.analysis.get_band_peak_fm(fm2, band_def)[1]
 
-        return pw1 - pw2
+#     #     return pw1 - pw2
 
-    def _compare_band_pw(fm1, fm2, band_def):
-        """Compare the power of frequency band ranges."""
+#     # def _compare_band_pw(fm1, fm2, band_def):
+#     #     """Compare the power of frequency band ranges."""
 
-        pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1.power_spectrum, band_def)[1])
-        pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2.power_spectrum, band_def)[1])
+#     #     pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1.power_spectrum, band_def)[1])
+#     #     pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2.power_spectrum, band_def)[1])
 
-        return pw1 - pw2
+#     #     return pw1 - pw2
 
-    def _compare_band_pw_flat(fm1, fm2, band_def):
-        """Compare the power of frequency band ranges."""
+#     # def _compare_band_pw_flat(fm1, fm2, band_def):
+#     #     """Compare the power of frequency band ranges."""
 
-        pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1._spectrum_flat, band_def)[1])
-        pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2._spectrum_flat, band_def)[1])
+#     #     pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1._spectrum_flat, band_def)[1])
+#     #     pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2._spectrum_flat, band_def)[1])
 
-        return pw1 - pw2
+#     #     return pw1 - pw2
 
-    shade_cols = ['#e8dc35', '#46b870', '#1882d9', '#a218d9', '#e60026']
-    bands = fooof.bands.Bands(band_dict)
-    all_chan_dfs = [] 
+#     # shade_cols = ['#e8dc35', '#46b870', '#1882d9', '#a218d9', '#e60026']
+#     # bands = fooof.bands.Bands(band_dict)
+#     all_chan_dfs = [] 
 
-    fooof_groups_cond = {f'{x}': np.nan for x in conditions}
+#     fooof_groups_cond = {f'{x}': np.nan for x in conditions}
 
-    all_cond_df = []
-    for cond in conditions: 
-        # check that this is an appropriate parsing (is it in the metadata?)
-        try:
-            epochs_with_metadata.metadata.query(cond)
-        except pd.errors.UndefinedVariableError:
-            raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
+#     all_cond_df = []
+#     for cond in conditions: 
+#         # check that this is an appropriate parsing (is it in the metadata?)
+#         try:
+#             epochs_with_metadata.metadata.query(cond)
+#         except pd.errors.UndefinedVariableError:
+#             raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
     
-        FOOOFGroup_res, cond_df = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, band_dict=band_dict, **kwargs)
+#         FOOOFGroup_res, cond_df = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, **kwargs)
 
-        fooof_groups_cond[cond] = FOOOFGroup_res
+#         fooof_groups_cond[cond] = FOOOFGroup_res
 
 
-        cond_df['condition'] = cond
+#         cond_df['condition'] = cond
 
-        all_cond_df.append(cond_df)
+#         all_cond_df.append(cond_df)
 
-    # Go through individual channels
-    for chan in range(len(epochs_with_metadata.ch_names)):
-        file_name = f'{epochs_with_metadata.ch_names[chan]}_PSD'
+#     # Go through individual channels
+#     for chan in range(len(epochs_with_metadata.ch_names)):
+#         file_name = f'{epochs_with_metadata.ch_names[chan]}_PSD'
 
-        cond_fits = [fooof_groups_cond[cond].get_fooof(ind=chan, regenerate=True) for cond in conditions]
-        for i in range(len(cond_fits)):
-            cond_fits[i].fit()
+#         cond_fits = [fooof_groups_cond[cond].get_fooof(ind=chan, regenerate=True) for cond in conditions]
+#         for i in range(len(cond_fits)):
+#             cond_fits[i].fit()
 
-        # Create a dataframe to store results 
-        chan_data_df = pd.DataFrame(columns=['exp_diff', 'peak_pow_diff', 'band_pow_diff', 'band_pow_diff_flat', 'band'])
+#         # Create a dataframe to store results 
+#         chan_data_df = pd.DataFrame(columns=['exp_diff', 'peak_pow_diff', 'band_pow_diff', 'band_pow_diff_flat', 'band'])
 
-        # Compute contrast between conditions
-        exp_diff = _compare_exp(cond_fits[0], cond_fits[1])
+#         # Compute contrast between conditions
+#         exp_diff = _compare_exp(cond_fits[0], cond_fits[1])
 
-        band_labels = []
-        peak_pow_diffs = [] 
-        band_pow_diffs = []
-        band_pow_diff_flats = []
+#         band_labels = []
+#         peak_pow_diffs = [] 
+#         band_pow_diffs = []
+#         band_pow_diff_flats = []
 
-        for label, definition in bands:
-            band_labels.append(label)
-            peak_pow_diffs.append(_compare_peak_pw(cond_fits[0], cond_fits[1], definition))
-            band_pow_diffs.append(_compare_band_pw(cond_fits[0], cond_fits[1], definition))
-            band_pow_diff_flats.append(_compare_band_pw_flat(cond_fits[0], cond_fits[1], definition))
+#         for label, definition in bands:
+#             band_labels.append(label)
+#             peak_pow_diffs.append(_compare_peak_pw(cond_fits[0], cond_fits[1], definition))
+#             band_pow_diffs.append(_compare_band_pw(cond_fits[0], cond_fits[1], definition))
+#             band_pow_diff_flats.append(_compare_band_pw_flat(cond_fits[0], cond_fits[1], definition))
 
-        chan_data_df['peak_pow_diff'] = peak_pow_diffs
-        chan_data_df['band_pow_diff'] = band_pow_diffs
-        chan_data_df['band_pow_diff_flat'] = band_pow_diff_flats
-        chan_data_df['band'] = band_labels
-        chan_data_df['exp_diff'] = exp_diff
-        chan_data_df['channel'] = epochs_with_metadata.ch_names[chan]
-        chan_data_df['region'] = epochs_with_metadata.metadata.region.unique()[0]
+#         chan_data_df['peak_pow_diff'] = peak_pow_diffs
+#         chan_data_df['band_pow_diff'] = band_pow_diffs
+#         chan_data_df['band_pow_diff_flat'] = band_pow_diff_flats
+#         chan_data_df['band'] = band_labels
+#         chan_data_df['exp_diff'] = exp_diff
+#         chan_data_df['channel'] = epochs_with_metadata.ch_names[chan]
+#         chan_data_df['region'] = epochs_with_metadata.metadata.region.unique()[0]
 
-        all_chan_dfs.append(chan_data_df)
+#         all_chan_dfs.append(chan_data_df)
 
-        if plot: 
-            with PdfPages(f'{file_path}/{file_name}.pdf') as pdf:
-                f, ax = plt.subplots(1, 2, figsize=[18, 6], dpi=300)
-                # Plot the power spectra differences, representing the 'band-by-band' idea
-                fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
-                                                        [x.power_spectrum for x in cond_fits],
-                                                        log_powers=False, linewidth=3,
-                                                        shades=bands.definitions, shade_colors=shade_cols,
-                                                        labels=conditions,
-                                                        ax=ax[0])
-                ax[0].set_title(f'{epochs_with_metadata.ch_names[chan]}', t_settings)
+#         if plot: 
+#             with PdfPages(f'{file_path}/{file_name}.pdf') as pdf:
+#                 f, ax = plt.subplots(1, 2, figsize=[18, 6], dpi=300)
+#                 # Plot the power spectra differences, representing the 'band-by-band' idea
+#                 fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
+#                                                         [x.power_spectrum for x in cond_fits],
+#                                                         log_powers=False, linewidth=3,
+#                                                         shades=bands.definitions, shade_colors=shade_cols,
+#                                                         labels=conditions,
+#                                                         ax=ax[0])
+#                 ax[0].set_title(f'{epochs_with_metadata.ch_names[chan]}', t_settings)
 
-                # Plot the flattened power spectra differences
-                fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
-                                                        [x._spectrum_flat for x in cond_fits],
-                                                        log_powers=False, linewidth=3,
-                                                        shades=bands.definitions, shade_colors=shade_cols,
-                                                        labels=conditions,
-                                                        ax=ax[1])
+#                 # Plot the flattened power spectra differences
+#                 fooof.plts.spectra.plot_spectra_shading(cond_fits[0].freqs, 
+#                                                         [x._spectrum_flat for x in cond_fits],
+#                                                         log_powers=False, linewidth=3,
+#                                                         shades=bands.definitions, shade_colors=shade_cols,
+#                                                         labels=conditions,
+#                                                         ax=ax[1])
 
-                ax[1].set_title(f'{epochs_with_metadata.ch_names[chan]} - flattened')
+#                 ax[1].set_title(f'{epochs_with_metadata.ch_names[chan]} - flattened')
 
-                f.tight_layout()
+#                 f.tight_layout()
 
-                pdf.savefig()
-                plt.close(f)
+#                 pdf.savefig()
+#                 plt.close(f)
 
-    return pd.concat(all_chan_dfs), pd.concat(all_cond_df)
+#     return pd.concat(all_chan_dfs), pd.concat(all_cond_df)
 
 def detect_oscillation_evs(signal, method=None): 
     """
