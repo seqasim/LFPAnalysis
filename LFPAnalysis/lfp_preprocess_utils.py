@@ -1082,7 +1082,7 @@ seeg_only=True, check_bad=True):
         drop_chans = list(set(mne_data.ch_names)^set(seeg_names))
         mne_data.drop_channels(drop_chans)
 
-        if check_bad = True:
+        if check_bad == True:
             bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
             mne_data.info['bads'] = bads
 
