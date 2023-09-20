@@ -287,7 +287,7 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
         ind_fits.fit()
 
         # Create a dataframe to store results 
-        chan_data_df = pd.DataFrame(columns=['channel', 'region', 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'peak_freq', 'peak_height', 'PSD_exp'])
+        chan_data_df = pd.DataFrame(columns=['channel', 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'peak_freq', 'peak_height', 'PSD_exp'])
 
         chan_data_df['frequency'] = ind_fits.freqs.tolist()
         chan_data_df['PSD_raw'] = ind_fits.power_spectrum.tolist()
@@ -305,13 +305,16 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
         # in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
         # peak_freq = np.ones_like(ind_fits.freqs) * np.nan
         # peak_height = np.ones_like(ind_fits.freqs) * np.nan
-        for ix, pk in enumerate(peaks):
-            center_pk = pk[0]
-            low_freq = pk[0] - (pk[2]/2)
-            high_freq = pk[0] + (pk[2]/2)
-            pk_height = pk[1]
+        
+        # Iterate through the peaks and create dataframe friendly data that assigns each frequency to a peak (or not)
+        if np.ndim(peaks) == 1: # only one peak
+
+            center_pk = peaks[0]
+            low_freq = peaks[0] - (peaks[2]/2)
+            high_freq = peaks[0] + (peaks[2]/2)
+            pk_height = peaks[1]
             in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
-            in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = ix + 1
+            in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = 1
             peak_freq = np.zeros_like(ind_fits.freqs)
             peak_freq[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = center_pk
             peak_height = np.zeros_like(ind_fits.freqs)
@@ -319,7 +322,24 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
             in_FOOOF_peaks.append(in_FOOOF_peak)
             peak_freqs.append(peak_freq)
-            peak_heights.append(peak_height)
+            peak_heights.append(peak_height)   
+
+        elif np.ndim(peaks) > 1: # more than one peak
+            for ix, pk in enumerate(peaks):
+                center_pk = pk[0]
+                low_freq = pk[0] - (pk[2]/2)
+                high_freq = pk[0] + (pk[2]/2)
+                pk_height = pk[1]
+                in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
+                in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = ix + 1
+                peak_freq = np.zeros_like(ind_fits.freqs)
+                peak_freq[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = center_pk
+                peak_height = np.zeros_like(ind_fits.freqs)
+                peak_height[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = pk_height
+
+                in_FOOOF_peaks.append(in_FOOOF_peak)
+                peak_freqs.append(peak_freq)
+                peak_heights.append(peak_height)
 
         if peaks is not None:
             in_FOOOF_peaks = sum(in_FOOOF_peaks)
@@ -351,7 +371,7 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
         # chan_data_df['band'] = band_labels
         # chan_data_df['exp'] = exp
         chan_data_df['channel'] = epochs.ch_names[chan]
-        chan_data_df['region'] = epochs.metadata.region.unique()[0]
+        # chan_data_df['region'] = epochs.metadata.region.unique()[0]
 
         all_chan_dfs.append(chan_data_df)
 
