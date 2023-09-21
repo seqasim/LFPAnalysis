@@ -143,14 +143,14 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
 
 
     if (baseline_only==False) & (data is not None):
-        if type(baseline_mne) == mne.epochs.Epochs:
+        if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
             baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
         else: 
             # ugly but flexible bc i don't want to break people's analyses that assume mne input
             baseline_data = np.concatenate((baseline_mne, data), axis=-1)
     else: 
         # Beware - this is super vulnerable to contamination by artifacts/outliers: https://www.sciencedirect.com/science/article/abs/pii/S1053811913009919
-        if type(baseline_mne) == mne.epochs.Epochs:
+        if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
             baseline_data = baseline_mne.data
         else:
             baseline_data = baseline_mne
@@ -158,7 +158,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
     # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
 
-    if type(baseline_mne) == mne.epochs.Epochs:
+    if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
         elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
         ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
         freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
