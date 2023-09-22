@@ -21,3 +21,4 @@
     levenshtein==0.20.9
     notebook
     scikit-learn
+    pycatch22
