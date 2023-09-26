@@ -19,8 +19,8 @@
     tabulate==0.9.0
     statsmodels==0.13.5
     levenshtein==0.20.9
+    pycatch22==0.4.2
     wheel
-    pycatch22
     notebook
     scikit-learn
     
