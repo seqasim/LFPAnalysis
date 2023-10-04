@@ -951,6 +951,9 @@ def load_elec(elec_path=None):
 
     # Sometimes there's extra columns with no entries: 
     elec_data = elec_data[elec_data.columns.drop(list(elec_data.filter(regex='Unnamed')))]
+    
+    # Sometimes there's extra rows with no entries:
+    elec_data = elec_data.dropna(axis=0, how = 'all')
 
     if 'NMMlabel' in elec_data.keys(): 
         # This is an annoying naming convention but also totally my fault lol
