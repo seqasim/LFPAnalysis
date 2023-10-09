@@ -10,9 +10,10 @@ from glob import glob
 from LFPAnalysis import nlx_utils, lfp_preprocess_utils, iowa_utils
 import pandas as pd
 from mne.filter import next_fast_len
-from scipy.signal import hilbert, find_peaks, peak_widths
+from scipy.signal import hilbert, find_peaks, peak_widths, convolve
 import Levenshtein as lev
 import os
+
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     """
@@ -792,6 +793,8 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
+    From: https://academic.oup.com/brain/article/142/11/3502/5566384
+
     Method 1: 
     1. Bandpass filter in the [25-80] Hz band. 
     2. Rectify. 
@@ -855,7 +858,7 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
             sig = filtered_data.get_data(picks=[ch_])[0, :]
 
             # Find peaks 
-            IED_samps, _ = find_peaks(sig, height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
+            IED_samps, _ = find_peaks(sig, height=peak_thresh, distance=closeness_thresh * sr)
 
             IED_samps_dict[ch_] = IED_samps 
 
@@ -896,7 +899,7 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
             sig = filtered_data.get_data(picks=[ch_])[:,0,:]
             IED_dict = {x:np.nan for x in np.arange(sig.shape[0])}
             for event in np.arange(sig.shape[0]):
-                IED_samps, _ = find_peaks(sig[event, :], height=peak_thresh, prominence=2, distance=closeness_thresh * sr)
+                IED_samps, _ = find_peaks(sig[event, :], height=peak_thresh, distance=closeness_thresh * sr)
                 # IED_s = (IED_samps / sr)
                 if len(IED_samps) == 0: 
                     IED_samps = np.array([np.nan])
@@ -924,6 +927,203 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
                     IED_samps_dict[ch_][event] = revised_IED_samps
 
         return IED_samps_dict
+
+
+# def detect_IEDs_2(mne_data, bandwidth = np.array([10, 60])): 
+#     """
+
+    # NOTE: THIS IS TOTAL OVERKILL. Someone can feel free to overhaul this and use it if the IED detection above does not work well. 
+
+#     Here I am going to try and write a better IED detection function that doesn't miss as many as the last one. 
+
+#     https://link.springer.com/article/10.1007/s10548-014-0379-1#Sec2
+
+#     1. Each channel was zero-phase filtered in 10–60 Hz band using combination of high-pass and low-pass 8th order type II Chebyshev digital filters (with stop-band ripple).
+#     2.  Instant envelope of each filtered channel was calculated using absolute value of Hilbert transform
+#     3. The algorithm estimates the statistical distribution of the envelope and identifies a threshold value, which enables discrimination of spikes from background activity.
+#     4. The signal envelope was analysed using a moving window with a segment width of 5 s and 80 % overlap between consecutive segments. 
+#     5. The statistical distribution of the envelope was calculated for each segment and approximated with a log-normal fit
+#     6. Therefore, mode and median of the log-normal distribution was used to define a threshold that discriminates segments with spikes from the segments with background activity
+#     7. mode = np.exp(mu - std**2), median = np.exp(mu) 
+#     8. threshold = 3.65 * [mode + median] (from .m code) 
+#     """
+
+#     # What type of data is this? Continuous or epoched? 
+#     if type(mne_data) == mne.epochs.Epochs:
+#         data_type = 'epoch'
+#         n_times = mne_data._data.shape[-1]
+#     elif type(mne_data) in [mne.io.fiff.raw.Raw, mne.io.edf.edf.RawEDF]: 
+#         data_type = 'continuous'
+#         n_times = mne_data._data.shape[1]
+#     else: 
+#         data_type = 'continuous'
+#         n_times = mne_data._data.shape[1]  
+        
+
+#     signal = mne_data.copy()._data
+
+#     # bandwidth in Hz
+#     sr = mne_data.info['sfreq']
+
+#     # Calculate filter parameters
+#     Wp = 2 * bandwidth / sr
+#     Ws = 2 * bandwidth / sr + 0.1
+#     Rp = 6
+#     Rs = 60
+
+#     # Calculate filter order and cutoff frequency
+#     n, Ws = signal.cheb2ord(Wp, Ws, Rp, Rs)
+#     bl, al = signal.cheby2(n, Rs, Ws)
+
+#     # Apply the filter using filtfilt function
+#     filtered_signal = signal.filtfilt(bl, al, signal)
+
+#     n_fft = next_fast_len(n_times)
+
+#     # Hilbert bandpass amplitude 
+#     envelope = np.abs(hilbert(envelope=True, n_fft=n_fft, n_jobs=-1))
+
+
+#     # # Given parameters
+#     k1 = 3.65 
+#     k2 = k1  
+#     k3 = 0  
+#     polyspike_union_time = 0.12  
+#     ti_switch = 1  
+
+#     # Given parameters
+#     noverlap = 4*sr  
+#     winsize = 5*sr 
+#     signal_length = len(signal)  
+
+#     # Calculate index array based on noverlap value
+#     if noverlap < 1:
+#         step = int(round(winsize * (1 - noverlap)))
+#     else:
+#         step = winsize - int(noverlap)
+        
+#     index = np.arange(0, signal_length - winsize + 1, step)
+
+
+#     # Estimation of segment's distribution using MLE
+#     phat = []
+#     for k in range(len(index)):
+#         segment = envelope[index[k]:index[k] + winsize]
+#         segment = segment[segment > 0]  # Remove non-positive values
+#         phat.append([np.mean(np.log(segment)), np.std(np.log(segment))])
+
+#     phat = np.array(phat)
+
+#     # Filtering phat using filtfilt
+#     r = len(envelope) / len(index)
+#     n_average = winsize / fs
+
+#     if round(n_average * fs / r) > 1:
+#         phat = np.array([np.convolve(row, np.ones(int(round(n_average * fs / r))) / int(round(n_average * fs / r)), mode='same') for row in phat])
+
+#     # Interpolation of thresholds value to threshold curve
+#     phat_int = np.zeros((len(envelope), 2))
+#     if len(phat) > 1:
+#         phat_int[:, 0] = interp1d(index + round(winsize / 2), phat[:, 0], kind='slinear', fill_value='extrapolate')(np.arange(index[0] + round(winsize / 2), index[-1] + round(winsize / 2) + 1))
+#         phat_int[:, 1] = interp1d(index + round(winsize / 2), phat[:, 1], kind='slinear', fill_value='extrapolate')(np.arange(index[0] + round(winsize / 2), index[-1] + round(winsize / 2) + 1))
+#     else:
+#         phat_int = np.tile(phat, (len(envelope), 1))
+
+#     lognormal_mode = np.exp(phat_int[:, 0] - phat_int[:, 1] ** 2)
+#     lognormal_median = np.exp(phat_int[:, 0])
+#     lognormal_mean = np.exp(phat_int[:, 0] + (phat_int[:, 1] ** 2) / 2)
+
+#     prah_int = k1 * (lognormal_mode + lognormal_median) - k3 * (lognormal_mean - lognormal_mode)
+#     if not (k2 == k1):
+#         prah_int_low = k2 * (lognormal_mode + lognormal_median) - k3 * (lognormal_mean - lognormal_mode)
+#     else:
+#         prah_int_low = prah_int
+
+#     # CDF and PDF of lognormal distribution
+#     envelope_cdf = 0.5 + 0.5 * erf((np.log(envelope) - phat_int[:, 0]) / np.sqrt(2 * phat_int[:, 1] ** 2))
+#     envelope_pdf = (np.exp(-0.5 * ((np.log(envelope) - phat_int[:, 0]) / phat_int[:, 1]) ** 2) / (envelope * phat_int[:, 1] * np.sqrt(2 * np.pi)))
+
+#     # # Detection of obvious and ambiguous spike
+
+#     def local_maxima_detection(envelope, prah_int, fs, polyspike_union_time, ti_switch, d_decim):
+#         marker1 = np.zeros_like(envelope)
+#         marker1[envelope > prah_int] = 1
+        
+#         point = []
+#         point.append(np.where(np.diff(np.concatenate(([0], marker1))) > 0)[0])  # start crossing
+#         point.append(np.where(np.diff(np.concatenate((marker1, [0]))) < 0)[0])  # end crossing
+        
+#         if ti_switch == 2:
+#             envelope = np.abs(d_decim)
+        
+#         marker1 = np.zeros_like(envelope, dtype=bool)
+#         for k in range(len(point[0])):
+#             seg = envelope[point[0][k]:point[1][k] + 1]
+#             if len(seg) > 2:
+#                 seg_s = np.diff(seg)
+#                 seg_s = np.where(np.diff(np.concatenate(([0], np.sign(seg_s)))) < 0)[0]  # positions of local maxima in the section
+#                 marker1[point[0][k] + seg_s] = True
+#             elif len(seg) <= 2:
+#                 s_max = np.argmax(seg)
+#                 marker1[point[0][k] + s_max] = True
+        
+#         pointer = np.where(marker1)[0]
+#         state_previous = False
+#         start = 0
+#         for k in range(len(pointer)):
+#             end = min(len(marker1) - 1, pointer[k] + int(polyspike_union_time * fs))
+#             seg = marker1[pointer[k] + 1:end]
+#             if state_previous:
+#                 if np.any(seg):
+#                     state_previous = True
+#                 else:
+#                     state_previous = False
+#                     marker1[start:pointer[k] + 1] = True
+#             else:
+#                 if np.any(seg):
+#                     state_previous = True
+#                     start = pointer[k]
+        
+#         point = []
+#         point.append(np.where(np.diff(np.concatenate(([0], marker1))) > 0)[0])  # start
+#         point.append(np.where(np.diff(np.concatenate((marker1, [0]))) < 0)[0])  # end
+        
+#         for k in range(len(point[0])):
+#             if point[1][k] - point[0][k] > 1:
+#                 local_max = pointer[(pointer >= point[0][k]) & (pointer <= point[1][k])]
+#                 marker1[point[0][k]:point[1][k] + 1] = False
+#                 local_max_val = envelope[local_max]
+#                 local_max_poz = np.where(np.diff(np.sign(np.diff(np.concatenate(([0], local_max_val, [0]))))) > 0)[0]
+#                 marker1[local_max[local_max_poz]] = True
+        
+#         return marker1
+
+#     def detection_union(marker1, envelope, union_samples):
+#         union_samples = int(np.ceil(union_samples))
+#         if union_samples % 2 == 0:
+#             union_samples += 1
+#         MASK = np.ones(union_samples)
+#         marker1_dilated = convolve(marker1.astype(float), MASK, mode='same') > 0  # dilatation
+#         marker1_eroded = ~convolve(~marker1_dilated.astype(float), MASK, mode='same').astype(bool)  # erosion
+        
+#         marker2 = np.zeros_like(marker1)
+#         point = []
+#         point.append(np.where(np.diff(np.concatenate(([0], marker1_eroded))) > 0)[0])  # start
+#         point.append(np.where(np.diff(np.concatenate((marker1_eroded, [0]))) < 0)[0])  # end
+        
+#         for i in range(len(point[0])):
+#             maxp = np.argmax(envelope[point[0][i]:point[1][i] + 1])
+#             marker2[point[0][i] + maxp] = 1
+        
+#         return marker2
+
+#     markers_high = local_maxima_detection(envelope, prah_int, fs, polyspike_union_time, ti_switch, d_decim)
+#     markers_high = detection_union(markers_high, envelope, polyspike_union_time * fs)
+
+#     markers_low = local_maxima_detection(envelope, prah_int_low, fs, polyspike_union_time, ti_switch, d_decim)
+#     markers_low = detection_union(markers_low, envelope, polyspike_union_time * fs)
+
+#     return markers_low, markers_high
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
@@ -1378,6 +1578,11 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
 
+    IED_sec_dict = lfp_preprocess_utils.detect_IEDs(mne_data_reref, 
+                                            peak_thresh=IED_args['peak_thresh'], 
+                                            closeness_thresh=IED_args['closeness_thresh'], 
+                                            width_thresh=IED_args['width_thresh'])
+
     # all behavioral times of interest 
     beh_ts = [(x*slope + offset) for x in behav_times]
 
@@ -1447,23 +1652,55 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
         ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
         # rm_baseline_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
 
-    IED_times_s = lfp_preprocess_utils.detect_IEDs(ev_epochs, 
-                                               peak_thresh=IED_args['peak_thresh'], 
-                                               closeness_thresh=IED_args['closeness_thresh'], 
-                                               width_thresh=IED_args['width_thresh'])
+    # # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
 
-    # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
+    # event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()), index=np.arange(len(evs)))
 
-    event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()), index=np.arange(len(evs)))
+    # for ch in list(IED_times_s.keys()):
+    #     for ev, val in IED_times_s[ch].items():
+    #         if len(val) > 1:    
+    #             event_metadata[ch].loc[ev] = val
+    #         else:
+    #             if ~np.isnan(val): 
+    #                 event_metadata[ch].loc[ev] = val
 
-    for ch in list(IED_times_s.keys()):
-        for ev, val in IED_times_s[ch].items():
+    
+    # Bin the IED times into the epoched bins
+    ev_starts = [x - ev_start_s for x in beh_ts]
+    ev_ends = [x + ev_end_s for x in beh_ts]
+    dfs = []
+    allts = {f'{x}': np.nan for x in IED_sec_dict.keys()}
+    for key in IED_sec_dict.keys():
+        timestamps = IED_sec_dict[key]
+        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
+
+        # Initialize a dictionary to store the assigned timestamps for each time bin
+        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
+
+        # Iterate through each timestamp and assign it to the appropriate time bin
+        for timestamp in timestamps:
+            for bin_index, (start, end) in enumerate(time_bins):
+                if start <= timestamp <= end:
+                    assigned_timestamps[bin_index].append(timestamp)
+                    break
+        allts[key] = assigned_timestamps
+
+    # Turn the dictionary into a metadata dataframe 
+    event_metadata = pd.DataFrame(columns=list(IED_sec_dict.keys()), index=np.arange(len(time_bins)))
+
+    for ch in list(allts.keys()):
+        for ev, val in allts[ch].items():
             if len(val) > 1:    
                 event_metadata[ch].loc[ev] = val
             else:
                 if ~np.isnan(val): 
                     event_metadata[ch].loc[ev] = val
-        
+
+    # Replace all nan with Nones 
+    event_metadata.where(pd.notna(event_metadata), None)
+
+
+
     ev_epochs.metadata = event_metadata
     # rm_baseline_epochs.metadata = event_metadata
     # event_metadata
