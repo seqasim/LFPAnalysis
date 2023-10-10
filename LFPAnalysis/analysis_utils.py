@@ -12,6 +12,29 @@ import os
 import pycatch22
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
+def select_rois_picks(elec_data, chan_name):
+    """
+    Grab specific roi for the channel you are looking at 
+    """
+
+    roi = np.nan
+    NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower()
+    if NMM_label.str.contains('entorhinal').iloc[0]:
+            roi = 'entorhinal'
+    else:
+        YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower()
+        if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]):
+            roi = 'anterior_cingulate'
+        elif (YBA_label.str.contains('hippocampus').iloc[0]):
+            roi = 'hippocampus'
+        elif (YBA_label.str.contains('amygdala').iloc[0]):
+            roi = 'amygdala'
+        elif (YBA_label.str.contains('insula').iloc[0]):
+            roi = 'insula'
+        elif (YBA_label.str.contains('parahippocampal').iloc[0]):
+            roi = 'parahippocampal'
+
+    return roi
 
 def select_picks_rois(elec_data, roi=None):
     """
