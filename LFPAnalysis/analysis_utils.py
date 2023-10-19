@@ -34,6 +34,13 @@ def select_rois_picks(elec_data, chan_name):
         elif (YBA_label.str.contains('parahippocampal').iloc[0]):
             roi = 'parahippocampal'
 
+    if pd.isna(roi):
+        # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
+        try:
+            roi = elec_data[elec_data.label==chan_name].BN246.iloc[0].split(' ')[1]
+        except IndexError: 
+            roi = 'Unknown'
+
     return roi
 
 def select_picks_rois(elec_data, roi=None):
