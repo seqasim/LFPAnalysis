@@ -568,14 +568,38 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     # get the white matter electrodes and make sure they are note in the bad channel list
     wm_elec_ix_manual = [] 
     wm_elec_ix_auto = []
+    oob_elec_ix_manual = [] 
+    oob_elec_ix_auto = []
+    false_negatives = [] 
+    # account for different labeling strategies in manual column
+    white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
+    gray_matter_labels = ['gm', 'gray', 'graymatter', 'gray matter']
+    out_of_brain_labels = ['oob', 'out of brain']
     if 'Manual Examination' in elec_data.keys():
-        wm_elec_ix_manual = wm_elec_ix_manual + [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='wm' and elec_data['label'].str.lower()[ind] not in bad_channels]
-        oob_elec_ix = [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data=='oob']
-    else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-        wm_elec_ix_auto = wm_elec_ix_auto + [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
-        oob_elec_ix = [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
+        wm_elec_ix_manual += [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
+        oob_elec_ix_manual += [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data in out_of_brain_labels]
+        false_negatives += [ind for ind, data in elec_data['Manual Examination'].str.lower().items() if data in gray_matter_labels]
+    elif 'ManualExamination' in elec_data.keys():
+        wm_elec_ix_manual += [ind for ind, data in elec_data['ManualExamination'].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
+        oob_elec_ix_manual += [ind for ind, data in elec_data['ManualExamination'].str.lower().items() if data in out_of_brain_labels]           
+        false_negatives += [ind for ind, data in elec_data['ManualExamination'].str.lower().items() if data in gray_matter_labels]
+    else:
+        raise IndexError('No Manual Column!')
 
-    wm_channels = elec_data['label'].str.lower()[wm_elec_ix_manual + wm_elec_ix_auto].tolist()
+    # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
+    #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
+    wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
+    oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
+
+    # Correct for false negatives in the autodetection that are corrected by manual examination
+    wm_elec_ix_auto = [x for x in wm_elec_ix_auto if x not in false_negatives]
+    oob_elec_ix_auto = [x for x in oob_elec_ix_auto if x not in false_negatives]
+
+    # consolidate manual and auto detection 
+    wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
+    oob_elec_ix = np.unique(oob_elec_ix_manual + oob_elec_ix_auto)
+
+    wm_channels = elec_data['label'].str.lower()[wm_elec_ix].tolist()
     oob_channels = elec_data['label'].str.lower()[oob_elec_ix].tolist()
 
     # helper function to perform sort for bipolar electrodes:
