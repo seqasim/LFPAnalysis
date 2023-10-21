@@ -19,10 +19,14 @@ def select_rois_picks(elec_data, chan_name):
 
     roi = np.nan
     NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower()
+    BN246_label = elec_data[elec_data.label==chan_name].BN246.str.lower()
+    YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower()
+
+    # Only NMM assigns entorhinal cortex 
     if NMM_label.str.contains('entorhinal').iloc[0]:
             roi = 'entorhinal'
+    # First priority: Use YBA labels 
     else:
-        YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower()
         if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]):
             roi = 'anterior_cingulate'
         elif (YBA_label.str.contains('hippocampus').iloc[0]):
@@ -33,13 +37,59 @@ def select_rois_picks(elec_data, chan_name):
             roi = 'insula'
         elif (YBA_label.str.contains('parahippocampal').iloc[0]):
             roi = 'parahippocampal'
+        elif (YBA_label.str.contains('superior frontal gyrus').iloc[0]):
+            roi = 'dmpfc'
+        elif (YBA_label.str.contains('middle frontal gyrus').iloc[0]):
+            roi = 'dlpfc'
+        elif (YBA_label.str.contains('pars opercularis').iloc[0]):
+            roi = 'broca/ifg'
+        elif (YBA_label.str.contains('pars triangularis').iloc[0]):
+            roi = 'vlpfc/ifg'
+        elif (YBA_label.str.contains('pars orbitalis').iloc[0]):
+            roi = 'ofc/ifg'      
+        elif (YBA_label.str.contains('frontal orbital').iloc[0]):
+            roi = 'ofc'   
+        elif (YBA_label.str.contains('frontal pole ').iloc[0]):
+            roi = 'vmpfc'              
+
+    # Second priority  use BN246 labels 
+    if pd.isna(roi):
+        # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
+        if (BN246_label.str.contains('hipp').iloc[0]):
+            roi = 'hippocampis'
+        elif (BN246_label.str.contains('amyg').iloc[0]):
+            roi = 'amygdala'
+        elif (BN246_label.str.contains('ins').iloc[0]):
+            roi = 'insula'
+        elif (BN246_label.str.contains('ifg').iloc[0]):
+            roi = 'ifg'
+        elif (BN246_label.str.contains('org').iloc[0]):
+            roi = 'ofc' 
+        elif (BN246_label.str.contains('mfg').iloc[0]):
+            roi = 'dlpfc'
+        elif (BN246_label.str.contains('sfg').iloc[0]):
+            roi = 'dmpfc'
+        elif (BN246_label.str.contains('cg').iloc[0]):
+            # fix this one 
+            roi = 'anterior_cingulate'
 
     if pd.isna(roi):
         # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
-        try:
-            roi = elec_data[elec_data.label==chan_name].BN246.iloc[0].split(' ')[1]
-        except IndexError: 
-            roi = 'Unknown'
+        if (NMM_label.str.contains('hippocampus').iloc[0]):
+            roi = 'hippocampus'
+        if (NMM_label.str.contains('amygdala').iloc[0]):
+            roi = 'amygdala'
+        if (NMM_label.str.contains('acgc').iloc[0]):
+            roi = 'anterior_cingulate'
+        if (NMM_label.str.contains('ofc').iloc[0]):
+            roi = 'ofc'
+        if (NMM_label.str.contains('mfg').iloc[0]):
+            roi = 'dlpfc'
+        if (NMM_label.str.contains('sfg').iloc[0]):
+            roi = 'dmpfc'
+
+    if pd.isna(roi):
+        roi = 'Unknown'
 
     return roi
 
@@ -579,4 +629,4 @@ def hctsa_signal_features(signal):
     df.reset_index(inplace=True, drop=True)
     df = df.drop(labels=0, axis=0).reset_index(drop=True)
 
-    return df 
+    return df
