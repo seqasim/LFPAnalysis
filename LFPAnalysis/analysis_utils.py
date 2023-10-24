@@ -28,7 +28,7 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
         roi = 'entorhinal'
     
     # First priority: Use YBA labels if there is no manual label
-    if pd.isna(manual_label)
+    if pd.isna(manual_label).iloc[0]:
         if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]):
             roi = 'anterior_cingulate'
         elif (YBA_label.str.contains('hippocampus').iloc[0]):
@@ -118,7 +118,7 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
             roi = 'dmpfc'  
 
     if pd.isna(roi):
-
+        # This is mostly temporal gyrus
         roi = 'Unknown'
 
     return roi
