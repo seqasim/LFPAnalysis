@@ -289,9 +289,9 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
         gray_matter_labels = ['gm', 'gray', 'graymatter', 'gray matter']
         out_of_brain_labels = ['oob', 'out of brain']
-        manual_col = elec_df.keys().str.lower().str.contains('manual')
+        manual_col = elec_data.keys().str.lower().str.contains('manual')
         if np.any(manual_col):
-            manual_key = elec_df.keys()[elec_df.keys().str.lower().str.contains('manual')][0]
+            manual_key = elec_data.keys()[elec_data.keys().str.lower().str.contains('manual')][0]
             wm_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
             oob_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in out_of_brain_labels]
             false_negatives += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in gray_matter_labels]
@@ -573,9 +573,9 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
     white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
     gray_matter_labels = ['gm', 'gray', 'graymatter', 'gray matter']
     out_of_brain_labels = ['oob', 'out of brain']
-    manual_col = elec_df.keys().str.lower().str.contains('manual')
+    manual_col = elec_data.keys().str.lower().str.contains('manual')
     if np.any(manual_col):
-        manual_key = elec_df.keys()[elec_df.keys().str.lower().str.contains('manual')][0]
+        manual_key = elec_data.keys()[elec_data.keys().str.lower().str.contains('manual')][0]
         wm_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
         oob_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in out_of_brain_labels]
         false_negatives += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in gray_matter_labels]
