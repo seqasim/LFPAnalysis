@@ -74,7 +74,7 @@ def select_rois_picks(elec_data, chan_name):
             roi = 'anterior_cingulate'
 
     if pd.isna(roi):
-        # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
+        # Just use the dumb NMM label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
         if (NMM_label.str.contains('hippocampus').iloc[0]):
             roi = 'hippocampus'
         if (NMM_label.str.contains('amygdala').iloc[0]):
