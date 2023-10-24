@@ -12,7 +12,7 @@ import os
 import pycatch22
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
-def select_rois_picks(elec_data, chan_name):
+def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
     """
     Grab specific roi for the channel you are looking at 
     """
@@ -21,12 +21,14 @@ def select_rois_picks(elec_data, chan_name):
     NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower()
     BN246_label = elec_data[elec_data.label==chan_name].BN246.str.lower()
     YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower()
+    manual_label = elec_data[elec_data.label==chan_name][manual_col].str.lower()
 
     # Only NMM assigns entorhinal cortex 
     if NMM_label.str.contains('entorhinal').iloc[0]:
-            roi = 'entorhinal'
-    # First priority: Use YBA labels 
-    else:
+        roi = 'entorhinal'
+    
+    # First priority: Use YBA labels if there is no manual label
+    if pd.isna(manual_label)
         if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]):
             roi = 'anterior_cingulate'
         elif (YBA_label.str.contains('hippocampus').iloc[0]):
@@ -49,10 +51,37 @@ def select_rois_picks(elec_data, chan_name):
             roi = 'ofc/ifg'      
         elif (YBA_label.str.contains('frontal orbital').iloc[0]):
             roi = 'ofc'   
-        elif (YBA_label.str.contains('frontal pole ').iloc[0]):
+        elif (YBA_label.str.contains('frontal pole').iloc[0]):
             roi = 'vmpfc'              
+    else:
+        # Now look at the manual labels: 
+        if YBA_label.str.contains('unknown').iloc[0]:
+            if (manual_label.str.contains('cingulate gyrus a').iloc[0]) | (manual_label.str.contains('cingulate gyrus b').iloc[0]) | (manual_label.str.contains('cingulate gyrus c').iloc[0]):
+                roi = 'anterior_cingulate'
+            elif (manual_label.str.contains('hippocampus').iloc[0]):
+                roi = 'hippocampus'
+            elif (manual_label.str.contains('amygdala').iloc[0]):
+                roi = 'amygdala'
+            elif (manual_label.str.contains('insula').iloc[0]):
+                roi = 'insula'
+            elif (manual_label.str.contains('parahippocampal').iloc[0]):
+                roi = 'parahippocampal'
+            elif (manual_label.str.contains('superior frontal gyrus').iloc[0]):
+                roi = 'dmpfc'
+            elif (manual_label.str.contains('middle frontal gyrus').iloc[0]):
+                roi = 'dlpfc'
+            elif (manual_label.str.contains('pars opercularis').iloc[0]):
+                roi = 'broca/ifg'
+            elif (manual_label.str.contains('pars triangularis').iloc[0]):
+                roi = 'vlpfc/ifg'
+            elif (manual_label.str.contains('pars orbitalis').iloc[0]):
+                roi = 'ofc/ifg'      
+            elif (manual_label.str.contains('frontal orbital').iloc[0]):
+                roi = 'ofc'   
+            elif (manual_label.str.contains('frontal pole ').iloc[0]):
+                roi = 'vmpfc'    
 
-    # Second priority  use BN246 labels 
+    # Next  use BN246 labels if still unlabeled
     if pd.isna(roi):
         # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
         if (BN246_label.str.contains('hipp').iloc[0]):
@@ -86,9 +115,10 @@ def select_rois_picks(elec_data, chan_name):
         if (NMM_label.str.contains('mfg').iloc[0]):
             roi = 'dlpfc'
         if (NMM_label.str.contains('sfg').iloc[0]):
-            roi = 'dmpfc'
+            roi = 'dmpfc'  
 
     if pd.isna(roi):
+
         roi = 'Unknown'
 
     return roi
