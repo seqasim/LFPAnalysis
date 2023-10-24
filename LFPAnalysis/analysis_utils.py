@@ -29,8 +29,12 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
     
     # First priority: Use YBA labels if there is no manual label
     if pd.isna(manual_label).iloc[0]:
-        if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]):
+        if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]) | (YBA_label.str.contains('cingulate gyrus d').iloc[0]) | (YBA_label.str.contains('cingulate gyrus e').iloc[0]) | (YBA_label.str.contains('cingulate gyrus f').iloc[0]) | (YBA_label.str.contains('cingulate gyrus g').iloc[0]) | (YBA_label.str.contains('cingulate gyrus h').iloc[0]) | (YBA_label.str.contains('cingulate gyrus i').iloc[0]) | (YBA_label.str.contains('cingulate gyrus j').iloc[0]):
             roi = 'anterior_cingulate'
+        elif (YBA_label.str.contains('cingulate gyrus k').iloc[0]) | (YBA_label.str.contains('cingulate gyrus l').iloc[0]) | (YBA_label.str.contains('cingulate gyrus m').iloc[0]) | (YBA_label.str.contains('cingulate gyrus n').iloc[0]) | (YBA_label.str.contains('cingulate gyrus o').iloc[0]):
+            roi = 'medial_cingulate'
+        elif (YBA_label.str.contains('cingulate gyrus p').iloc[0]) | (YBA_label.str.contains('cingulate gyrus q').iloc[0]) | (YBA_label.str.contains('cingulate gyrus r').iloc[0]):
+            roi = 'posterior_cingulate'
         elif (YBA_label.str.contains('hippocampus').iloc[0]):
             roi = 'hippocampus'
         elif (YBA_label.str.contains('amygdala').iloc[0]):
@@ -40,24 +44,36 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
         elif (YBA_label.str.contains('parahippocampal').iloc[0]):
             roi = 'parahippocampal'
         elif (YBA_label.str.contains('superior frontal gyrus').iloc[0]):
-            roi = 'dmpfc'
+            if (YBA_label.str.contains('superior frontal gyrus 8').iloc[0]):
+                pass 
+                # this is too pre-motor for me
+            else:
+                roi = 'dmpfc'
         elif (YBA_label.str.contains('middle frontal gyrus').iloc[0]):
             roi = 'dlpfc'
         elif (YBA_label.str.contains('pars opercularis').iloc[0]):
-            roi = 'broca/ifg'
+            roi = 'vlpfc'
         elif (YBA_label.str.contains('pars triangularis').iloc[0]):
-            roi = 'vlpfc/ifg'
+            roi = 'vlpfc'
         elif (YBA_label.str.contains('pars orbitalis').iloc[0]):
-            roi = 'ofc/ifg'      
+            roi = 'ofc'      
         elif (YBA_label.str.contains('frontal orbital').iloc[0]):
             roi = 'ofc'   
+        elif (YBA_label.str.contains('frontal orbital 1 a').iloc[0]):
+            roi = 'ofc'   
         elif (YBA_label.str.contains('frontal pole').iloc[0]):
-            roi = 'vmpfc'              
+            roi = 'vmpfc'     
+        elif (YBA_label.str.contains(' temporal').iloc[0]):
+            roi = 'temporal'            
     else:
         # Now look at the manual labels: 
         if YBA_label.str.contains('unknown').iloc[0]:
-            if (manual_label.str.contains('cingulate gyrus a').iloc[0]) | (manual_label.str.contains('cingulate gyrus b').iloc[0]) | (manual_label.str.contains('cingulate gyrus c').iloc[0]):
+            if (manual_label.str.contains('cingulate gyrus a').iloc[0]) | (manual_label.str.contains('cingulate gyrus b').iloc[0]) | (manual_label.str.contains('cingulate gyrus c').iloc[0]) | (manual_label.str.contains('cingulate gyrus d').iloc[0]) | (manual_label.str.contains('cingulate gyrus e').iloc[0]) | (manual_label.str.contains('cingulate gyrus f').iloc[0]) | (manual_label.str.contains('cingulate gyrus g').iloc[0]) | (manual_label.str.contains('cingulate gyrus h').iloc[0]) | (manual_label.str.contains('cingulate gyrus i').iloc[0]) | (manual_label.str.contains('cingulate gyrus j').iloc[0]):
                 roi = 'anterior_cingulate'
+            elif (manual_label.str.contains('cingulate gyrus k').iloc[0]) | (manual_label.str.contains('cingulate gyrus l').iloc[0]) | (manual_label.str.contains('cingulate gyrus m').iloc[0]) | (manual_label.str.contains('cingulate gyrus n').iloc[0]) | (manual_label.str.contains('cingulate gyrus o').iloc[0]):
+                roi = 'medial_cingulate'
+            elif (manual_label.str.contains('cingulate gyrus p').iloc[0]) | (manual_label.str.contains('cingulate gyrus q').iloc[0]) | (manual_label.str.contains('cingulate gyrus r').iloc[0]):
+                roi = 'posterior_cingulate'
             elif (manual_label.str.contains('hippocampus').iloc[0]):
                 roi = 'hippocampus'
             elif (manual_label.str.contains('amygdala').iloc[0]):
@@ -67,25 +83,35 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
             elif (manual_label.str.contains('parahippocampal').iloc[0]):
                 roi = 'parahippocampal'
             elif (manual_label.str.contains('superior frontal gyrus').iloc[0]):
-                roi = 'dmpfc'
+                if (manual_label.str.contains('superior frontal gyrus 8').iloc[0]):
+                    pass 
+                    # this is too pre-motor for me
+                else:
+                    roi = 'dmpfc'
             elif (manual_label.str.contains('middle frontal gyrus').iloc[0]):
                 roi = 'dlpfc'
             elif (manual_label.str.contains('pars opercularis').iloc[0]):
-                roi = 'broca/ifg'
+                roi = 'vlpfc'
             elif (manual_label.str.contains('pars triangularis').iloc[0]):
-                roi = 'vlpfc/ifg'
+                roi = 'vlpfc'
             elif (manual_label.str.contains('pars orbitalis').iloc[0]):
-                roi = 'ofc/ifg'      
+                roi = 'ofc'      
             elif (manual_label.str.contains('frontal orbital').iloc[0]):
+                roi = 'ofc'   
+            elif (manual_label.str.contains('frontal orbital 1 a').iloc[0]):
                 roi = 'ofc'   
             elif (manual_label.str.contains('frontal pole ').iloc[0]):
                 roi = 'vmpfc'    
+            elif (manual_label.str.contains(' temporal').iloc[0]):
+                roi = 'temporal'   
+            elif (manual_label.str.contains('thalamus').iloc[0]):
+                roi = 'thalamus'
 
     # Next  use BN246 labels if still unlabeled
     if pd.isna(roi):
         # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
         if (BN246_label.str.contains('hipp').iloc[0]):
-            roi = 'hippocampis'
+            roi = 'hippocampus'
         elif (BN246_label.str.contains('amyg').iloc[0]):
             roi = 'amygdala'
         elif (BN246_label.str.contains('ins').iloc[0]):
@@ -98,9 +124,6 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
             roi = 'dlpfc'
         elif (BN246_label.str.contains('sfg').iloc[0]):
             roi = 'dmpfc'
-        elif (BN246_label.str.contains('cg').iloc[0]):
-            # fix this one 
-            roi = 'anterior_cingulate'
 
     if pd.isna(roi):
         # Just use the dumb NMM label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
@@ -110,6 +133,8 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
             roi = 'amygdala'
         if (NMM_label.str.contains('acgc').iloc[0]):
             roi = 'anterior_cingulate'
+        if (NMM_label.str.contains('mcgc').iloc[0]):
+            roi = 'medial_cingulate'
         if (NMM_label.str.contains('ofc').iloc[0]):
             roi = 'ofc'
         if (NMM_label.str.contains('mfg').iloc[0]):
