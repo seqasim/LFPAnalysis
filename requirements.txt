@@ -13,7 +13,6 @@
     emd==0.5.5
     joblib==1.2.0
     llvmlite==0.39.1
-    numba==0.56.4
     pyyaml==6.0
     sparse==0.13.0
     tabulate==0.9.0
@@ -25,4 +24,5 @@
     scikit-learn
     h5io
     mne-connectivity
+    numba
     

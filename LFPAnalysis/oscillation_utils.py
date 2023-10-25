@@ -16,6 +16,9 @@ from pathlib import Path
 import statsmodels.api as sm
 from scipy.stats.distributions import chi2
 from mne_connectivity import phase_slope_index, seed_target_indices, spectral_connectivity_epochs
+import mne
+from tqdm import tqdm
+from scipy.stats import zscore
 
 # Helper functions 
 
@@ -114,9 +117,9 @@ def compute_connectivity(mne_data, band, metric, indices, freqs, n_cycles, buf_m
                                                                 fmin=band[0], fmax=band[1],
                                                                 cwt_freqs=freqs,
                                                                 cwt_n_cycles=n_cycles,
-                                                                verbose='warning'))
+                                                                verbose='warning').get_data()[:, 0])
         return pairwise_connectivity
-    elif self.compute_surr: 
+    elif n_surr > 0: 
         real_conn = np.squeeze(spectral_connectivity_epochs(mne_data,
                                                         indices=indices,
                                                         method=metric,
@@ -127,13 +130,15 @@ def compute_connectivity(mne_data, band, metric, indices, freqs, n_cycles, buf_m
                                                         tmax=mne_data.tmax - (buf_ms / 1000),
                                                         cwt_freqs=freqs,
                                                         cwt_n_cycles=n_cycles,
-                                                        verbose='warning')[0])
+                                                        verbose='warning').get_data()[:, 0])
 
         data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-        surr_struct = np.zeros([real_conn.shape[0], real_conn.shape[1], nsurr+1]) # allocate space for all the surrogates 
+        surr_struct = np.zeros([real_conn.shape[0], real_conn.shape[1], n_surr+1]) # allocate space for all the surrogates 
 
-        for ns in range(nsurr): 
+        # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
+
+        for ns in range(n_surr): 
             surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
             for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
                 surr_ch = swap_time_blocks(ch_dat, random_state=None)
@@ -156,7 +161,7 @@ def compute_connectivity(mne_data, band, metric, indices, freqs, n_cycles, buf_m
                                                             tmax=surr_mne.tmax - (buf_ms / 1000),
                                                             cwt_freqs=freqs,
                                                             cwt_n_cycles=n_cycles,
-                                                            verbose='warning')[0])
+                                                            verbose='warning').get_data()[:, 0])
 
             surr_struct[:, :, ns] = surr_conn
 
@@ -175,7 +180,7 @@ def compute_connectivity(mne_data, band, metric, indices, freqs, n_cycles, buf_m
                                                                     tmax=eeg_mne.tmax - (buf_ms / 1000),
                                                                     cwt_freqs=freqs,
                                                                     cwt_n_cycles=n_cycles,
-                                                                    verbose='warning')[0])
+                                                                    verbose='warning').get_data()[:, 0])
         
             
     return pairwise_connectivity
