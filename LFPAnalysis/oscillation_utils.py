@@ -1,10 +1,12 @@
 """
-IN PROGRESS: 
+eBOSC IN PROGRESS: 
 
 Pulled largely from Julian Q. Kosciessa at
 https://github.com/jkosciessa/eBOSC_py 
 
 """
+
+
 
 import numpy as np
 import pandas as pd
@@ -13,6 +15,7 @@ import scipy.io as sio
 from pathlib import Path
 import statsmodels.api as sm
 from scipy.stats.distributions import chi2
+from mne_connectivity import phase_slope_index, seed_target_indices, spectral_connectivity_epochs
 
 # Helper functions 
 
@@ -49,7 +52,173 @@ def getTimeFromFTmat(fname, var_name='data'):
     return time
 
 def get_project_root() -> Path:
-    return Path(__file__).parent
+    return Path(__file__)
+    
+def swap_time_blocks(data, random_state=None):
+
+    """Compute surrogates by swapping time blocks.
+    This function cuts the timeseries at a random time point. Then, both time
+    blocks are swapped.
+    Parameters
+    ----------
+    data : array_like
+        Array of shape (n_chan, ..., n_times).
+    random_state : int | None
+        Fix the random state of the machine for reproducible results.
+    Returns
+    -------
+    surr : array_like
+        Swapped timeseries to use to compute the distribution of
+        permutations
+    References
+    ----------
+    Bahramisharif et al. 2013 
+    """
+    
+    if random_state is None:
+        random_state = int(np.random.randint(0, 10000, size=1))
+    rnd = np.random.RandomState(random_state)
+    
+    # get the minimum / maximum shift
+    min_shift, max_shift = 1, None
+    if not isinstance(max_shift, (int, float)):
+        max_shift = data.shape[-1]
+    # random cutting point along time axis
+    cut_at = rnd.randint(min_shift, max_shift, (1,))
+    # split amplitude across time into two parts
+    surr = np.array_split(data, cut_at, axis=-1)
+    # revered elements
+    surr.reverse()
+    
+    return np.concatenate(surr, axis=-1)
+
+
+def compute_connectivity(mne_data, band, metric, indices, freqs, n_cycles, buf_ms, n_surr=500):
+    """
+    Compute different connectivity metrics using mne.
+    :param eeg_mne: MNE formatted EEG
+    :param samplerate: sample rate of the data
+    :param band: tuple of band of interest
+    :param metric: 'psi' for directional, or for non_directional: ['coh', 'cohy', 'imcoh', 'plv', 'ciplv', 'ppc', 'pli', pli2_unbiased', 'dpli', 'wpli', 'wpli2_debiased']
+    see: https://mne.tools/mne-connectivity/stable/generated/mne_connectivity.spectral_connectivity_epochs.html
+    :param indices: determine the source and target for connectivity. Matters most for directional metrics i.e. 'psi'
+    :return:
+    pairwise connectivity: array of pairwise weights for the connectivity metric with some number of timepoints
+    """
+    
+    if metric == 'psi': 
+        pairwise_connectivity = np.squeeze(phase_slope_index(mne_data,
+                                                                indices=indices,
+                                                                sfreq=mne_data.info['sfreq'],
+                                                                mode='cwt_morlet',
+                                                                fmin=band[0], fmax=band[1],
+                                                                cwt_freqs=freqs,
+                                                                cwt_n_cycles=n_cycles,
+                                                                verbose='warning'))
+        return pairwise_connectivity
+    elif self.compute_surr: 
+        real_conn = np.squeeze(spectral_connectivity_epochs(mne_data,
+                                                        indices=indices,
+                                                        method=metric,
+                                                        sfreq=mne_data.info['sfreq'],
+                                                        mode='cwt_morlet',
+                                                        fmin=band[0], fmax=band[1], faverage=True,
+                                                        tmin=0,
+                                                        tmax=mne_data.tmax - (buf_ms / 1000),
+                                                        cwt_freqs=freqs,
+                                                        cwt_n_cycles=n_cycles,
+                                                        verbose='warning')[0])
+
+        data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+
+        surr_struct = np.zeros([real_conn.shape[0], real_conn.shape[1], nsurr+1]) # allocate space for all the surrogates 
+
+        for ns in range(nsurr): 
+            surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+            for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                surr_dat[ix, :, :] = surr_ch
+            surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+            # make a new EpochArray from it
+            surr_mne = mne.EpochsArray(surr_dat, 
+                        mne_data.info, 
+                        tmin=mne_data.tmin, 
+                        events = mne_data.events, 
+                        event_id = mne_data.event_id)
+
+            surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
+                                                            indices=indices,
+                                                            method=metric,
+                                                            sfreq=mne_data.info['sfreq'],
+                                                            mode='cwt_morlet',
+                                                            fmin=band[0], fmax=band[1], faverage=True,
+                                                            tmin=0,
+                                                            tmax=surr_mne.tmax - (buf_ms / 1000),
+                                                            cwt_freqs=freqs,
+                                                            cwt_n_cycles=n_cycles,
+                                                            verbose='warning')[0])
+
+            surr_struct[:, :, ns] = surr_conn
+
+        surr_struct[:, :, -1] = real_conn # add the real data in as the last entry 
+        z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data 
+        pairwise_connectivity = z_struct[:, :, -1] # extract the real data
+        
+    else:
+        pairwise_connectivity = np.squeeze(spectral_connectivity_epochs(mne_data,
+                                                                    indices=indices,
+                                                                    method=metric,
+                                                                    sfreq=mne_data.info['sfreq'],
+                                                                    mode='cwt_morlet',
+                                                                    fmin=band[0], fmax=band[1], faverage=True,
+                                                                    tmin=0,
+                                                                    tmax=eeg_mne.tmax - (buf_ms / 1000),
+                                                                    cwt_freqs=freqs,
+                                                                    cwt_n_cycles=n_cycles,
+                                                                    verbose='warning')[0])
+        
+            
+    return pairwise_connectivity
+
+
+
+# def compute_indices(elec_df, roi = ['hippocampus', 'anterior_cingulate'], band=[8, 13], band_name='beta'): 
+#     """
+#     Use mne connectivity to compute the spectral connectivity between electrodes 
+#     the first roi is the seed. the second roi is the target. 
+#     """
+
+
+#         # set a mask for the right electrodes 
+#         right_elec_mask = [elec_df.hemisphere=='r']
+#         seed_target_df = pd.DataFrame(columns=['seed', 'target'], index=['left', 'right'])
+#         seed_target_df['seed']['left'] = np.where(elec_df[~right_elec_mask].region == roi[0])[0]
+#         seed_target_df['target']['left'] = np.where(elec_df[~right_elec_mask].region == self.roi[1])[0]
+#         seed_target_df['seed']['right'] = np.where(elec_df[right_elec_mask].region == self.roi[0])[0]
+#         seed_target_df['target']['right'] = np.where(elec_df[right_elec_mask].region == self.roi[1])[0]
+
+
+#         seed_target_df = seed_target_df[
+#             (seed_target_df['seed'].map(lambda d: len(d) > 0)) & (seed_target_df['target'].map(lambda d: len(d) > 0))]
+
+#             # Dealing with multiple channels: stack them, don't average them
+#         psi = {}
+#         for hemi in ['left', 'right']:
+#             # first determine if ipsi connectivity is even possible; if not, move on
+#             if hemi not in seed_target_df.index.tolist():
+#                 continue
+#             else:
+#                 seed_to_target = seed_target_indices(
+#                     seed_target_df['seed'][hemi],
+#                     seed_target_df['target'][hemi])
+
+#                     self.compute_connectivity(eeg_mne[recalled],
+#                                                           samplerate=self.resample_freq,
+#                                                           band=[self.fb[band][0], self.fb[band][1]],
+#                                                           metric=self.metric,
+#                                                           indices=seed_to_source,
+#                                                           n_cycles=self.n_cycles)
+        
 
 """
 BOSC (Better Oscillation Detection) function library

@@ -645,12 +645,6 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
 #     return pd.concat(all_chan_dfs), pd.concat(all_cond_df)
 
-def detect_oscillation_evs(signal, method=None): 
-    """
-    Eventually could port: https://github.com/neurofractal/fBOSC
-    """
-    pass 
-
 
 def empirical_mode_decomposition(signal):
     """

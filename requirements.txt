@@ -24,4 +24,5 @@
     notebook
     scikit-learn
     h5io
+    mne-connectivity
     
