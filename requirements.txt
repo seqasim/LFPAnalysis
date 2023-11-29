@@ -25,4 +25,4 @@
     h5io
     mne-connectivity
     numba
-    
+    pactools

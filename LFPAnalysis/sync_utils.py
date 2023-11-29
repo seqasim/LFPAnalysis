@@ -5,6 +5,8 @@ from scipy.stats import spearmanr
 
 # Utility functions for synchronization
 
+# Might be nice to synergize with https://github.com/alexrockhill/pd-parser to see if there's some improvements to be made
+
 def get_behav_ts(logfile): 
     """
     Insert custom function to extract the behavioral timestamps from the logfile for your task. 

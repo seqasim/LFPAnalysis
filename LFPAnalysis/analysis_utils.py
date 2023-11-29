@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
+import scipy as sp
 import math
 import pandas as pd
 import mne
@@ -10,6 +12,9 @@ from fooof import FOOOFGroup
 from matplotlib.backends.backend_pdf import PdfPages
 import os
 import pycatch22
+import pkg_resources
+
+
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
@@ -17,130 +22,77 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
     Grab specific roi for the channel you are looking at 
     """
 
+    # Load the YBA ROI labels, custom assigned by Salman: 
+    file_path = pkg_resources.resource_filename('LFPAnalysis', 'YBA_ROI_labelled.xlsx')
+    YBA_ROI_labels = pd.read_excel(file_path)
+    YBA_ROI_labels['Long.name'] = YBA_ROI_labels['Long.name'].str.lower().str.replace(" ", "")
+
     roi = np.nan
-    NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower()
-    BN246_label = elec_data[elec_data.label==chan_name].BN246.str.lower()
-    YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower()
-    manual_label = elec_data[elec_data.label==chan_name][manual_col].str.lower()
+    NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower().str.strip()
+    BN246_label = elec_data[elec_data.label==chan_name].BN246.str.lower().str.strip()
+
+    # Account for individual differences in labelling: 
+    YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower().str.replace(" ", "")
+    manual_label = elec_data[elec_data.label==chan_name][manual_col].str.lower().str.replace(" ", "")
 
     # Only NMM assigns entorhinal cortex 
     if NMM_label.str.contains('entorhinal').iloc[0]:
-        roi = 'entorhinal'
-    
+        roi = 'EC'
+
     # First priority: Use YBA labels if there is no manual label
     if pd.isna(manual_label).iloc[0]:
-        if (YBA_label.str.contains('cingulate gyrus a').iloc[0]) | (YBA_label.str.contains('cingulate gyrus b').iloc[0]) | (YBA_label.str.contains('cingulate gyrus c').iloc[0]) | (YBA_label.str.contains('cingulate gyrus d').iloc[0]) | (YBA_label.str.contains('cingulate gyrus e').iloc[0]) | (YBA_label.str.contains('cingulate gyrus f').iloc[0]) | (YBA_label.str.contains('cingulate gyrus g').iloc[0]) | (YBA_label.str.contains('cingulate gyrus h').iloc[0]) | (YBA_label.str.contains('cingulate gyrus i').iloc[0]) | (YBA_label.str.contains('cingulate gyrus j').iloc[0]):
-            roi = 'anterior_cingulate'
-        elif (YBA_label.str.contains('cingulate gyrus k').iloc[0]) | (YBA_label.str.contains('cingulate gyrus l').iloc[0]) | (YBA_label.str.contains('cingulate gyrus m').iloc[0]) | (YBA_label.str.contains('cingulate gyrus n').iloc[0]) | (YBA_label.str.contains('cingulate gyrus o').iloc[0]):
-            roi = 'medial_cingulate'
-        elif (YBA_label.str.contains('cingulate gyrus p').iloc[0]) | (YBA_label.str.contains('cingulate gyrus q').iloc[0]) | (YBA_label.str.contains('cingulate gyrus r').iloc[0]):
-            roi = 'posterior_cingulate'
-        elif (YBA_label.str.contains('hippocampus').iloc[0]):
-            roi = 'hippocampus'
-        elif (YBA_label.str.contains('amygdala').iloc[0]):
-            roi = 'amygdala'
-        elif (YBA_label.str.contains('insula').iloc[0]):
-            roi = 'insula'
-        elif (YBA_label.str.contains('parahippocampal').iloc[0]):
-            roi = 'parahippocampal'
-        elif (YBA_label.str.contains('superior frontal gyrus').iloc[0]):
-            if (YBA_label.str.contains('superior frontal gyrus 8').iloc[0]):
-                pass 
-                # this is too pre-motor for me
-            else:
-                roi = 'dmpfc'
-        elif (YBA_label.str.contains('middle frontal gyrus').iloc[0]):
-            roi = 'dlpfc'
-        elif (YBA_label.str.contains('pars opercularis').iloc[0]):
-            roi = 'vlpfc'
-        elif (YBA_label.str.contains('pars triangularis').iloc[0]):
-            roi = 'vlpfc'
-        elif (YBA_label.str.contains('pars orbitalis').iloc[0]):
-            roi = 'ofc'      
-        elif (YBA_label.str.contains('frontal orbital').iloc[0]):
-            roi = 'ofc'   
-        elif (YBA_label.str.contains('frontal orbital 1 a').iloc[0]):
-            roi = 'ofc'   
-        elif (YBA_label.str.contains('frontal pole').iloc[0]):
-            roi = 'vmpfc'     
-        elif (YBA_label.str.contains(' temporal').iloc[0]):
-            roi = 'temporal'            
+        try:
+            roi = YBA_ROI_labels[YBA_ROI_labels['Long.name']==YBA_label.values[0]].Custom.values[0]
+        except IndexError:
+            # This is probably white matter or out of brain, but not manually labelled as such
+            roi = np.nan
     else:
         # Now look at the manual labels: 
         if YBA_label.str.contains('unknown').iloc[0]:
-            if (manual_label.str.contains('cingulate gyrus a').iloc[0]) | (manual_label.str.contains('cingulate gyrus b').iloc[0]) | (manual_label.str.contains('cingulate gyrus c').iloc[0]) | (manual_label.str.contains('cingulate gyrus d').iloc[0]) | (manual_label.str.contains('cingulate gyrus e').iloc[0]) | (manual_label.str.contains('cingulate gyrus f').iloc[0]) | (manual_label.str.contains('cingulate gyrus g').iloc[0]) | (manual_label.str.contains('cingulate gyrus h').iloc[0]) | (manual_label.str.contains('cingulate gyrus i').iloc[0]) | (manual_label.str.contains('cingulate gyrus j').iloc[0]):
-                roi = 'anterior_cingulate'
-            elif (manual_label.str.contains('cingulate gyrus k').iloc[0]) | (manual_label.str.contains('cingulate gyrus l').iloc[0]) | (manual_label.str.contains('cingulate gyrus m').iloc[0]) | (manual_label.str.contains('cingulate gyrus n').iloc[0]) | (manual_label.str.contains('cingulate gyrus o').iloc[0]):
-                roi = 'medial_cingulate'
-            elif (manual_label.str.contains('cingulate gyrus p').iloc[0]) | (manual_label.str.contains('cingulate gyrus q').iloc[0]) | (manual_label.str.contains('cingulate gyrus r').iloc[0]):
-                roi = 'posterior_cingulate'
-            elif (manual_label.str.contains('hippocampus').iloc[0]):
-                roi = 'hippocampus'
-            elif (manual_label.str.contains('amygdala').iloc[0]):
-                roi = 'amygdala'
-            elif (manual_label.str.contains('insula').iloc[0]):
-                roi = 'insula'
-            elif (manual_label.str.contains('parahippocampal').iloc[0]):
-                roi = 'parahippocampal'
-            elif (manual_label.str.contains('superior frontal gyrus').iloc[0]):
-                if (manual_label.str.contains('superior frontal gyrus 8').iloc[0]):
-                    pass 
-                    # this is too pre-motor for me
-                else:
-                    roi = 'dmpfc'
-            elif (manual_label.str.contains('middle frontal gyrus').iloc[0]):
-                roi = 'dlpfc'
-            elif (manual_label.str.contains('pars opercularis').iloc[0]):
-                roi = 'vlpfc'
-            elif (manual_label.str.contains('pars triangularis').iloc[0]):
-                roi = 'vlpfc'
-            elif (manual_label.str.contains('pars orbitalis').iloc[0]):
-                roi = 'ofc'      
-            elif (manual_label.str.contains('frontal orbital').iloc[0]):
-                roi = 'ofc'   
-            elif (manual_label.str.contains('frontal orbital 1 a').iloc[0]):
-                roi = 'ofc'   
-            elif (manual_label.str.contains('frontal pole ').iloc[0]):
-                roi = 'vmpfc'    
-            elif (manual_label.str.contains(' temporal').iloc[0]):
-                roi = 'temporal'   
-            elif (manual_label.str.contains('thalamus').iloc[0]):
-                roi = 'thalamus'
+            # prioritize thalamus labels! Which are not present in YBA for some reason
+            if (manual_label.str.contains('thalamus').iloc[0]):
+                roi = 'THAL'
+            else:
+                try:
+                    roi = YBA_ROI_labels[YBA_ROI_labels['Long.name']==manual_label.values[0]].Custom.values[0]
+                except IndexError: 
+                    # This is probably white matter or out of brain, and manually labelled as such
+                    roi = np.nan
 
     # Next  use BN246 labels if still unlabeled
     if pd.isna(roi):
         # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
         if (BN246_label.str.contains('hipp').iloc[0]):
-            roi = 'hippocampus'
+            roi = 'HPC'
         elif (BN246_label.str.contains('amyg').iloc[0]):
-            roi = 'amygdala'
+            roi = 'AMY'
         elif (BN246_label.str.contains('ins').iloc[0]):
-            roi = 'insula'
+            roi = 'INS'
         elif (BN246_label.str.contains('ifg').iloc[0]):
-            roi = 'ifg'
+            roi = 'IFG'
         elif (BN246_label.str.contains('org').iloc[0]):
-            roi = 'ofc' 
+            roi = 'OFC' 
         elif (BN246_label.str.contains('mfg').iloc[0]):
-            roi = 'dlpfc'
+            roi = 'dlPFC'
         elif (BN246_label.str.contains('sfg').iloc[0]):
-            roi = 'dmpfc'
+            roi = 'dmPFC'
 
     if pd.isna(roi):
         # Just use the dumb NMM label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
         if (NMM_label.str.contains('hippocampus').iloc[0]):
-            roi = 'hippocampus'
+            roi = 'HPC'
         if (NMM_label.str.contains('amygdala').iloc[0]):
-            roi = 'amygdala'
+            roi = 'AMY'
         if (NMM_label.str.contains('acgc').iloc[0]):
-            roi = 'anterior_cingulate'
+            roi = 'ACC'
         if (NMM_label.str.contains('mcgc').iloc[0]):
-            roi = 'medial_cingulate'
+            roi = 'MCC'
         if (NMM_label.str.contains('ofc').iloc[0]):
-            roi = 'ofc'
+            roi = 'OFC'
         if (NMM_label.str.contains('mfg').iloc[0]):
-            roi = 'dlpfc'
+            roi = 'dlPFC'
         if (NMM_label.str.contains('sfg').iloc[0]):
-            roi = 'dmpfc'  
+            roi = 'dmPFC'  
 
     if pd.isna(roi):
         # This is mostly temporal gyrus
@@ -397,7 +349,8 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
-                                                tmax=tmax)
+                                                tmax=tmax,
+                                                verbose=False)
                                                 
     psds, freqs = epo_spectrum.get_data(return_freqs=True)
             
@@ -645,14 +598,98 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
 #     return pd.concat(all_chan_dfs), pd.concat(all_cond_df)
 
-
-def empirical_mode_decomposition(signal):
+# We put all of our basic FOOOF usage into a slightly clunky function that is meant to be used for running the regression
+# over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
+def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event, ev_dict, band_dict, conditions, 
+                           do_plot=False, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses',
+                           do_save=False, **kwargs):
     """
-    My preference is to eventually implement EMD because it is better for our stupid non-stationary data. 
+    Compute FOOOF for a single channel across all trials and for each condition of interest. 
+    Meant to be used in parallel, hence a little clunky. 
 
-    https://emd.readthedocs.io/en/stable/index.html
+    Parameters
+    ----------   
+    chan_name : str
+        Name of the channel to compute FOOOF for
+    MNE_object : mne.Epochs
+        MNE object containing the data
+    subj_id : str
+        Subject ID
+    elec_df : pd.DataFrame
+        DataFrame containing the electrode information
+    event : str
+        Event to compute FOOOF for
+    ev_dict : dict
+        Dictionary containing the start and end times for each event
+    band_dict : dict
+        Dictionary containing the frequency bands to compute FOOOF for
+    conditions : list
+        List of conditions to compute FOOOF for
+    do_plot : bool
+        Whether to plot the FOOOF results
+    save_path : str
+        Path to save the FOOOF results
+    do_save : bool
+        Whether to save the FOOOF results
+    **kwargs : dict
+        Additional arguments to pass to FOOOF_compute_epochs
     """
-    pass
+
+    # First, compute FOOOF across all trials
+                
+    ev_dict = {'feedback_start': [-0.5, 1.5]}
+
+    dfs = []
+    # Can pick the epoch depending on the event being selected
+    chan_epochs = MNE_object.copy().pick_channels([chan_name])
+
+    # FOOOF across all trials: 
+    FOOOFGroup_res, df_all = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event][0], tmax=ev_dict[event][1], 
+                                                        band_dict=band_dict, **kwargs)
+
+    df_all['PSD_raw'] =  sp.stats.zscore(df_all['PSD_raw'])
+    # df_all['PSD_corrected'] =  sp.stats.zscore(df_all['PSD_corrected'])
+    df_all['cond'] = 'all'
+    df_all['event'] = event
+    df_all['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
+
+    dfs.append(df_all)
+
+    # Second, compute FOOOF only for the trials belonging to each condition of interest
+    df_conds = []
+    for cond in conditions: 
+
+        chan_epochs = MNE_object[cond].copy().pick_channels([chan_name])
+
+        FOOOFGroup_res, df_temp = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event][0], tmax=ev_dict[event][1], 
+                                                        band_dict=band_dict, **kwargs)
+
+        df_temp['cond'] = cond
+        df_temp['event'] = event
+
+        df_temp['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
+
+        df_conds.append(df_temp)
+
+    df_conds = pd.concat(df_conds)
+    df_conds['PSD_raw'] =  sp.stats.zscore(df_conds['PSD_raw'])
+    # df_conds['PSD_corrected'] =  sp.stats.zscore(df_conds['PSD_corrected'])
+    dfs.append(df_conds)
+
+    chan_df = pd.concat(dfs)
+    chan_df.insert(0,'participant', subj_id)
+
+    if do_plot:
+        fig = sns.lineplot(data=chan_df, x='frequency', y='PSD_corrected', hue='cond')
+        figure = fig.get_figure()    
+        figure.savefig(f'{save_path}/{subj_id}/scratch/FOOOF/{event}/plots/{chan_name}_FOOOF.pdf', dpi=100)
+        plt.close()
+
+    if do_save:
+        # save this chan_df out 
+        chan_df.to_csv(f'{save_path}/{subj_id}/scratch/FOOOF/{event}/dfs/{chan_name}_df.csv', index=False)
+    else:
+        return chan_df
 
 
 def sliding_FOOOF(signal): 
