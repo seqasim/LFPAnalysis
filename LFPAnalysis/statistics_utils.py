@@ -114,7 +114,7 @@ def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100,
 # Now we want to put this all together into a slightly clunky function that is meant to be used for running the regression
 # over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
     
-def compute_time_resolved_regression_parallel(chan_name, TFR_object, subj_id, elec_df, event, bands=['hfa'],
+def compute_time_resolved_regression_parallel(chan_name, TFR_object, subj_id, elec_df, event_name, bands=['hfa'],
                              win_len=100, step_size=25, nsurr=500, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses',
                              do_save=False):
     """
@@ -207,7 +207,7 @@ def compute_time_resolved_regression_parallel(chan_name, TFR_object, subj_id, el
     
     if do_save:
         # TODO: replace this with your own path structure.... 
-        band_regress_df.to_csv(f'{save_path}/{subj_id}/scratch/TFR/{event}/dfs/{chan_name}_time_regressed_surr.csv', index=False)
+        band_regress_df.to_csv(f'{save_path}/{subj_id}/scratch/TFR/{event_name}/dfs/{chan_name}_time_regressed_surr.csv', index=False)
     else: 
         return band_regress_df
     # print(f'done with subject {subj_id} channel {chan_name}')

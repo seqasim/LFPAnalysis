@@ -19,6 +19,9 @@ from mne_connectivity import phase_slope_index, seed_target_indices, spectral_co
 import mne
 from tqdm import tqdm
 from scipy.stats import zscore
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+
 
 # Helper functions 
 
@@ -477,7 +480,7 @@ def eBOSC_getThresholds(cfg_eBOSC, TFR, eBOSC):
 def eBOSC_episode_sparsefreq(cfg_eBOSC, detected, TFR):
     """Sparsen the detected matrix along the frequency dimension
     """    
-    print('Creating sparse detected matrix ...')
+    # print('Creating sparse detected matrix ...')
     
     freqWidth = (2/cfg_eBOSC['wavenumber'])*cfg_eBOSC['F']
     lowFreq = cfg_eBOSC['F']-(freqWidth/2)
@@ -1192,7 +1195,7 @@ def eBOSC_wrapper(cfg_eBOSC, data):
         # %% application of thresholds to single trials
 
         for trial in cfg_eBOSC['trial']:
-            print('Trial Nr. ' + str(trial+1) + '/' + str(len(cfg_eBOSC['trial'])))
+            # print('Trial Nr. ' + str(trial+1) + '/' + str(len(cfg_eBOSC['trial'])))
             # encode current trial ID for later
             cfg_eBOSC['tmp_trialID'] = trial
             # trial ID in the intuitive convention
@@ -1241,6 +1244,109 @@ def eBOSC_wrapper(cfg_eBOSC, data):
     # %% return dictionaries back to caller script
     return eBOSC, cfg_eBOSC
 
+
+def compute_eBOSC_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, ev_dict, conditions, 
+                           do_plot=False, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses', 
+                           do_save=False, mean_across_time=False, mean_across_freqs=False, both_dfs=True, **kwargs):
+    """
+
+
+    """
+
+    data_df = MNE_object.copy().pick_channels([chan_name]).to_data_frame(time_format=None)
+
+    # parameters for eBOSC
+    cfg_eBOSC = kwargs
+    cfg_eBOSC['channel'] = [chan_name]
+
+    # Compute BOSC: 
+    [eBOSC, cfg] = eBOSC_wrapper(cfg_eBOSC, data_df)
+
+    # Cut off buffer time
+    if ev_dict[event_name][0] < 0:
+        eBOSC['detected'] = eBOSC['detected'].query(f'(time>=0) & (time<={ev_dict[event_name][1]})')
+
+    eBOSC['detected'] = eBOSC['detected'].reset_index().rename(columns={0:'prop_detect'})
+
+    # Update: Let's actually do this AFTER loading the saved BOSC results so we are not being redundant. 
+    # # Add events to the BOSC data:  
+    # event_df['trial'] = eBOSC['detected']['trial'].unique()
+    # eBOSC['detected'] = eBOSC['detected'].merge(event_df, on=['trial'])
+
+    # identify frequency bands 
+    eBOSC['detected']['fband'] = eBOSC['detected'].frequency.apply(lambda x: 'theta' if x<10 else 'alpha' if (x>=10) & (x<14) else 'beta' if (x>=14) & (x<30) else 'slowgamma' if (x>=30) & (x<55) else 'hfa')
+
+    # # get rid of all the annoying line messages
+    # clear_output(wait=True)
+
+    # Dataframe for saving
+    if both_dfs:
+        time_averaged_df = pd.DataFrame(eBOSC['detected'].groupby(['trial', 'frequency']).mean()).reset_index().drop(columns=['time'])
+        time_averaged_df.insert(0,'channel', chan_name)
+        time_averaged_df.insert(0, 'region', elec_df[elec_df.label==chan_name].salman_region.values[0])
+        time_averaged_df.insert(0,'subj', subj_id)
+        time_averaged_df['event'] = event_name    
+        if do_save: 
+            time_averaged_df.to_csv(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs/{chan_name}_time_averaged_df.csv', index=False)
+
+        time_resolved_df = eBOSC['detected'].groupby(['trial', 'fband', 'time']).mean().reset_index().drop(columns=['frequency'])
+        if do_save: 
+            time_resolved_df.to_csv(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs/{chan_name}_time_resolved_df.csv', index=False)
+    
+    if mean_across_time:
+        time_averaged_df = pd.DataFrame(eBOSC['detected'].groupby(['trial', 'frequency']).mean()).reset_index().drop(columns=['time'])
+        time_averaged_df.insert(0,'channel', chan_name)
+        time_averaged_df.insert(0, 'region', elec_df[elec_df.label==chan_name].salman_region.values[0])
+        time_averaged_df.insert(0,'subj', subj_id)
+        time_averaged_df['event'] = event_name
+        if do_save: 
+            time_averaged_df.to_csv(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs/{chan_name}_time_averaged_df.csv', index=False)
+    elif mean_across_freqs: 
+        # Average across frequencies within a band, rename some columns 
+        time_resolved_df = eBOSC['detected'].groupby(['trial', 'fband', 'time']).mean().reset_index().drop(columns=['frequency'])
+        if do_save: 
+            time_resolved_df.to_csv(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs/{chan_name}_time_resolved_df.csv', index=False)
+    
+#     THE FOLLOWING CODE APPLIE TO TFR parallelized code as well!! 
+#     if do_plot:
+#         # If we want to plot we need the event data and the condition information
+#         fig, ax = plt.subplots(nrows=1, ncols=2, figsize=[10,5], sharex=True, sharey=True)
+#         for ix, cond in enumerate(conditions): 
+#             # Plot: 
+#             detected_avg = pd.DataFrame(eBOSC['detected'].query(cond).groupby(['frequency', 'time']).mean().drop(columns=['trial'])['prop_detect'])
+
+#             # eBOSC['detected'].groupby(level=['frequency', 'time']).mean()
+#             detected_avg = detected_avg.pivot_table(index=['frequency'], columns='time')
+#             cur_multiindex = eBOSC['detected'].index
+#             cur_time = eBOSC['detected'].time.unique()
+#             # cur_multiindex.get_level_values('time').unique()
+#             cur_freq = eBOSC['detected'].frequency.unique()
+#             # cur_multiindex.get_level_values('frequency').unique()
+
+            
+# #                 ax.vlines(250, 0, len(cfg_eBOSC['F']), 'white')
+#             im = ax[ix].imshow(detected_avg, aspect = 'auto', interpolation='bicubic', cmap='rocket', vmin=0, vmax=.4)
+
+#             [x0, x1] = ax[ix].get_xlim()
+#             [y0, y1] = ax[ix].get_ylim()
+#             xticks_loc = np.linspace(0,750, 4)
+#             # [t for t in ax.get_xticks() if t>=x0 and t<=x1]
+#             yticks_loc = [t for t in ax[ix].get_yticks() if t>=y1 and t<=y0]
+#             x_label_list = np.round(cur_time[np.int_(xticks_loc)],1).tolist()
+#             y_label_list = np.round(cur_freq[np.int_(yticks_loc)],1).tolist()
+#             ax[ix].set_xticks(xticks_loc)
+#             ax[ix].set_xticklabels(x_label_list)
+#             ax[ix].set_yticks(yticks_loc)
+#             ax[ix].set_yticklabels(y_label_list)
+#             ax[ix].invert_yaxis()
+#             ax[ix].set_xlabel('Time [s]')
+#             ax[ix].set_ylabel('Frequency [Hz]') 
+#             ax[ix].set_title(f'{cond}')
+#             fig.colorbar(im, ax=ax[ix])
+#         plt.suptitle('Avg. detected rhythms across trials', fontsize=12)
+#         plt.tight_layout()
+#         plt.savefig(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/plots/{chan_name}_eBOSC.pdf', dpi=100)
+#         plt.close()
 
 # # USAGE example from: https://github.com/jkosciessa/eBOSC_py/blob/main/examples/eBOSC_example_empirical.ipynb
 # pn = dict()

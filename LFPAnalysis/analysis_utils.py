@@ -600,7 +600,7 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
 
 # We put all of our basic FOOOF usage into a slightly clunky function that is meant to be used for running the regression
 # over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
-def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event, ev_dict, band_dict, conditions, 
+def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, ev_dict, band_dict, conditions, 
                            do_plot=False, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses',
                            do_save=False, **kwargs):
     """
@@ -644,13 +644,13 @@ def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event, ev_di
     chan_epochs = MNE_object.copy().pick_channels([chan_name])
 
     # FOOOF across all trials: 
-    FOOOFGroup_res, df_all = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event][0], tmax=ev_dict[event][1], 
+    FOOOFGroup_res, df_all = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event_name][0], tmax=ev_dict[event_name][1], 
                                                         band_dict=band_dict, **kwargs)
 
     df_all['PSD_raw'] =  sp.stats.zscore(df_all['PSD_raw'])
     # df_all['PSD_corrected'] =  sp.stats.zscore(df_all['PSD_corrected'])
     df_all['cond'] = 'all'
-    df_all['event'] = event
+    df_all['event'] = event_name
     df_all['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
 
     dfs.append(df_all)
@@ -661,11 +661,11 @@ def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event, ev_di
 
         chan_epochs = MNE_object[cond].copy().pick_channels([chan_name])
 
-        FOOOFGroup_res, df_temp = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event][0], tmax=ev_dict[event][1], 
+        FOOOFGroup_res, df_temp = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event_name][0], tmax=ev_dict[event_name][1], 
                                                         band_dict=band_dict, **kwargs)
 
         df_temp['cond'] = cond
-        df_temp['event'] = event
+        df_temp['event'] = event_name
 
         df_temp['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
 
@@ -682,12 +682,12 @@ def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event, ev_di
     if do_plot:
         fig = sns.lineplot(data=chan_df, x='frequency', y='PSD_corrected', hue='cond')
         figure = fig.get_figure()    
-        figure.savefig(f'{save_path}/{subj_id}/scratch/FOOOF/{event}/plots/{chan_name}_FOOOF.pdf', dpi=100)
+        figure.savefig(f'{save_path}/{subj_id}/scratch/FOOOF/{event_name}/plots/{chan_name}_FOOOF.pdf', dpi=100)
         plt.close()
 
     if do_save:
         # save this chan_df out 
-        chan_df.to_csv(f'{save_path}/{subj_id}/scratch/FOOOF/{event}/dfs/{chan_name}_df.csv', index=False)
+        chan_df.to_csv(f'{save_path}/{subj_id}/scratch/FOOOF/{event_name}/dfs/{chan_name}_df.csv', index=False)
     else:
         return chan_df
 
