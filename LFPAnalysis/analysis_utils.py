@@ -291,7 +291,7 @@ def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5,
     RPL_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
         
     for ch_ in range(ripple_band_data._data.shape[0]):
-        ripple_ch = ripple_events_index[:, np.where(ripple_events_index[0]==chan)[0]][1]
+        ripple_ch = ripple_events_index[:, np.where(ripple_events_index[0]==ch_)[0]][1]
         ripple_events_differences = np.array([0] + np.diff(ripple_ch))
 
         # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
@@ -303,12 +303,16 @@ def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5,
         ripple_events_length_seconds = ripple_events_length_samples/mne_data_reref.info['sfreq'] # length in seconds of ripple events that reach criterion
 
         # # zip the three lists using zip() function --> ripple_results is a list of tuples containing the starting index of each ripple, the ending index of each ripple, and the length of each ripple in seconds
-        ripple_results = list(zip(ripple_events_index_correct_time,ripple_end_index,ripple_events_length_seconds))
+        ripple_results = list(zip(ripple_ch[ripple_events_index_correct_time],
+                                ripple_ch[ripple_end_index],
+                                ripple_events_length_seconds))
         num_ripples = len(ripple_results) # this is the number of ripples
         RPL_samps_dict[mne_data.ch_names[ch_]] = ripple_results
-        RPL_sec_dict[mne_data.ch_names[ch_]] = list(zip(ripple_events_index_correct_time/mne_data.info['sfreq'],
-                                                        ripple_end_index/mne_data.info['sfreq'],
+        RPL_sec_dict[mne_data.ch_names[ch_]] = list(zip(ripple_ch[ripple_events_index_correct_time]/mne_data.info['sfreq'],
+                                                        ripple_ch[ripple_end_index]/mne_data.info['sfreq'],
                                                         ripple_events_length_seconds))
+
+    
 
     return RPL_samps_dict, RPL_sec_dict
 
