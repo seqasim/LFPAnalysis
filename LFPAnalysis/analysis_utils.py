@@ -195,7 +195,7 @@ def plot_TFR(data, freqs, pre_win, post_win, sr, title):
     return f
 
 
-def detect_ripple_evs(signal, min_ripple_length=0.038, max_ripple_length=0.5, smoothing_window_length=0.02, sd_upper_cutoff=9,sd_lower_cutoff=2.5,plotting_window = 0.20, rmethod=None):
+def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, smoothing_window_length=0.02, sd_upper_cutoff=9,sd_lower_cutoff=2.5,plotting_window = 0.20, rmethod=None):
     
     """
     Input: 
@@ -222,93 +222,74 @@ In addition to the amplitude and duration criteria the spectral features of each
     10. reject events where high frequency activity peaks exceed 80% of the ripple peak height
   
     """
-    signal = mne.io.read_raw_fif('/Users/christinamaher/Desktop/MS009/wm_ref_ieeg.fif', preload=True)
-    sf = signal.info["sfreq"] # get the sampling frequency
-    single_ch = signal._data[1,:] # subset just one channel (dev purposes)
-    
-    # Step 1: band-pass filter from 80 - 120 Hz (ripple band) using a FIR filter
-    bandpass_filtered_data = mne.filter.filter_data(single_ch,sf,80,120,method='fir')
-    
-    # visualize 2s of white matter referenced and band-passed signal
-    fig1 = plt.figure()
-    plt.plot(single_ch[1:2048]) # plot the first 2s of wm re-referenced data 
-    plt.plot(bandpass_filtered_data[1:2048]) # plot the first 2s of bandpass filted + wm re-referenced data
-    plt.show() #- for dev purposes  
-    
-    # Step 2: Calculate the root mean square of the band-passed signal and smooth using a 20 ms window
-    column_values = ['signal'] 
-    df = pd.DataFrame(data = bandpass_filtered_data, columns = column_values)
-    smoothed_data = df['signal'].pow(2).rolling(round(smoothing_window_length * sf),min_periods=1).mean().apply(np.sqrt, raw=True)
 
+    if type(mne_data) == mne.epochs.Epochs:
+        data_type = 'epoch'
+        raise ValueError('Continuous data required')
+    elif type(mne_data) in [mne.io.fiff.raw.Raw, mne.io.edf.edf.RawEDF]: 
+        data_type = 'continuous'
+    else: 
+        data_type = 'continuous'
+
+    # Step 1: band-pass filter from 80 - 120 Hz (ripple band) 
+    ripple_band_data = mne_data.copy().filter(80, 120, n_jobs=-1)
+
+    # Step 2: Calculate the root mean square of the band-passed signal and smooth using a 20 ms window
+
+    # Create an empty array to store the rolling RMS for each trial and time series
+    rolling_rms_array = np.zeros_like(ripple_band_data._data)
+
+    # Loop over each trial and each time series and calculate the rolling RMS
+    for i in range(ripple_band_data._data.shape[0]):
+        column_values = ['signal'] 
+        df = pd.DataFrame(data = ripple_band_data._data[i, :], columns = column_values)
+        smoothed_data = df['signal'].pow(2).rolling(round(smoothing_window_length * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt, raw=True)
+        rolling_rms_array[i, :] = smoothed_data.values
+    
     # Step 3: mark ripple events [ripple start, ripple end] as periods of RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean 
 
-    # calculate mean and standard deviation of smoothed rms data
-    smoothed_mean = np.mean(smoothed_data)
-    smoothed_sd = np.std(smoothed_data)
+    # calculate mean and standard deviation of smoothed rms data, across all epochs and timepoints
+    smoothed_mean = rolling_rms_array.mean(axis=(-1))
+    smoothed_sd = rolling_rms_array.std(axis=(-1))
 
     # calculate lower (above 2.5 SD from mean) and upper (lower than 9 SD from mean) cutoffs for marking ripple events 
     lower_cutoff = smoothed_mean + sd_lower_cutoff * smoothed_sd
     upper_cutoff = smoothed_mean + sd_upper_cutoff * smoothed_sd
 
-    ripple_events_index = np.asarray(np.where((smoothed_data > lower_cutoff) & (smoothed_data < upper_cutoff)))
+    # change the dims to match the data array
+    lower_cutoff_expanded = np.expand_dims(lower_cutoff, axis=(1))
+    upper_cutoff_expanded = np.expand_dims(upper_cutoff, axis=(1))
+
+    ripple_events_index = np.asarray(np.where((rolling_rms_array > lower_cutoff_expanded) & (rolling_rms_array < upper_cutoff_expanded)))
 
     # Step 4: detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
-    min_length_ripple_event = min_ripple_length * sf # add an input parameter for duration of ripple event
-    max_length_ripple_event = max_ripple_length * sf
+    min_length_ripple_event = min_ripple_length * mne_data.info['sfreq'] # add an input parameter for duration of ripple event
+    max_length_ripple_event = max_ripple_length * mne_data.info['sfreq']
     
-    ripple_events_differences = np.array([0] + np.diff(ripple_events_index[0,:]))
+    RPL_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+    RPL_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+        
+    for ch_ in range(ripple_band_data._data.shape[0]):
+        ripple_ch = ripple_events_index[:, np.where(ripple_events_index[0]==chan)[0]][1]
+        ripple_events_differences = np.array([0] + np.diff(ripple_ch))
 
-    # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
-    _, idx, counts = np.unique(np.cumsum(1-ripple_events_differences)*ripple_events_differences, return_index=True, return_counts=True)    
+        # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
+        _, idx, counts = np.unique(np.cumsum(1-ripple_events_differences)*ripple_events_differences, return_index=True, return_counts=True)    
 
-    ripple_events_index_correct_time = idx[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))] # index of ripple events that reach criterion
-    ripple_events_length_samples = counts[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))]  # length in samples of ripple events that reach criterion
-    ripple_end_index = ripple_events_index_correct_time + ripple_events_length_samples
-    ripple_events_length_seconds = ripple_events_length_samples/1024 # length in seconds of ripple events that reach criterion
-    
-    # zip the three lists using zip() function --> ripple_results is a list of tuples containing the starting index of each ripple, the ending index of each ripple, and the length of each ripple in seconds
-    ripple_results = list(zip(ripple_events_index_correct_time,ripple_end_index,ripple_events_length_seconds))
-    num_ripples = len(ripple_results) # this is the number of ripples
-    
-    # plot each ripple individually
-    i = 0
-    while i < num_ripples:
-        ripple_temp = ripple_results[i]
-        plt.figure()
-        plt.plot(smoothed_data[ripple_temp[0]:ripple_temp[1]])
-        i += 1
-    plt.show() # calling this outside the loop shows all plots at once 
+        ripple_events_index_correct_time = idx[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))] # index of ripple events that reach criterion
+        ripple_events_length_samples = counts[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))]  # length in samples of ripple events that reach criterion
+        ripple_end_index = ripple_events_index_correct_time + ripple_events_length_samples
+        ripple_events_length_seconds = ripple_events_length_samples/mne_data_reref.info['sfreq'] # length in seconds of ripple events that reach criterion
 
-    # plot the average of ripples using bandpass filtered data (pre-smoothing window)
-    #ripple_matrix = np.zeros((num_ripples, ((round(plotting_window * sf))*2)), dtype=np.int32) # nrows = number of ripples, ncols = maximum number of samples in a given ripple for this electrode
-    longest_ripple_index = np.array(np.where(ripple_events_length_samples == max(ripple_events_length_samples))).item() # appending .item() returns as a scalar which can be used more flexibly for indexing etc.
-    longest_ripple_info = ripple_results[longest_ripple_index]
-    longest_ripple_data = smoothed_data[longest_ripple_info[0]:longest_ripple_info[1]]
-    longest_ripple_peak_index = np.array(np.where(longest_ripple_data == max(longest_ripple_data))).item()
+        # # zip the three lists using zip() function --> ripple_results is a list of tuples containing the starting index of each ripple, the ending index of each ripple, and the length of each ripple in seconds
+        ripple_results = list(zip(ripple_events_index_correct_time,ripple_end_index,ripple_events_length_seconds))
+        num_ripples = len(ripple_results) # this is the number of ripples
+        RPL_samps_dict[mne_data.ch_names[ch_]] = ripple_results
+        RPL_sec_dict[mne_data.ch_names[ch_]] = list(zip(ripple_events_index_correct_time/mne_data.info['sfreq'],
+                                                        ripple_end_index/mne_data.info['sfreq'],
+                                                        ripple_events_length_seconds))
 
-
-    i = 0 
-    ripple_matrix = []
-    while i < num_ripples:
-        ripple_info = ripple_results[i]
-        ripple_temp = bandpass_filtered_data[ripple_info[0]:ripple_info[1]]
-        ripple_peak_index = np.array(np.where(bandpass_filtered_data == max(ripple_temp))).item()
-        num_samples_plotting = round(plotting_window * sf)
-        min_sample_index = ripple_peak_index - num_samples_plotting
-        max_sample_index = ripple_peak_index + num_samples_plotting
-        ripple_temp = np.array(bandpass_filtered_data[min_sample_index:max_sample_index])
-        ripple_matrix.append(ripple_temp)
-        i += 1
-
-    avg_ripple_by_elec = np.mean(ripple_matrix, axis = 0) 
-    
-    plt.figure()
-    plt.plot(avg_ripple_by_elec)
-    plt.show()
-
-    # function for plotting ripples (sanity check) - find the longest ripple and make that the matrix size, ripples that are shorter will be padded by NAs so they are still centered. 
-
-    return ripple_rate, ripple_duration, ripple_peak_amp, ripple_peak_freq
+    return RPL_samps_dict, RPL_sec_dict
 
 def FOOOF_continuous(signal):
     """
