@@ -195,25 +195,46 @@ def plot_TFR(data, freqs, pre_win, post_win, sr, title):
     return f
 
 
-def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, smoothing_window_length=0.02, sd_upper_cutoff=9,sd_lower_cutoff=2.5,plotting_window = 0.20, rmethod=None):
+def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, 
+                      smoothing_window_length=0.02, sd_upper_cutoff=9, sd_lower_cutoff=2.5):
     
     """
-    Input: 
-    signal = continuous voltage time-series filtered and re-referenced
-    smoothing_window_length = window size in seconds for smoothing (relevant for step 2)
-    sd_upper_cutoff = maximum standard deviations from the mean for RMS amplitude (relevant for step 3)
-    sd_lower_cutoff = minimum standard deviations from the mean for RMS amplitude (relevant for step 3)
-    min_ripple_length = min duration of ripple events in seconds (relevant for step 4)
-    max_ripple_length = max duration of ripple events in seconds (relevant for step 4)
-    plotting_window = window size (in seconds) for plotting average ripples
+
+    Parameters
+    ----------   
+    mne_data : re-referenced MNE object with neural data
+    min_ripple_length : float
+        Minimum length of ripple event in seconds
+    max_ripple_length : float
+        Maximum length of ripple event in seconds
+    smoothing_window_length : float
+        Length of window to smooth the RMS signal
+    sd_upper_cutoff : float
+        Upper cutoff for ripple detection
+    sd_lower_cutoff : float
+        Lower cutoff for ripple detection
     
-    Method 1: Foster et al., 
+    Returns
+    -------
+    RPL_samps_dict : dict
+        Dictionary containing the start and end samples for each ripple event
+    RPL_sec_dict : dict
+        Dictionary containing the start and end times for each ripple event
+  
+    
+    Foster et al., 
     1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
     2. the root mean square (RMS) of the band-passed signal was calculated and smoothed using a 20-ms window
     3. ripple events were identified as having an RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean
     4. detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
 
-In addition to the amplitude and duration criteria the spectral features of each detected ripple event were examined
+    # TODO: Spectral analysis of ripple events
+
+    Just like with IEDs, assign the ripples in each dict to a behavioral event so that the TFRs computed for those events can be 
+    used for the next step - ripple rejection based on spectral features 
+
+    In addition to the amplitude and duration criteria the spectral features of each detected ripple event were examined
+    
     5. calculate the frequency spectrum for each detected ripple event by averaging the normalized instantaneous amplitude between the onset and offset of the ripple event for the frequency range of 2–200 Hz.
     6. spectral amplitude was normalized to a percent change signal by applying a baseline correction at each frequency based on the mean amplitude of the entire recording for a given electrode and frequency
     7. reject events with more than one peak in the ripple band
