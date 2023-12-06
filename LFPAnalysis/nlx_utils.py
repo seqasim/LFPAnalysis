@@ -239,10 +239,10 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
     ch_type = []
 
     for chan_path in ncs_files:
-        chan_name = chan_path.split('/')[-1].replace('.ncs','')
+        chan_name = chan_path.split('/')[-1].replace('.ncs','').lower()
         # strip the file type off the end if needed 
         if '_' in chan_name:
-            chan_name = chan_name.split('_')[0]
+            chan_name = chan_name.split('_')[0].lower()
         try:
             fdata = load_ncs(chan_path)
         except IndexError: 
@@ -250,27 +250,32 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
             continue
         if drop_names: 
             drop_names = [x.lower() for x in drop_names]
-            if chan_name.lower() in drop_names:
+            if chan_name in drop_names:
                 print(f'Channel selected to skip (bad or empty) {chan_path}')
                 continue
         #  scalp eeg
         if eeg_names:
             eeg_names = [x.lower() for x in eeg_names]
-            if chan_name.lower() in eeg_names:
+            if chan_name in eeg_names:
                 ch_type.append('eeg')
         if resp_names:
             resp_names = [x.lower() for x in resp_names]
-            if chan_name.lower() in resp_names:
+            if chan_name in resp_names:
                 ch_type.append('bio')
         if ekg_names:
             ekg_names = [x.lower() for x in ekg_names]
-            if ((chan_name.lower() in ekg_names) | ('ekg' in chan_name.lower())): 
+            if (chan_name in ekg_names): 
                 ch_type.append('ecg') 
+        else:
+            ekg_names = []
+            if 'ekg' in chan_name:
+                ch_type.append('ecg')
+                ekg_names.append(chan_name)
         if seeg_names: 
             seeg_names = [x.lower() for x in seeg_names]
-            if chan_name.lower() in seeg_names:
+            if chan_name in seeg_names:
                 ch_type.append('seeg')  
-            elif (chan_name.lower()[0] == 'u') | (chan_name.lower()[:3] == 'pde'):
+            elif (chan_name[0] == 'u') | (chan_name[:3] == 'pde'):
                 # microwire data
                 if include_micros==True:
                     ch_type.append('seeg')  

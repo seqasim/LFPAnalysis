@@ -1368,6 +1368,7 @@ seeg_only=True, check_bad=True):
                 pattern = re.compile(r"_\d{4}\.ncs")  # regex pattern to match "_0000.ncs" to "_9999.ncs"
                 ncs_files = numbered_ncs_files
                 seeg_names = [x.split('/')[-1].replace('.ncs','').split('_')[0] for x in glob(f'{load_path}/[R,L]*.ncs') if re.search(pattern, x)]
+
         elif site == 'UI':
             # here, the filenames are not informative. We have to get subject-specific information from the experimenter
             ncs_files = glob(f'{load_path}/LFP*.ncs')
@@ -1427,75 +1428,75 @@ seeg_only=True, check_bad=True):
 
             mne_data.add_channels(mne_data_resampled)
 
-            # Search for sync names if need be
-            if not sync_name: 
-                if sync_type == 'photodiode':
-                    iteration = 0
-                    photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
-                    while (not sync_name) & (iteration<len(photodiode_options)-1):
-                        sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
-                        iteration += 1
-                elif sync_type == 'audio': 
-                    pass 
-                elif sync_type == 'ttl': 
-                    pass
-
-                
-            if not sync_name:
-                raise ValueError('Could not find a sync channel')
-
-            mne_data.info['line_freq'] = 60
-            # Notch out 60 Hz noise and harmonics 
-            mne_data.notch_filter(freqs=(60, 120, 180, 240))
-
+        # Search for sync names if need be
+        if not sync_name: 
             if sync_type == 'photodiode':
-                # Save out the photodiode channel separately
-                print(f'Saving photodiode data to {load_path}/photodiode.fif')
-                mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
-            elif sync_type == 'audio':
+                iteration = 0
+                photodiode_options = ['photodiode', 'research', 'sync', 'dc1', 'analog', 'stim', 'trig', 'dc2']
+                while (not sync_name) & (iteration<len(photodiode_options)-1):
+                    sync_name = next((s for s in mne_data.ch_names if photodiode_options[iteration] in s.lower()), None)
+                    iteration += 1
+            elif sync_type == 'audio': 
+                pass 
+            elif sync_type == 'ttl': 
                 pass
-            elif sync_type == 'ttl':
-                print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
 
-            new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
-            mne_data.rename_channels(new_name_dict)
-
-            # Save out the respiration channels separately
-            if resp_names:
-                print(f'Saving respiration data to {load_path}/respiration_data.fif')
-                mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
             
-            # Save out the EEG channels separately
-            if eeg_names: 
-                print(f'Saving EEG data to {load_path}/scalp_eeg_data.fif')
-                mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
+        if not sync_name:
+            raise ValueError('Could not find a sync channel')
 
-            # Save out the EEG channels separately
-            if ekg_names:
-                print(f'Saving EKG data to {load_path}/ekg_data.fif')
-                mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
+        mne_data.info['line_freq'] = 60
+        # Notch out 60 Hz noise and harmonics 
+        mne_data.notch_filter(freqs=(60, 120, 180, 240))
 
-            if seeg_only == True:
-                drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
-                mne_data.drop_channels(drop_chans)
+        if sync_type == 'photodiode':
+            # Save out the photodiode channel separately
+            print(f'Saving photodiode data to {load_path}/photodiode.fif')
+            mne_data.save(f'{load_path}/photodiode.fif', picks=sync_name, overwrite=overwrite)
+        elif sync_type == 'audio':
+            pass
+        elif sync_type == 'ttl':
+            print('TTL  used - no need to split out a separate sync channel. Check the .nev file with the neural data.')
 
-            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
-            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
-            # Rename the mne data according to the localization data
-            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
-            mne_data.rename_channels(new_name_dict)
+        new_name_dict = {x:x.replace(" ", "").lower() for x in mne_data.ch_names}
+        mne_data.rename_channels(new_name_dict)
 
-            seeg_names = new_mne_names
-            sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+        # Save out the respiration channels separately
+        if resp_names:
+            print(f'Saving respiration data to {load_path}/respiration_data.fif')
+            mne_data.save(f'{load_path}/respiration_data.fif', picks=resp_names, overwrite=overwrite)
+        
+        # Save out the EEG channels separately
+        if eeg_names: 
+            print(f'Saving EEG data to {load_path}/scalp_eeg_data.fif')
+            mne_data.save(f'{load_path}/scalp_eeg_data.fif', picks=eeg_names, overwrite=overwrite)
 
-            if check_bad == True:
-                bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
-                mne_data.info['bads'] = bads
+        # Save out the EEG channels separately
+        if ekg_names:
+            print(f'Saving EKG data to {load_path}/ekg_data.fif')
+            mne_data.save(f'{load_path}/ekg_data.fif', picks=ekg_names, overwrite=overwrite)
 
-            if resample_sr is not None: 
-                mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
-            print(f'Saving LFP data to {load_path}/lfp_data.fif')
-            mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
+        if seeg_only == True:
+            drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
+            mne_data.drop_channels(drop_chans)
+
+        # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+        # Rename the mne data according to the localization data
+        new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+        mne_data.rename_channels(new_name_dict)
+
+        seeg_names = new_mne_names
+        sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
+
+        if check_bad == True:
+            bads = detect_bad_elecs(mne_data, sEEG_mapping_dict)
+            mne_data.info['bads'] = bads
+
+        if resample_sr is not None: 
+            mne_data.resample(sfreq=resample_sr, npad='auto', n_jobs=-1)
+        print(f'Saving LFP data to {load_path}/lfp_data.fif')
+        mne_data.save(f'{load_path}/lfp_data.fif', picks=seeg_names, overwrite=overwrite)
 
     if return_data==True:
         return mne_data
