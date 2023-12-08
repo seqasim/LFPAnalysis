@@ -1623,7 +1623,10 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
                                             width_thresh=IED_args['width_thresh'])
 
     # all behavioral times of interest 
-    beh_ts = [(x*slope + offset) for x in behav_times]
+    beh_ts = [(x*slope + offset) if x != 'None' else np.nan for x in behav_times]
+
+    # any NaN's (e.g. non-responses) should be removed. make sur to remove from the dataframes during later analysis too. 
+    beh_ts = [x for x in beh_ts if ~np.isnan(x)]
 
     # Make events 
     evs = beh_ts
