@@ -1259,12 +1259,12 @@ seeg_only=True, check_bad=True):
         mne object
     """
 
-    elec_data = load_elec(elec_path)
-
     if not sync_name:
         warnings.warn(f'No sync name specified - if using an audiovisual sync signal please check load_path to make sure a valid sync was saved out')
 
     if site == 'MSSM':
+        elec_data = load_elec(elec_path)
+
         if not eeg_names: # If no input, assume the standard EEG montage at MSSM
             eeg_names = ['fp1', 'f7', 't3', 't5', 'o1', 'f3', 'c3', 'p3', 'fp2', 'f8', 't4', 't6', 'o2', 'f4', 'c4', 'p4', 'fz', 'cz', 'pz']
     
@@ -1374,13 +1374,12 @@ seeg_only=True, check_bad=True):
             ncs_files = glob(f'{load_path}/LFP*.ncs')
 
             # load the connection table .csv
-            connect_table_path = glob(f'{os.path.split(elec_path)[0]}/*Connection*Table*.csv')[0]
+            connect_table_path = glob(f'{elec_path}/*Connection*Table*.csv')[0]
             if not connect_table_path: 
                 print('Manually enter the path to the Iowa connection table:')
                 connect_table_path = glob(input())
 
             eeg_names, resp_names, ekg_names, seeg_names, drop_names = iowa_utils.extract_names_connect_table(connect_table_path)
-        
         if not seeg_names: 
             raise NameError('no seeg channels specified')
         else:
@@ -1441,9 +1440,8 @@ seeg_only=True, check_bad=True):
             elif sync_type == 'ttl': 
                 pass
 
-            
-        if not sync_name:
-            raise ValueError('Could not find a sync channel')
+        # if not sync_name:
+        #     raise ValueError('Could not find a sync channel')
 
         mne_data.info['line_freq'] = 60
         # Notch out 60 Hz noise and harmonics 
