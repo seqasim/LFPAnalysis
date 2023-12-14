@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.stats
 import warnings
-from scipy.stats import spearmanr 
+from scipy.stats import spearmanr, pearsonr
+from collections import defaultdict 
 
 # Utility functions for synchronization
 
@@ -34,11 +35,43 @@ def moving_average(a, n=11) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
+def fastCorr(x, y):
+    # faster version of corr
+    # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
+
+    c = np.cov(x, y)
+    r = c[0, 1] / (np.std(x) * np.std(y))
+    return r
+
+def get_neural_ts_photodiode(mne_sync, smoothSize=11, height=0.5):
+    """
+    get neural ts from photodiode
+    """
+
+    sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
+    timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
+    sig = scipy.stats.zscore(sig)
+
+    trig_ix = np.where((sig[:-1]<=height)*(sig[1:]>height))[0] # rising edge of trigger
+    
+    neural_ts = timestamp[trig_ix]
+    neural_ts = np.array(neural_ts)
+
+    return neural_ts
+
+def get_neural_ts_ttl(nev_data):
+    """
+    get neural ts from ttl recording on nlx
+    """
+
+    return nev_data['records']['TimeStamp'][nev_data['records']['ttl']==1] * 1e-6
+
 def pulsealign(beh_ms=None,
                pulses=None, 
                windSize=15):
     """
-    Aligns the behavioral timestamps with the EEG pulses by finding the chunks of behavioral pulse times where the inter-pulse intervals are correlated with the EEG pulses.
+    Aligns the behavioral timestamps with the EEG pulses by finding the chunks of behavioral pulse times 
+    where the inter-pulse intervals are correlated with the EEG pulses.
 
     Parameters
     ----------
@@ -52,13 +85,6 @@ def pulsealign(beh_ms=None,
         - beh_ms: The truncated beh_ms values that match the eeg_offset.
         - eeg_offset: The truncated pulses that match the beh_ms.
     """
-    
-    # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
-    def fastCorr(x, y):
-        # faster version of corr
-        c = np.cov(x, y)
-        r = c[0, 1] / (np.std(x) * np.std(y))
-        return r
 
     # these are parameters that one could potentially tweak....
     corrThresh = 0.99
@@ -66,14 +92,14 @@ def pulsealign(beh_ms=None,
     eegBlockStart = np.arange(0, len(pulses) - windSize + 1, windSize)
     
     beh_d = np.diff(beh_ms)
-    # beh_d[beh_d > 20*1000] = 0  # if any interpulse differences are greater than twenty seconds, throw them out!
     pulse_d = np.diff(pulses)
     
     print(f"{len(eegBlockStart)} blocks")
     
     blockR = np.zeros(len(eegBlockStart))
     blockBehMatch = np.zeros(len(eegBlockStart), dtype=int)
-    
+
+    # iterate through blocks of neural ts
     for b in range(len(eegBlockStart)):
         print(".", end="")
         eeg_d = pulse_d[eegBlockStart[b]:eegBlockStart[b]+windSize]
@@ -82,10 +108,10 @@ def pulsealign(beh_ms=None,
         for i in range(len(beh_d) - len(eeg_d)):
             # sometimes the lengths mismatch by one entry if we are by an edge: 
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
-            r[i] = fastCorr(eeg_d[:length], beh_d[i:i+length])
+            r[i] = fastCorr(beh_d[i:i+length], eeg_d[:length])
             if r[i] > 1: 
                 # failure mode
-                res = spearmanr(eeg_d[:length], beh_d[i:i+length])
+                res = spearmanr(beh_d[i:i+length], eeg_d[:length])
                 r[i] = res[0]
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
         blockR[b] = np.max(r)
@@ -130,17 +156,72 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
 
     return slope, offset, rval
 
+def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size=15, step_size=1, correlation_threshold=0.99):
+    # Calculate differences between consecutive timestamps
+    neural_diff = np.diff(neural_ts)
+    beh_diff = np.diff(beh_ts)
 
-def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
+    # Initialize variables to store matching epochs
+    matching_epochs = []
+
+    corr = -1
+    # Iterate through windows in neural_diff
+    for i in range(0, len(neural_diff) - window_size + 1, step_size):
+        print(".", end="")
+        neural_window = neural_diff[i:i + window_size]
+        if corr > correlation_threshold:
+            continue
+        # Iterate through windows in beh_diff
+        for j in range(0, len(beh_diff) - window_size + 1, step_size):
+            beh_window = beh_diff[j:j + window_size]
+
+            # Calculate Pearson correlation coefficient
+            corr, _ = pearsonr(beh_window, neural_window)
+
+            # Check if correlation coefficient exceeds the threshold
+            if corr > correlation_threshold:
+                # Save matching epoch details
+                neural_matching_window = neural_ts[i:i + window_size + 1]
+                beh_matching_window = beh_ts[j:j + window_size + 1]
+                slope, offset, rval = sync_matched_pulses(beh_matching_window, neural_matching_window)
+
+                matching_epochs.append({
+                    'neural_timestamps': neural_matching_window,
+                    'beh_timestamps': beh_matching_window,
+                    'slope': slope,
+                    'offset': offset,
+                    'correlation_coefficient': rval
+                })
+        corr = -1
+    print("\n")
+
+    merged_dict = defaultdict(list)
+
+    for d in matching_epochs:
+        for key, value in d.items():
+            merged_dict[key].append(value)
+
+    # If you want to convert defaultdict back to a regular dictionary
+    merged_dict = dict(merged_dict)
+    
+    # stack and compute final sync
+    slope, offset, rval = sync_matched_pulses(np.hstack(merged_dict['beh_timestamps']), 
+                                          np.hstack(merged_dict['neural_timestamps']))      
+
+    return slope, offset, rval
+
+def synchronize_data(beh_ts=None, mne_sync=None, 
+                     smoothSize=11, windSize=15, height=0.5, sync_source='photodiode'):
     """
     Synchronize the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
 
     Parameters:
     beh_ts (array-like): The timestamps of the behavioral events.
-    mne_sync (MNE object): The MNE photodiode data.
+    mne_sync: The MNE photodiode data OR the nev data for TTL (UIowa)
     smoothSize (int): The size of the smoothing window for the photodiode data.
     windSize (int): The size of the window for pulse alignment.
     height (float): The threshold for detecting the rising edge of the photodiode signal.
+    sync_source (str): the type of signal used to sync the data 
 
     Returns:
     tuple: A tuple containing the slope and offset of the linear regression between the behavioral and neural timestamps.
@@ -157,15 +238,11 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
     - The function increases the window size for pulse alignment until the correlation coefficient of the linear regression is greater than or equal to 0.99.
     - The function raises a ValueError if the synchronization fails.
     """
-    
-    sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
-    timestamp = np.squeeze(np.arange(len(sig))/mne_sync.info['sfreq'])
-    sig = scipy.stats.zscore(sig)
 
-    trig_ix = np.where((sig[:-1]<=height)*(sig[1:]>height))[0] # rising edge of trigger
-    
-    neural_ts = timestamp[trig_ix]
-    neural_ts = np.array(neural_ts)
+    if sync_source=='photodiode':
+        neural_ts = get_neural_ts_photodiode(mne_sync, smoothSize, height)
+    elif sync_source=='ttl':
+        neural_ts = get_neural_ts_ttl(mne_sync)
 
     if len(neural_ts) < (len(beh_ts)//1.5): 
         warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
@@ -174,16 +251,27 @@ def synchronize_data(beh_ts, mne_sync, smoothSize=11, windSize=15, height=0.5):
         warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
 
     rval = 0 
-    while (rval<0.99) & (windSize < 60):
-        if len(beh_ts)!=len(neural_ts):
-            good_beh_ts, good_neural_ts = pulsealign(beh_ts, neural_ts, windSize=windSize)
-            slope, offset, rval = sync_matched_pulses(good_beh_ts, good_neural_ts)
+    try:
+        while (rval<0.99) & (windSize < 60):
+            if len(beh_ts)!=len(neural_ts):
+                good_beh_ts, good_neural_ts = pulsealign(beh_ts, neural_ts, windSize=windSize)
+                slope, offset, rval = sync_matched_pulses(good_beh_ts, good_neural_ts)
+            else:
+                slope, offset, rval = sync_matched_pulses(beh_ts, neural_ts)
+            windSize += 5
+        if rval < 0.99:
+            raise ValueError(f'this sync for subject has failed - running robust synch now')
+    except: 
+        print('fast sync failed - running robust sync now')
+        while (rval<0.99) & (windSize < 60):
+            windSize = 15
+            slope, offset, rval = synchronize_data_robust(beh_ts, neural_ts, window_size=windSize, step_size=1)
+            windSize += 5
+        if rval < 0.99:
+            raise ValueError(f'this sync for subject has failed - CHECK YOUR INPUT DATA')
         else:
-            slope, offset, rval = sync_matched_pulses(beh_ts, neural_ts)
-        windSize += 5
-    if rval < 0.99:
-        raise ValueError(f'this sync for subject has failed - examine the data')
-    else:
-        return slope, offset
+            print('successful sync!')
+    return slope, offset
+
 
 

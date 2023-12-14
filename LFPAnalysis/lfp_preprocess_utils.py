@@ -13,7 +13,7 @@ from mne.filter import next_fast_len
 from scipy.signal import hilbert, find_peaks, peak_widths, convolve
 import Levenshtein as lev
 import os
-
+import warnings
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     """
@@ -221,7 +221,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     
     return baseline_corrected 
 
-def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site=None, average=False):
+def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site='MSSM', average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
 
@@ -266,7 +266,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
 
     """
 
-    elec_data = load_elec(elec_path)
+    elec_data = load_elec(elec_path, site=site)
 
     if site == 'MSSM': 
         # Drop the micros and unmatched seeg from here for now....
@@ -527,7 +527,7 @@ def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=N
 
     # return anode_list, cathode_list
 
-def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
+def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     """
     Return the cathode list and anode list for mne to use for bipolar referencing.
 
@@ -550,9 +550,12 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
         list of channels to subtract
     """
 
-    elec_data = load_elec(elec_path)
+    elec_data = load_elec(elec_path, site=site)
     elec_data['bundle'] = np.nan
-    elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
+    if site == 'MSSM':
+        elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
+    elif site == 'UI':
+        elec_data['bundle'] = (elec_data['ContactLabel'] != elec_data['ContactLabel'].shift()).cumsum()
 
     drop_from_locs = []
     for ind, data in elec_data['label'].str.lower().items(): 
@@ -580,10 +583,11 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
         oob_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in out_of_brain_labels]
         false_negatives += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in gray_matter_labels]
     else:
-        raise IndexError('No Manual Column!')
+        warnings.warn('Warning...........No Manual Column!')
 
     # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
     #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
+    
     wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
     oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
 
@@ -628,31 +632,53 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site=None):
             # Set the cathodes and anodes 
             cath = all_elecs[1:]
             an = all_elecs[:-1]
+            for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
-            if cath in wm_channels and an in wm_channels:
-                drop_wm_channels.append(cath)
-                drop_wm_channels.append(an)
-                continue
-            # I need to make sure I drop any channels where either electrode is out of the brain
-            elif cath in oob_channels or an in oob_channels:
-                continue
-            else:
-                cathode_list = cathode_list + cath
-                anode_list = anode_list + an
+                if (c in wm_channels) and (a in wm_channels):
+                    drop_wm_channels.append(c)
+                    drop_wm_channels.append(a)
+                    continue
+                # I need to make sure I drop any channels where either electrode is out of the brain
+                elif (c in oob_channels) or (a in oob_channels):
+                    continue
+                else:
+                    cathode_list.append(c)
+                    anode_list.append(a)
+            # # I need to make sure I drop any channels where both electrodes are in the wm
+            # if cath in wm_channels and an in wm_channels:
+            #     drop_wm_channels.append(cath)
+            #     drop_wm_channels.append(an)
+            #     continue
+            # # I need to make sure I drop any channels where either electrode is out of the brain
+            # elif cath in oob_channels or an in oob_channels:
+            #     continue
+            # else:
+            #     cathode_list = cathode_list + cath
+            #     anode_list = anode_list + an
 
-    # elif site=='UI':
+    elif site=='UI':
 
-    #     for bundle in elec_data.bundle.unique():
-    #         # Isolate the electrodes in each bundle 
-    #         bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='contact', ignore_index=True)
-    #         all_elecs = bundle_df.Channel.tolist()
-    #         # make sure these are not bad channels 
-    #         all_elecs = [x for x in all_elecs if x not in bad_channels]
-    #         # Set the cathodes and anodes 
-    #         cath = all_elecs[1:]
-    #         an = all_elecs[:-1]
-    #         cathode_list = cathode_list + cath
-    #         anode_list = anode_list + an
+        for bundle in elec_data.bundle.unique():
+            # Isolate the electrodes in each bundle 
+            bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='Contact', ignore_index=True)
+            all_elecs = bundle_df.label.tolist()
+            # make sure these are not bad channels 
+            all_elecs = [x for x in all_elecs if x not in bad_channels]
+            # Set the cathodes and anodes 
+            cath = all_elecs[1:]
+            an = all_elecs[:-1]
+            for c, a in zip(cath, an):
+            # I need to make sure I drop any channels where both electrodes are in the wm
+                if (c in wm_channels) and (a in wm_channels):
+                    drop_wm_channels.append(c)
+                    drop_wm_channels.append(a)
+                    continue
+                # I need to make sure I drop any channels where either electrode is out of the brain
+                elif (c in oob_channels) or (a in oob_channels):
+                    continue
+                else:
+                    cathode_list.append(c)
+                    anode_list.append(a)
 
     return anode_list, cathode_list, drop_wm_channels, oob_channels
 
@@ -1165,7 +1191,7 @@ def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def load_elec(elec_path=None):
+def load_elec(elec_path=None, site='MSSM'):
     """
     Load the electrode data from a CSV or Excel file, correct for small idiosyncracies, and return as a pandas dataframe.
 
@@ -1190,23 +1216,57 @@ def load_elec(elec_path=None):
     # Sometimes there's extra columns with no entries: 
     elec_data = elec_data[elec_data.columns.drop(list(elec_data.filter(regex='Unnamed')))]
 
-    if 'NMMlabel' in elec_data.keys(): 
-        # This is an annoying naming convention but also totally my fault lol
-        elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
+    if site == 'MSSM':
 
-    # Deprecate below in favor of just localizing UI data through our LeGui pipeline:
-    if 'Channel' in elec_data.keys():
-        # This is an annoying naming convention for UIowa data
-        elec_data['label'] = [f'LFPx{ch}' for ch in elec_data.Channel.values]
-    
-    if 'mni_x' not in elec_data.keys(): 
-        # Check for weird naming of the mni coordinate columns (UIowa)
-        elec_data.rename(columns={elec_data.keys()[elec_data.keys().str.lower().str.contains('mnix')].values[0]: 'mni_x',
-        elec_data.keys()[elec_data.keys().str.lower().str.contains('mniy')].values[0]: 'mni_y', 
-        elec_data.keys()[elec_data.keys().str.lower().str.contains('mniz')].values[0]: 'mni_z'}, inplace=True)
+        if 'NMMlabel' in elec_data.keys(): 
+            # This is an annoying naming convention but also totally my fault lol
+            elec_data.rename(columns={'NMMlabel':'label'}, inplace=True)
 
-    if 'Desikan-Killianylabel' in elec_data.keys(): 
-        elec_data.rename(columns={'Desikan-Killianylabel':'DesikanKilliany'}, inplace=True)
+    elif site == 'UI':
+
+        if 'Channel' in elec_data.keys():
+            # This is an annoying naming convention for UIowa data
+            elec_data['label'] = [f'lfpx{ch}' for ch in elec_data.Channel.values]
+        
+        if 'mni_x' not in elec_data.keys(): 
+            # Check for weird naming of the mni coordinate columns (UIowa)
+            elec_data.rename(columns={elec_data.keys()[elec_data.keys().str.lower().str.contains('mnix')].values[0]: 'mni_x',
+            elec_data.keys()[elec_data.keys().str.lower().str.contains('mniy')].values[0]: 'mni_y', 
+            elec_data.keys()[elec_data.keys().str.lower().str.contains('mniz')].values[0]: 'mni_z'}, inplace=True)
+
+        if 'Desikan-Killianylabel' in elec_data.keys(): 
+            elec_data.rename(columns={'Desikan-Killianylabel':'DesikanKilliany'}, inplace=True)
+
+        # Get rid of unnecessary empty columns 
+        elec_data = elec_data.dropna(axis=1)
+
+        # make a manual column to assign white matter 
+        elec_data['gm'] = np.nan
+
+        # Assign regions here that match keys for more detailed YBA atlas that we use for MSSM data.
+
+        elec_data['salman_region'] = np.nan
+        if 'Destrieuxlabel' in elec_data.keys():
+            # Destrieux does not have hippocampus and amygdala 
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('hippocampus')] = 'HPC'
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('amygdala')] = 'AMY'
+            # umbrella label captures some operc/triangul/orbital
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('front_inf')] = 'dlPFC'
+
+            # rename those 
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('opercular')] = 'vlPFC'
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('triangul')] = 'vlPFC'
+
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('frontopol')] = 'vmPFC'
+            # captures frontal gyrus and lateral, medial, orbital sulci
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('orbital')] = 'OFC'
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('front_middle')] = 'dmPFC'
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('cingul-ant')] = 'ACC'
+            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('insula_ant')] = 'AINS'
+
+            elec_data['gm'][elec_data['Destrieuxlabel'].str.lower().str.contains('white')] = 'white'
+
+
 
     return elec_data
 
@@ -1478,13 +1538,21 @@ seeg_only=True, check_bad=True):
             drop_chans = list(set([x.lower() for x in mne_data.ch_names])^set(seeg_names))
             mne_data.drop_channels(drop_chans)
 
-        # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
-        new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
-        # Rename the mne data according to the localization data
-        new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
-        mne_data.rename_channels(new_name_dict)
+        if site == 'MSSM':
+            # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
+            new_mne_names, _, _ = match_elec_names(mne_data.ch_names, elec_data.label)
+            # Rename the mne data according to the localization data
+            new_name_dict = {x:y for (x,y) in zip(mne_data.ch_names, new_mne_names)}
+            mne_data.rename_channels(new_name_dict)
 
-        seeg_names = new_mne_names
+            seeg_names = new_mne_names
+
+        # if site == 'UI':
+        #     # Rename the mne channels to match the connectoin table: 
+        #     mapping_name = iowa_utils.rename_mne_channels(mne_data, connect_table_path)
+        #     mne_data.rename_channels(mapping_name)
+        #     seeg_names = mne_data.ch_names
+        
         sEEG_mapping_dict = {f'{x}':'seeg' for x in seeg_names}
 
         if check_bad == True:
@@ -1521,7 +1589,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
         mne object with re-referenced data
     """
 
-    elec_data = load_elec(elec_path)
+    elec_data = load_elec(elec_path, site=site)
 
     # Sometimes, there's electrodes on the pdf that are NOT in the MNE data structure... let's identify those as well. 
     _, _, unmatched_seeg = match_elec_names(mne_data.ch_names, elec_data.label)
