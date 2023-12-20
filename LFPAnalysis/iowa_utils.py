@@ -1,6 +1,6 @@
 import pandas as pd 
 import numpy as np 
-
+from itertools import chain
 
 def extract_names_connect_table(connect_table_path):
     """
@@ -9,8 +9,14 @@ def extract_names_connect_table(connect_table_path):
 
     connect_table = pd.read_csv(connect_table_path)
 
-    eegCode =['SCALP']
-    eeg_labels = [x.lower() for x in connect_table[connect_table.Code==eegCode[0]]['Contact Location'].tolist()[0][7:].split(', ')]
+    # Strip spaces from column headers if they have them: 
+    connect_table.rename(columns=lambda x: x.strip(), inplace=True)
+
+    connect_table.dropna(subset=['Code'], inplace=True)
+
+    eegCode =['scalp']
+    all_eeg = [x[7:].split(', ') for x in connect_table[connect_table.Code.str.lower().str.contains(eegCode[0])]['Contact Location'].astype(str).tolist()]
+    eeg_labels = [x.lower().replace(u'\xa0', u' ') for x in list(chain(*all_eeg))]
     # NOTE: The following names are set MANUALLY upon data UPLOAD. In the original table they read as "BP" which is not informative.
     respCode = ['CAN', 'THERM', 'BELT']
     ekgCode = ['EKG']

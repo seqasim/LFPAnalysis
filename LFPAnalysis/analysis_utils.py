@@ -18,6 +18,7 @@ import pkg_resources
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
+    
     """
     Grab specific roi for the channel you are looking at 
     """
@@ -305,8 +306,32 @@ def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5,
 
     return RPL_samps_dict, RPL_sec_dict
 
-def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, ):
+def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, freqs):
     """
+
+    Parameters
+    ----------   
+    RPL_sec_dict : dict
+        Dictionary containing the start and end times for each ripple event
+    evs : dict
+        Dictionary containing the start and end times for each event of interest
+    event : str
+        Specific event of interest to look for ripples in
+    beh_ts : list
+        List of timestamps for each event of interest
+    tfr_path : str
+        Path to the TFR data computed for each event of interest
+    freqs : np.array
+        Array of frequencies for the TFR data
+    
+    Returns
+    -------
+    allts : dict
+        Dictionary containing the start and end times for each ripple event, binned into the epoched bins
+    ripple_categories : dict
+        Dictionary containing the ripple categories for each ripple event
+    ripple_psds : dict
+        Dictionary containing the PSDs for each ripple event
     
     Just like with IEDs, assign the ripples in each dict to a behavioral event so that the TFRs computed for those events can be 
     used for the next step - ripple rejection based on spectral features 
