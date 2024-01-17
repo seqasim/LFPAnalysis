@@ -26,3 +26,4 @@
     mne-connectivity
     numba
     pactools
+    nibabel==5.2.0

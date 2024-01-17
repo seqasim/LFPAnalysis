@@ -12,6 +12,10 @@ def extract_names_connect_table(connect_table_path):
     # Strip spaces from column headers if they have them: 
     connect_table.rename(columns=lambda x: x.strip(), inplace=True)
 
+    connect_table['Contact Location'] = connect_table['Contact Location'].str.split().str.join(' ')
+
+    # strip \xa0 from all strings in all columns, all rows 
+
     connect_table.dropna(subset=['Code'], inplace=True)
 
     eegCode =['scalp']

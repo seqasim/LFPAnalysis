@@ -634,7 +634,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
             an = all_elecs[:-1]
             for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
-                if (c in wm_channels) and (a in wm_channels):
+                if (c in wm_channels) or (a in wm_channels):
                     drop_wm_channels.append(c)
                     drop_wm_channels.append(a)
                     continue
@@ -669,7 +669,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
             an = all_elecs[:-1]
             for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
-                if (c in wm_channels) and (a in wm_channels):
+                if (c in wm_channels) or (a in wm_channels):
                     drop_wm_channels.append(c)
                     drop_wm_channels.append(a)
                     continue
@@ -1258,6 +1258,7 @@ def load_elec(elec_path=None, site='MSSM'):
             elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('triangul')] = 'vlPFC'
 
             elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('frontopol')] = 'vmPFC'
+            
             # captures frontal gyrus and lateral, medial, orbital sulci
             elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('orbital')] = 'OFC'
             elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('front_middle')] = 'dmPFC'

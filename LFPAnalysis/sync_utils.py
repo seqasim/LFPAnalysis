@@ -239,16 +239,22 @@ def synchronize_data(beh_ts=None, mne_sync=None,
     - The function raises a ValueError if the synchronization fails.
     """
 
-    if sync_source=='photodiode':
-        neural_ts = get_neural_ts_photodiode(mne_sync, smoothSize, height)
-    elif sync_source=='ttl':
-        neural_ts = get_neural_ts_ttl(mne_sync)
+    if isinstance(sync_source, str):
+        # This indicates I need to extract the syncs myself 
+        if sync_source=='photodiode':
+            neural_ts = get_neural_ts_photodiode(mne_sync, smoothSize, height)
+            
+            if len(neural_ts) < (len(beh_ts)//1.5): 
+                warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
 
-    if len(neural_ts) < (len(beh_ts)//1.5): 
-        warnings.warn("Your height parameter may be too strict - consider setting it a little lower")
+            if len(neural_ts) > (len(beh_ts)*1.5): 
+                warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
 
-    if len(neural_ts) > (len(beh_ts)*1.5): 
-        warnings.warn("Your height parameter may be too lenient - consider setting it a little higher")
+        elif sync_source=='ttl':
+            neural_ts = get_neural_ts_ttl(mne_sync)
+    elif isinstance(sync_source, np.ndarray) | isinstance(sync_source, list):
+        # This indicates I am providing the extracted syncs myself
+        neural_ts = sync_source
 
     rval = 0 
     try:
