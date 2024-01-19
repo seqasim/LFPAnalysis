@@ -555,7 +555,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     if site == 'MSSM':
         elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
     elif site == 'UI':
-        elec_data['bundle'] = (elec_data['ContactLabel'] != elec_data['ContactLabel'].shift()).cumsum()
+        elec_data['bundle'] = (elec_data['Array'] != elec_data['Array'].shift()).cumsum()
 
     drop_from_locs = []
     for ind, data in elec_data['label'].str.lower().items(): 
@@ -589,7 +589,8 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
     
     # wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
-    oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
+    if site == 'MSSM':
+        oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
 
     # # Correct for false negatives in the autodetection that are corrected by manual examination
     # wm_elec_ix_auto = [x for x in wm_elec_ix_auto if x not in false_negatives]
@@ -1208,7 +1209,15 @@ def load_elec(elec_path=None, site='MSSM'):
     if elec_path.split('.')[-1] =='csv':
         elec_data = pd.read_csv(elec_path)
     elif elec_path.split('.')[-1] =='xlsx': 
-        elec_data = pd.read_excel(elec_path)
+        if site == 'MSSM':
+            elec_data = pd.read_excel(elec_path)
+        elif site == 'UI':
+            # KN excel files: 
+            elec_data_all_sheets = pd.read_excel(elec_path, sheet_name=None)
+            # Grab the most recent sheet in the dataframe
+            elec_data = elec_data_all_sheets[list(elec_data_all_sheets.keys())[-1]]
+            elec_data.dropna(subset=['Contact'], inplace=True)
+            elec_data.reset_index(drop=True, inplace=True)
 
     # Strip spaces from column headers if they have them: 
     elec_data.columns = elec_data.columns.str.replace(' ', '')
@@ -1224,6 +1233,7 @@ def load_elec(elec_path=None, site='MSSM'):
 
     elif site == 'UI':
 
+
         if 'Channel' in elec_data.keys():
             # This is an annoying naming convention for UIowa data
             elec_data['label'] = [f'lfpx{ch}' for ch in elec_data.Channel.values]
@@ -1237,35 +1247,62 @@ def load_elec(elec_path=None, site='MSSM'):
         if 'Desikan-Killianylabel' in elec_data.keys(): 
             elec_data.rename(columns={'Desikan-Killianylabel':'DesikanKilliany'}, inplace=True)
 
-        # Get rid of unnecessary empty columns 
-        elec_data = elec_data.dropna(axis=1)
+        # # Get rid of unnecessary empty columns 
+        # elec_data = elec_data.dropna(axis=1)
 
         # make a manual column to assign white matter 
-        elec_data['gm'] = np.nan
+        elec_data['manual'] = np.nan
 
         # Assign regions here that match keys for more detailed YBA atlas that we use for MSSM data.
 
         elec_data['salman_region'] = np.nan
-        if 'Destrieuxlabel' in elec_data.keys():
-            # Destrieux does not have hippocampus and amygdala 
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('hippocampus')] = 'HPC'
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('amygdala')] = 'AMY'
+
+        if 'Destrieux' in elec_data.keys():
+
+            # elec_data['manual'][elec_data['Destrieuxlabel'].str.lower().str.contains('white')] = 'white'
+            elec_data['manual'][elec_data['Region'].str.lower().str.contains('wm', na=False)] = 'white'
+            elec_data['manual'][elec_data['Notes'].str.lower().str.contains('outside', na=False)] = 'oob'
+            elec_data['manual'][elec_data['Notes'].str.lower().str.contains('ventricle', na=False)] = 'oob'
+            elec_data['manual'][elec_data['Notes'].str.lower().str.contains('lesion', na=False)] = 'oob'
+            elec_data['manual'][elec_data['Notes'].str.lower().str.contains('cyst', na=False)] = 'oob'
+            elec_data['manual'][elec_data['Notes'].str.lower().str.contains('bad', na=False)] = 'oob'
+
+            # Get manual labels for hippocampus and amygdala 
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('hippocampus', na=False)] = 'HPC'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('amygdala', na=False)] = 'AMY'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('temporal', na=False)] = 'Temporal'
+
             # umbrella label captures some operc/triangul/orbital
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('front_inf')] = 'dlPFC'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('front_inf', na=False)] = 'dlPFC'
 
             # rename those 
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('opercular')] = 'vlPFC'
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('triangul')] = 'vlPFC'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('opercular', na=False)] = 'vlPFC'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('triangul', na=False)] = 'vlPFC'
 
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('frontopol')] = 'vmPFC'
-            
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('frontopol', na=False)] = 'vmPFC'
+
             # captures frontal gyrus and lateral, medial, orbital sulci
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('orbital')] = 'OFC'
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('front_middle')] = 'dmPFC'
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('cingul-ant')] = 'ACC'
-            elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('insula_ant')] = 'AINS'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('orbital', na=False)] = 'OFC'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('rectus', na=False)] = 'OFC'
 
-            elec_data['gm'][elec_data['Destrieuxlabel'].str.lower().str.contains('white')] = 'white'
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('front_middle', na=False)] = 'dmPFC'
+            # elec_data['salman_region'][elec_data['Destrieuxlabel'].str.lower().str.contains('cingul-ant')] = 'ACC'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('anterior cingulate', na=False)] = 'ACC'
+
+            elec_data['salman_region'][elec_data['Destrieux'].str.lower().str.contains('insula_ant', na=False)] = 'AINS'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('insula', na=False)] = 'AINS'
+
+            # unique to Iowa: 
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('lingual', na=False)] = 'OCC'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('occipital', na=False)] = 'OCC'
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('cuneus', na=False)] = 'OCC'
+
+            elec_data['salman_region'][elec_data['Region'].str.lower().str.contains('parietal', na=False)] = 'Parietal'
+
+
+
+
+
 
 
 
