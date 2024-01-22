@@ -5,6 +5,7 @@ import difflib
 from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis, zscore
 import neurodsp
+from neurodsp.spectral import compute_spectrum
 import mne
 from glob import glob
 from LFPAnalysis import nlx_utils, lfp_preprocess_utils, iowa_utils
@@ -1861,7 +1862,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
         sig = ev_epochs.get_data(picks=[ch_])[:,0,:]
         noise_evs = []
         # compute the power spectrum
-        freqs, psds = neurodsp.spectral.compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
+        freqs, psds = compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
 
         for event in np.arange(sig.shape[0]):
             # Find peaks in the power spectrum
