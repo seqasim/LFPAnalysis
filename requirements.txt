@@ -10,7 +10,6 @@
     fooof==1.0.0
     joblib==1.2.0
     dcor==0.6
-    emd==0.5.5
     joblib==1.2.0
     llvmlite==0.39.1
     pyyaml==6.0

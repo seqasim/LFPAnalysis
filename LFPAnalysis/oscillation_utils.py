@@ -1318,7 +1318,7 @@ def compute_eBOSC_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, 
 #             # eBOSC['detected'].groupby(level=['frequency', 'time']).mean()
 #             detected_avg = detected_avg.pivot_table(index=['frequency'], columns='time')
 #             cur_multiindex = eBOSC['detected'].index
-#             cur_time = eBOSC['detected'].time.unique()
+#             cur_time = eBOSC['detected']z.time.unique()
 #             # cur_multiindex.get_level_values('time').unique()
 #             cur_freq = eBOSC['detected'].frequency.unique()
 #             # cur_multiindex.get_level_values('frequency').unique()
