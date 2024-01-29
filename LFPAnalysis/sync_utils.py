@@ -3,6 +3,7 @@ import scipy.stats
 import warnings
 from scipy.stats import spearmanr, pearsonr
 from collections import defaultdict 
+import matplotlib.pyplot as plt
 
 # Utility functions for synchronization
 

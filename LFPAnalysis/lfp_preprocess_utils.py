@@ -1735,15 +1735,17 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     # any NaN's (e.g. non-responses) should be removed. make sur to remove from the dataframes during later analysis too. 
     beh_ts = [x for x in beh_ts if ~np.isnan(x)]
 
-    # Make events 
-    evs = beh_ts
-    durs = np.zeros_like(beh_ts).tolist()
-    descriptions = [behav_name]*len(beh_ts)
+    # Make behavioral events.
+    onset_beh = beh_ts
+    duration_beh = np.zeros_like(beh_ts).tolist()
+    descriptions_beh = [behav_name]*len(beh_ts)
+    ch_names_beh = []*len(beh_ts)
 
     # Make mne annotations based on these descriptions
-    annot = mne.Annotations(onset=evs,
-                            duration=durs,
-                            description=descriptions)
+    annot = mne.Annotations(onset=onset_beh,
+                            duration=duration_beh,
+                            description=descriptions_beh)
+                
     mne_data_reref.set_annotations(annot)
     events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
 
@@ -1848,8 +1850,6 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     # Replace all nan with Nones 
     event_metadata.where(pd.notna(event_metadata), None)
 
-
-
     ev_epochs.metadata = event_metadata
     # rm_baseline_epochs.metadata = event_metadata
     # event_metadata
@@ -1878,6 +1878,69 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
 
     return ev_epochs
 
+def get_bad_epochs_by_chan(epochs):
+    """
+    Most of the time, we will want to simply identify all the bad epochs (IED, 60Hz) on a given channel to exclude from analysis.
+    If for some reason you need to split this by category of bad channel, rewrite.
+    """
+     
+    good_epochs = {f'{x}': np.nan for x in epochs.ch_names}
+    bad_epochs = {f'{x}': np.nan for x in epochs.ch_names}
+
+    for ch_ix, ch_name in enumerate(epochs.ch_names):
+        ch_data = epochs._data[:, ch_ix:ch_ix+1, :]
+        bad_epochs[ch_name] = np.where(epochs.metadata[epochs.ch_names[ch_ix]].notnull())[0]
+        good_epochs[ch_name] = np.delete(np.arange(ch_data.shape[0]), bad_epochs[ch_name])
+        
+    return good_epochs, bad_epochs
+
+def get_bad_epochs_annot(epochs): 
+    """
+    We might want to extract the annotations for the bad epochs so we can make mne objects out of just them
+    """
+
+    onset_60Hz = [] 
+    duration_60Hz = [] 
+    descriptions_60Hz = [] 
+    ch_names_60Hz = []
+
+    onset_IED = [] 
+    duration_IED = [] 
+    descriptions_IED = [] 
+    ch_names_IED = []
+
+    # Make bad events.
+    for ch_ix, ch_name in enumerate(epochs.ch_names):
+        # find categories of bad events
+        bad_events_60Hz = np.where(epochs.metadata[ch_name]=='noise')[0]
+        nbad_60Hz = len(bad_events_60Hz)
+        if nbad_60Hz > 0:
+            onset_60Hz+=behav_times[bad_events_60Hz].values.tolist()
+            duration_60Hz+=np.zeros_like(bad_events_60Hz).tolist()
+            descriptions_60Hz+=['bad_events_60Hz'] * nbad_60Hz
+            ch_names_60Hz+=[[ch_name] for x in range(nbad_60Hz)]
+
+        bad_events_IED = np.where(epochs.metadata[ch_name].apply(lambda x: isinstance(x, list)))[0]
+        nbad_IED = len(bad_events_IED)
+        if nbad_IED > 0:
+            onset_IED+=behav_times[bad_events_IED].values.tolist()
+            duration_IED+=np.zeros_like(bad_events_IED).tolist()
+            descriptions_IED+=['bad_events_IED'] * nbad_IED
+            ch_names_IED+=[[ch_name] for x in range(nbad_IED)]
+
+    # merge all events and remake the epochs: 
+    bad_onsets =  onset_60Hz + onset_IED
+    bad_duration = duration_60Hz + duration_IED
+    bad_descriptions =  descriptions_60Hz + descriptions_IED
+    bad_ch_names = ch_names_60Hz + ch_names_IED
+
+    # Make mne annotations based on these descriptions
+    revised_annot = mne.Annotations(onset=bad_onsets,
+                            duration=bad_duration,
+                            description=bad_descriptions,
+                            ch_names=bad_ch_names)
+
+    return revised_annot
 
 def rename_elec_df_reref(reref_labels, elec_path):
 
