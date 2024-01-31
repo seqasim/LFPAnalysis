@@ -277,22 +277,22 @@ def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_sample
         time_axis = time_axis
 
     # Slow loop
-    # m = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
-    # std = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
-    # for electrode in range(baseline_data.shape[elec_axis]):
-    #     electrode_data = np.take(baseline_data, indices=[electrode], axis=elec_axis)
-    #     for frequency in range(baseline_data.shape[freq_axis]):
-    #         frequency_data = np.squeeze(np.take(electrode_data, indices=[frequency], axis=freq_axis)).flatten()
-    #         # np.take(arr, indices=[1], axis=axis_to_index)
-    #         samples = np.random.choice(frequency_data, num_samples)
-    #         m[electrode, frequency] = np.nanmean(samples)
-    #         std[electrode, frequency] = np.nanstd(samples)
+    m = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
+    std = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
+    for electrode in range(baseline_data.shape[elec_axis]):
+        electrode_data = np.take(baseline_data, indices=[electrode], axis=elec_axis)
+        for frequency in range(baseline_data.shape[freq_axis]):
+            frequency_data = np.squeeze(np.take(electrode_data, indices=[frequency], axis=freq_axis)).flatten()
+            # np.take(arr, indices=[1], axis=axis_to_index)
+            samples = np.random.choice(frequency_data, num_samples)
+            m[electrode, frequency] = np.nanmean(samples)
+            std[electrode, frequency] = np.nanstd(samples)
 
-    electrode_data = np.take(baseline_data, indices=np.arange(baseline_data.shape[elec_axis]), axis=elec_axis)
-    frequency_data = np.squeeze(np.take(electrode_data, indices=np.arange(baseline_data.shape[freq_axis]), axis=freq_axis)).flatten()
-    samples = np.random.choice(frequency_data, size=(num_samples, baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]))
-    m = np.nanmean(samples, axis=0)
-    std = np.nanstd(samples, axis=0)
+    # electrode_data = np.take(baseline_data, indices=np.arange(baseline_data.shape[elec_axis]), axis=elec_axis)
+    # frequency_data = np.squeeze(np.take(electrode_data, indices=np.arange(baseline_data.shape[freq_axis]), axis=freq_axis)).flatten()
+    # samples = np.random.choice(frequency_data, size=(num_samples, baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]))
+    # m = np.nanmean(samples, axis=0)
+    # std = np.nanstd(samples, axis=0)
 
     # 2. Expand the array
     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
