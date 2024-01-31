@@ -36,13 +36,13 @@ def moving_average(a, n=11) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def fastCorr(x, y):
-    # faster version of corr
-    # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
+# def fastCorr(x, y):
+#     # faster version of corr
+#     # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
 
-    c = np.cov(x, y)
-    r = c[0, 1] / (np.std(x) * np.std(y))
-    return r
+#     c = np.cov(x, y)
+#     r = c[0, 0] / (np.std(x) * np.std(y))
+#     return r
 
 def get_neural_ts_photodiode(mne_sync, smoothSize=11, height=0.5):
     """
@@ -109,13 +109,9 @@ def pulsealign(beh_ms=None,
         for i in range(len(beh_d) - len(eeg_d)):
             # sometimes the lengths mismatch by one entry if we are by an edge: 
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
+            # 1/31/24: slows down correlation but more confident in result.
             r[i] = np.corrcoef(beh_d[i:i+length], eeg_d[:length])[0, 1]
-            # r[i] = fastCorr(beh_d[i:i+length], eeg_d[:length])
-            # if r[i] > 1: 
-            #     # failure mode
-            #     res = spearmanr(beh_d[i:i+length], eeg_d[:length])
-            #     r[i] = res[0]
-            # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
+
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
     print("\n")
@@ -129,11 +125,12 @@ def pulsealign(beh_ms=None,
         x = pulses[eegBlockStart[b]:eegBlockStart[b]+windSize]
         y = beh_ms[blockBehMatch[b]:blockBehMatch[b]+windSize]
         slope, offset, rval = sync_matched_pulses(y, x)
+        # 1/31/24: Let's only concatenate if slope is within some reasonable distance to 1
         if (rval > corrThresh) & (np.abs(1-slope)<=0.05):
             eeg_offset = np.concatenate([eeg_offset, x])
             
             good_beh_ms = np.concatenate([good_beh_ms, y])
-        
+            # FOR DEBUGGING:
             # print(slope)
             # print(offset)
             # print(rval)
