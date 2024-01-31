@@ -109,11 +109,12 @@ def pulsealign(beh_ms=None,
         for i in range(len(beh_d) - len(eeg_d)):
             # sometimes the lengths mismatch by one entry if we are by an edge: 
             length = min(len(eeg_d), len(beh_d[i:i+windSize]))
-            r[i] = fastCorr(beh_d[i:i+length], eeg_d[:length])
-            if r[i] > 1: 
-                # failure mode
-                res = spearmanr(beh_d[i:i+length], eeg_d[:length])
-                r[i] = res[0]
+            r[i] = np.corrcoef(beh_d[i:i+length], eeg_d[:length])[0, 1]
+            # r[i] = fastCorr(beh_d[i:i+length], eeg_d[:length])
+            # if r[i] > 1: 
+            #     # failure mode
+            #     res = spearmanr(beh_d[i:i+length], eeg_d[:length])
+            #     r[i] = res[0]
             # r[i] = fastCorr(eeg_d, beh_d[i:i+windSize])
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
@@ -126,10 +127,17 @@ def pulsealign(beh_ms=None,
     
     for b in np.where(blockR > corrThresh)[0]:
         x = pulses[eegBlockStart[b]:eegBlockStart[b]+windSize]
-        eeg_offset = np.concatenate([eeg_offset, x])
         y = beh_ms[blockBehMatch[b]:blockBehMatch[b]+windSize]
-        good_beh_ms = np.concatenate([good_beh_ms, y])
-    
+        slope, offset, rval = sync_matched_pulses(y, x)
+        if (rval > corrThresh) & (np.abs(1-slope)<=0.05):
+            eeg_offset = np.concatenate([eeg_offset, x])
+            
+            good_beh_ms = np.concatenate([good_beh_ms, y])
+        
+            # print(slope)
+            # print(offset)
+            # print(rval)
+        
     print(f"found matches for {len(eeg_offset)} of {len(pulses)} pulses")
     
     return good_beh_ms, eeg_offset
@@ -279,6 +287,4 @@ def synchronize_data(beh_ts=None, mne_sync=None,
         else:
             print('successful sync!')
     return slope, offset
-
-
 

@@ -636,6 +636,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
             an = all_elecs[:-1]
             for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
+            # POSSIBLE ALTERNATIVE FOR FUTURE USERS: you can determine if the "virtual" electrode is in gray matter or not.
                 if (c in wm_channels) or (a in wm_channels):
                     drop_wm_channels.append(c)
                     drop_wm_channels.append(a)
@@ -1671,7 +1672,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None):
 
     # elec_path=None,
     """
@@ -1752,7 +1753,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None):
     ev_epochs = mne.Epochs(mne_data_reref, 
         events_from_annot, 
         event_id=event_dict, 
-        baseline=None, 
+        baseline=baseline, 
         tmin=ev_start_s - buf_s, 
         tmax=ev_end_s + buf_s, 
         reject=None, 
@@ -1891,7 +1892,7 @@ def get_bad_epochs_by_chan(epochs):
         ch_data = epochs._data[:, ch_ix:ch_ix+1, :]
         bad_epochs[ch_name] = np.where(epochs.metadata[epochs.ch_names[ch_ix]].notnull())[0]
         good_epochs[ch_name] = np.delete(np.arange(ch_data.shape[0]), bad_epochs[ch_name])
-        
+
     return good_epochs, bad_epochs
 
 def get_bad_epochs_annot(epochs): 
