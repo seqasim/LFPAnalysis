@@ -222,6 +222,103 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     
     return baseline_corrected 
 
+def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_samples=1000,
+                            ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
+    
+    """
+    This function samples from all the baseline periods N times with replacement
+    and computes the mean and std for normalization of task-related activity. 
+    
+    Parameters
+    ----------
+    data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The original time-frequency data.
+    baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
+    mode : str, optional
+        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
+    trialwise : bool, optional
+        Whether to baseline each trial separately. Default is True.
+    baseline_only : bool, optional
+        Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
+    ev_axis : int, optional
+        The axis corresponding to the event dimension. Default is 0.
+    elec_axis : int, optional
+        The axis corresponding to the electrode dimension. Default is 1.
+    freq_axis : int, optional
+        The axis corresponding to the frequency dimension. Default is 2.
+    time_axis : int, optional
+        The axis corresponding to the time dimension. Default is 3.
+
+    Returns
+    -------
+    baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+        The baseline-corrected time-frequency data.
+    """
+
+
+    if type(baseline_mne) in [mne.time_frequency.tfr.EpochsTFR]:
+        baseline_data = baseline_mne.data
+    else:
+        baseline_data = baseline_mne
+
+    # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
+    # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
+
+    if type(baseline_mne) in [mne.time_frequency.tfr.EpochsTFR]:
+        elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
+        ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
+        freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
+        time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
+    else:
+        ev_axis = ev_axis
+        elec_axis = elec_axis
+        freq_axis = freq_axis
+        time_axis = time_axis
+
+    # Slow loop
+    # m = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
+    # std = np.zeros([baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]])
+    # for electrode in range(baseline_data.shape[elec_axis]):
+    #     electrode_data = np.take(baseline_data, indices=[electrode], axis=elec_axis)
+    #     for frequency in range(baseline_data.shape[freq_axis]):
+    #         frequency_data = np.squeeze(np.take(electrode_data, indices=[frequency], axis=freq_axis)).flatten()
+    #         # np.take(arr, indices=[1], axis=axis_to_index)
+    #         samples = np.random.choice(frequency_data, num_samples)
+    #         m[electrode, frequency] = np.nanmean(samples)
+    #         std[electrode, frequency] = np.nanstd(samples)
+
+    electrode_data = np.take(baseline_data, indices=np.arange(baseline_data.shape[elec_axis]), axis=elec_axis)
+    frequency_data = np.squeeze(np.take(electrode_data, indices=np.arange(baseline_data.shape[freq_axis]), axis=freq_axis)).flatten()
+    samples = np.random.choice(frequency_data, size=(num_samples, baseline_data.shape[elec_axis], baseline_data.shape[freq_axis]))
+    m = np.nanmean(samples, axis=0)
+    std = np.nanstd(samples, axis=0)
+
+    # 2. Expand the array
+    m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
+    # 3. Copy the data to every time-point
+    m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+    # 2. Expand the array
+    std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
+    # 3. Copy the data to every time-point
+    std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+    if mode == 'mean':
+        baseline_corrected = data - m
+    elif mode == 'ratio':
+        baseline_corrected = data / m
+    elif mode == 'logratio':
+        baseline_corrected = np.log10(data / m)
+    elif mode == 'percent':
+        baseline_corrected = (data - m) / m 
+    elif mode == 'zscore':
+        baseline_corrected = (data - m) / std 
+    elif mode == 'zlogratio':
+        baseline_corrected = np.log10(data / m) / std
+    
+    return baseline_corrected 
+
 def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site='MSSM', average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
