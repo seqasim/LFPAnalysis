@@ -43,3 +43,7 @@ pip install git+https://github.com/seqasim/LFPAnalysis.git
 ```
 pip install --upgrade git+https://github.com/seqasim/LFPAnalysis.git
 ```
+
+## Where to start? 
+
+In the scripts folder you'll find some Jupyter notebooks. Condensed Notebook.ipynb is the best starting point! As I run through different analyses I'll add them into their own notebooks.
