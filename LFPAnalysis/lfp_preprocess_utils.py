@@ -734,7 +734,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
             for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
             # POSSIBLE ALTERNATIVE FOR FUTURE USERS: you can determine if the "virtual" electrode is in gray matter or not.
-                if (c in wm_channels) or (a in wm_channels):
+                if (c in wm_channels) and (a in wm_channels):
                     drop_wm_channels.append(c)
                     drop_wm_channels.append(a)
                     continue
@@ -769,7 +769,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
             an = all_elecs[:-1]
             for c, a in zip(cath, an):
             # I need to make sure I drop any channels where both electrodes are in the wm
-                if (c in wm_channels) or (a in wm_channels):
+                if (c in wm_channels) and (a in wm_channels):
                     drop_wm_channels.append(c)
                     drop_wm_channels.append(a)
                     continue

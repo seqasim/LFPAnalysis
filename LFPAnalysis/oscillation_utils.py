@@ -190,7 +190,7 @@ def compute_connectivity(mne_data,
                 surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry 
                 z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data 
                 pairwise_connectivity = z_struct[:, :, -1] # extract the real data
-    elif avg_over_dim == 'time':
+    elif avg_over_dim == 'time':    
         if metric == 'psi': 
             return (ValueError('Cannot compute psi over time.'))
         else:

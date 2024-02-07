@@ -190,14 +190,14 @@ def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size=15, step_si
                 neural_matching_window = neural_ts[i:i + window_size + 1]
                 beh_matching_window = beh_ts[j:j + window_size + 1]
                 slope, offset, rval = sync_matched_pulses(beh_matching_window, neural_matching_window)
-
-                matching_epochs.append({
-                    'neural_timestamps': neural_matching_window,
-                    'beh_timestamps': beh_matching_window,
-                    'slope': slope,
-                    'offset': offset,
-                    'correlation_coefficient': rval
-                })
+                if np.abs(1-slope)<=0.05:
+                    matching_epochs.append({
+                        'neural_timestamps': neural_matching_window,
+                        'beh_timestamps': beh_matching_window,
+                        'slope': slope,
+                        'offset': offset,
+                        'correlation_coefficient': rval
+                    })
         corr = -1
     print("\n")
 
