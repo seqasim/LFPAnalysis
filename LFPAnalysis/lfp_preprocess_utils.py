@@ -105,9 +105,7 @@ def baseline_avg_TFR(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
-
 def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', 
-                            trialwise=True, baseline_only=False, 
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
@@ -143,23 +141,8 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         The baseline-corrected time-frequency data.
     """
 
-
-    if (baseline_only==False) & (data is not None):
-        if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
-            baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
-        else: 
-            # ugly but flexible bc i don't want to break people's analyses that assume mne input
-            baseline_data = np.concatenate((baseline_mne, data), axis=-1)
-    else: 
-        # Beware - this is super vulnerable to contamination by artifacts/outliers: https://www.sciencedirect.com/science/article/abs/pii/S1053811913009919
-        if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
-            baseline_data = baseline_mne.data
-        else:
-            baseline_data = baseline_mne
-
     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
     # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
-
     if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
         elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
         ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
@@ -170,57 +153,178 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         elec_axis = elec_axis
         freq_axis = freq_axis
         time_axis = time_axis
+    
+    # concatenate the baseline period and the data period 
+    if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
+        baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
+        len_baseline = baseline_mne.data.shape[time_axis]
+    else: 
+        # ugly but flexible bc i don't want to break people's analyses that assume mne input
+        baseline_data = np.concatenate((baseline_mne, data), axis=-1)
+        len_baseline = baseline_mne.shape[time_axis]
 
-    if trialwise:
-        if baseline_data.shape[0] != data.shape[0]:
-            return print('Baseline data and data must have the same number of trials')
-            
-        # Create an array of the mean and standard deviation of the power values across the session
-        # 1. Compute the mean across time points and across trials 
-        m = np.nanmean(np.nanmean(baseline_data, axis=time_axis), axis=ev_axis)
-        # 1. Compute the std across time points for every trial
-        std = np.nanstd(np.nanstd(baseline_data, axis=time_axis), axis=ev_axis)
-    elif baseline_only:
-        # We can compute the mean and std by concatenating all of our baseline data! 
-
-        # manually reshape
-        baseline_data_reshaped = np.zeros([baseline_data.shape[1], baseline_data.shape[2], baseline_data.shape[-1]*baseline_data.shape[0]])
-        
-        for ev in range(baseline_data.shape[0]):
-            ix1 = baseline_data.shape[-1]*ev 
-            ix2 = ix1 + baseline_data.shape[-1]
-            baseline_data_reshaped[:, :, ix1:ix2] = baseline_data[ev, : ,: ,:]
-
-        # Now we can compute the mean and std across trials and time points all at once 
-        m = np.nanmean(baseline_data_reshaped, axis=-1)
-        std = np.nanstd(baseline_data_reshaped, axis=-1)
-    else:
-        raise ValueError('If baselining across a session then you dont want to concatenate baseline and data. Set baseline_only=True or trialwise=True')
+    # 1. Compute the mean and std for each trial: 
+    m = np.nanmean(baseline_data, axis=(time_axis, ev_axis))
+    std = np.nanstd(baseline_data, axis=(time_axis, ev_axis))
 
     # 2. Expand the array
     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
     # 3. Copy the data to every time-point
-    m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+    m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
 
     # 2. Expand the array
     std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
     # 3. Copy the data to every time-point
-    std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+    std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
 
     if mode == 'mean':
-        baseline_corrected = data - m
+        baseline_corrected = baseline_data - m
     elif mode == 'ratio':
-        baseline_corrected = data / m
+        baseline_corrected = baseline_data / m
     elif mode == 'logratio':
-        baseline_corrected = np.log10(data / m)
+        baseline_corrected = np.log10(baseline_data / m)
     elif mode == 'percent':
-        baseline_corrected = (data - m) / m 
+        baseline_corrected = (baseline_data - m) / m 
     elif mode == 'zscore':
-        baseline_corrected = (data - m) / std 
+        baseline_corrected = (baseline_data - m) / std 
     elif mode == 'zlogratio':
-        baseline_corrected = np.log10(data / m) / std
+        baseline_corrected = np.log10(baseline_data / m) / std
+
+    # # Can subtract the mean of the baseline period, only, if using the whole trial to z-score (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
     
-    return baseline_corrected 
+    # 1. Compute the mean across time points and across trials 
+    baseline_only = np.take(baseline_corrected, range(len_baseline), axis=time_axis)
+    data_only = np.take(baseline_corrected, range(len_baseline, len_baseline+data.shape[time_axis]), axis=time_axis)
+    m_b = np.nanmean(baseline_only, axis=(time_axis))
+    m_b = np.expand_dims(m_b, axis=m_b.ndim)
+    m_b = np.repeat(m_b, data_only.shape[time_axis], axis=time_axis)
+    baseline_corrected_data = data_only - m_b
+
+    return baseline_corrected_data 
+
+# def baseline_trialwise_TFR_OLD(data=None, baseline_mne=None, mode='zscore', 
+#                             trialwise=True, baseline_only=False, 
+#                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
+    
+#     """
+#     Meant to mimic the mne baseline
+#     for TFR but when the specific baseline period might change across trials. 
+
+#     This presumes you're using trial-level data (check dimensions)
+    
+#     Parameters
+#     ----------
+#     data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+#         The original time-frequency data.
+#     baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+#         The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
+#     mode : str, optional
+#         The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
+#     trialwise : bool, optional
+#         Whether to baseline each trial separately. Default is True.
+#     baseline_only : bool, optional
+#         Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
+#     ev_axis : int, optional
+#         The axis corresponding to the event dimension. Default is 0.
+#     elec_axis : int, optional
+#         The axis corresponding to the electrode dimension. Default is 1.
+#     freq_axis : int, optional
+#         The axis corresponding to the frequency dimension. Default is 2.
+#     time_axis : int, optional
+#         The axis corresponding to the time dimension. Default is 3.
+
+#     Returns
+#     -------
+#     baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
+#         The baseline-corrected time-frequency data.
+#     """
+
+
+#     if (baseline_only==False) & (data is not None):
+#         if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
+#             baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
+#         else: 
+#             # ugly but flexible bc i don't want to break people's analyses that assume mne input
+#             baseline_data = np.concatenate((baseline_mne, data), axis=-1)
+#     else: 
+#         # Beware - this is super vulnerable to contamination by artifacts/outliers: https://www.sciencedirect.com/science/article/abs/pii/S1053811913009919
+#         if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
+#             baseline_data = baseline_mne.data
+#         else:
+#             baseline_data = baseline_mne
+
+#     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
+#     # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
+
+#     if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
+#         elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
+#         ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
+#         freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
+#         time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
+#     else:
+#         ev_axis = ev_axis
+#         elec_axis = elec_axis
+#         freq_axis = freq_axis
+#         time_axis = time_axis
+
+#     if trialwise:
+#         if baseline_data.shape[0] != data.shape[0]:
+#             return print('Baseline data and data must have the same number of trials')
+            
+#         # Create an array of the mean and standard deviation of the power values across the session
+#         # 1. Compute the mean across time points and across trials 
+#         m = np.nanmean(baseline_data, axis=(time_axis, axis=ev_axis))
+#         # 1. Compute the std across time points for every trial
+#         std = np.nanstd(baseline_data, axis=(time_axis, axis=ev_axis))
+#     elif baseline_only:
+#         # We can compute the mean and std by concatenating all of our baseline data! 
+
+#         # manually reshape
+#         baseline_data_reshaped = np.zeros([baseline_data.shape[1], baseline_data.shape[2], baseline_data.shape[-1]*baseline_data.shape[0]])
+        
+#         for ev in range(baseline_data.shape[0]):
+#             ix1 = baseline_data.shape[-1]*ev 
+#             ix2 = ix1 + baseline_data.shape[-1]
+#             baseline_data_reshaped[:, :, ix1:ix2] = baseline_data[ev, : ,: ,:]
+
+#         # Now we can compute the mean and std across trials and time points all at once 
+#         m = np.nanmean(baseline_data_reshaped, axis=-1)
+#         std = np.nanstd(baseline_data_reshaped, axis=-1)
+#     else:
+#         raise ValueError('If baselining across a session then you dont want to concatenate baseline and data. Set baseline_only=True or trialwise=True')
+
+#     # 2. Expand the array
+#     m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
+#     # 3. Copy the data to every time-point
+#     m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+#     # 2. Expand the array
+#     std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
+#     # 3. Copy the data to every time-point
+#     std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+#     if mode == 'mean':
+#         baseline_corrected = data - m
+#     elif mode == 'ratio':
+#         baseline_corrected = data / m
+#     elif mode == 'logratio':
+#         baseline_corrected = np.log10(data / m)
+#     elif mode == 'percent':
+#         baseline_corrected = (data - m) / m 
+#     elif mode == 'zscore':
+#         baseline_corrected = (data - m) / std 
+#     elif mode == 'zlogratio':
+#         baseline_corrected = np.log10(data / m) / std
+
+#     # # Can subtract the mean of the baseline period, only, if using the whole trial to z-score (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
+#     # if (baseline_only==False):
+#     #     # 1. Compute the mean across time points and across trials 
+#     #     m = np.nanmean(baseline_data, axis=(time_axis))
+        
+
+#     return baseline_corrected 
+
+    
 
 def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_samples=1000,
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 

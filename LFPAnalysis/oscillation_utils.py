@@ -137,8 +137,6 @@ def compute_connectivity(mne_data,
                                                             sfreq=mne_data.info['sfreq'],
                                                             mode='cwt_morlet',
                                                             fmin=band[0], fmax=band[1], faverage=True,
-                                                            tmin=0,
-                                                            tmax=mne_data.tmax - (buf_ms / 1000),
                                                             cwt_freqs=freqs,
                                                             cwt_n_cycles=n_cycles,
                                                             verbose='warning').get_data()[:, 0])
@@ -175,8 +173,6 @@ def compute_connectivity(mne_data,
                                                                     sfreq=surr_mne.info['sfreq'],
                                                                     mode='cwt_morlet',
                                                                     fmin=band[0], fmax=band[1], faverage=True,
-                                                                    tmin=0,
-                                                                    tmax=surr_mne.tmax - (buf_ms / 1000),
                                                                     cwt_freqs=freqs,
                                                                     cwt_n_cycles=n_cycles,
                                                                     verbose='warning').get_data()[:, 0])
@@ -262,7 +258,6 @@ def compute_connectivity(mne_data,
                 pairwise_connectivity = z_struct[:, :, -1] # extract the real data            
 
     return pairwise_connectivity
-
 
 
 # def compute_indices(elec_df, roi = ['hippocampus', 'anterior_cingulate'], band=[8, 13], band_name='beta'): 
@@ -1325,6 +1320,8 @@ def compute_eBOSC_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, 
                            do_save=False, mean_across_time=False, mean_across_freqs=False, both_dfs=True, **kwargs):
     """
 
+    This function is meant to parallelize our BOSC code to be computed over many channels simultaneously and save the results 
+    to individual dataframes. 
 
     """
 
