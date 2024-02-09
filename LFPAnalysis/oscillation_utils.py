@@ -100,16 +100,102 @@ def swap_time_blocks(data, random_state=None):
     
     return np.concatenate(surr, axis=-1)
 
+def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
+    """
+    Compute the correlation between the amplitude envelope of two signals. 
+    Can be within-frequency or between-frequency coupling.
 
-def compute_connectivity(mne_data, 
-                        band,
-                        metric, 
-                        indices, 
-                        freqs, 
-                        n_cycles, 
-                        buf_ms, 
+    Parameters
+    ----------
+    mne_data : epochs object
+        MNE epochs object containing the data to be analyzed.
+    seed_to_target : list of tuples
+        List of tuples containing the indices of the seed and target electrodes.
+    freqs0 : list or tuple
+        Frequency range for the first signal.
+    freqs1 : list or tuple
+        Frequency range for the second signal. If None, assume within-frequency coupling.
+
+    Note: inspired by MNE's pairwise orthogonal envelope connectivity metric
+    """
+
+    nevents = mne_data._data.shape[0]
+    ntimes = mne_data._data.shape[-1] 
+    nfft = next_fast_len(ntimes)  
+    # npairs = len(seed_to_target[0])
+    nsource = len(np.unique(seed_to_target[0]))
+    ntarget = len(np.unique(seed_to_target[1]))
+
+    if freqs1 is None: 
+        # Assume within-frequency coupling
+        freqs1 = freqs0
+    
+    signal0 = mne_data._data[:, np.unique(seed_to_target[0]), :]
+    signal1 = mne_data._data[:, np.unique(seed_to_target[1]), :]
+
+    signal0_filt = mne.filter.filter_data(signal0, 
+                     mne_data.info['sfreq'], 
+                     l_freq=freqs0[0], 
+                     h_freq=freqs0[1])
+    
+    signal1_filt = mne.filter.filter_data(signal1,
+                        mne_data.info['sfreq'],
+                        l_freq=freqs0[0],
+                        h_freq=freqs0[1])
+    
+    corrs = []
+
+    for ei in range(nevents):
+        signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
+        signal0_amp = np.abs(signal0_hilbert)
+        signal1_hilbert = hilbert(signal1_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
+        signal1_amp = np.abs(signal1_hilbert)
+
+        # Square and log the analytical amplitude: https://www.nature.com/articles/nn.3101#Sec15
+        signal0_amp *= signal0_amp
+        np.log(signal0, out=signal0)
+        signal1_amp *= signal1_amp
+        np.log(signal1, out=signal1)
+
+        # subtract mean 
+        signal0_amp_nomean = signal0_amp - np.mean(signal0_amp, axis=-1, keepdims=True)
+        signal1_amp_nomean = signal1_amp - np.mean(signal1_amp, axis=-1, keepdims=True)
+
+        # compute variances using linalg.norm (square, sum, sqrt) since mean=0
+        signal0_amp_std = np.linalg.norm(signal0_amp_nomean, axis=-1)
+        signal0_amp_std[signal0_amp_std == 0] = 1
+        signal1_amp_std = np.linalg.norm(signal1_amp_nomean, axis=-1)
+        signal1_amp_std[signal1_amp_std == 0] = 1
+
+        # compute correlation for each source to all targets
+        corr_mat = []
+        for source_ix in range(nsource):
+            for target_ix in range(ntarget): 
+                signal0_amp_elec = np.squeeze(signal1_amp_nomean[source_ix, :])
+                signal1_amp_elec = np.squeeze(signal1_amp_nomean[target_ix, :])
+                corr = np.sum(signal1_amp_elec * signal0_amp_elec)
+                corr /= signal0_amp_std[source_ix]
+                corr /= signal1_amp_std[target_ix]
+                corr_mat.append(corr)
+                
+        corrs.append(corr_mat)
+
+    pairwise_connectivity = np.stack(corrs) # size is (nevents, ntarget, nsource)
+    # reshape so all pairs are in order:
+
+
+    return pairwise_connectivity
+
+def compute_connectivity(mne_data=None, 
+                        band=None,
+                        metri=None, 
+                        indices=None, 
+                        freqs=None, 
+                        n_cycles=None, 
+                        buf_ms=1000, 
                         avg_over_dim='time',
-                        n_surr=500):
+                        n_surr=500,
+                        band1=None):
     """
     Compute different connectivity metrics using mne.
     :param eeg_mne: MNE formatted EEG
@@ -122,6 +208,8 @@ def compute_connectivity(mne_data,
     pairwise connectivity: array of pairwise weights for the connectivity metric with some number of timepoints
     """
     if avg_over_dim == 'epochs':
+        if metric == 'amp': 
+            return (ValueError('Cannot compute amplitude-amplitude coupling over epochs.'))
         if metric == 'psi': 
             pairwise_connectivity = np.squeeze(phase_slope_index(mne_data,
                                                                     indices=indices,
@@ -191,6 +279,59 @@ def compute_connectivity(mne_data,
     elif avg_over_dim == 'time':    
         if metric == 'psi': 
             return (ValueError('Cannot compute psi over time.'))
+        elif metric == 'amp': 
+            
+            # crop the buffer first:
+            buf_s = buf_ms / 1000
+            mne_data.crop(tmin=mne_data.tmin + buf_s,
+                          tmax=mne_data.tmax - buf_s)
+
+            pairwise_connectivity = amp_amp_coupling(mne_data, 
+                                                     indices, 
+                                                     freqs0=band,
+                                                     freqs1=band1)
+            n_pairs = len(indices[0])
+
+            if n_pairs == 1:
+                # reshape data
+                pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
+
+            if n_surr > 0:
+                data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+
+                surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+
+                # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
+
+                for ns in range(n_surr): 
+                    print(f'Computing surrogate # {ns}')
+                    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                        surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                        surr_dat[ix, :, :] = surr_ch
+                    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                    # make a new EpochArray from it
+                    surr_mne = mne.EpochsArray(surr_dat, 
+                                mne_data.info, 
+                                tmin=mne_data.tmin, 
+                                events = mne_data.events, 
+                                event_id = mne_data.event_id)
+
+                    surr_conn = amp_amp_coupling(surr_mne, 
+                                                 indices, 
+                                                 freqs0=band,
+                                                 freqs1=band1)
+                    if n_pairs == 1:
+                        # reshape data
+                        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+
+                    surr_struct[:, :, ns] = surr_conn
+                    clear_output(wait=True)
+
+                surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry
+                z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
+                pairwise_connectivity = z_struct[:, :, -1] # extract the real data      
+
         else:
             pairwise_connectivity = np.squeeze(spectral_connectivity_time(data=mne_data, 
                                                 freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
@@ -260,88 +401,6 @@ def compute_connectivity(mne_data,
                 pairwise_connectivity = z_struct[:, :, -1] # extract the real data            
 
     return pairwise_connectivity
-
-def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
-    """
-    Compute the correlation between the amplitude envelope of two signals. 
-    Can be within-frequency or between-frequency coupling.
-
-    Parameters
-    ----------
-    mne_data : epochs object
-        MNE epochs object containing the data to be analyzed.
-    seed_to_target : list of tuples
-        List of tuples containing the indices of the seed and target electrodes.
-    freqs0 : list or tuple
-        Frequency range for the first signal.
-    freqs1 : list or tuple
-        Frequency range for the second signal. If None, assume within-frequency coupling.
-
-    Note: inspired by MNE's pairwise orthogonal envelope connectivity metric
-    """
-
-    nevents = mne_data._data.shape[0]
-    ntimes = mne_data._data.shape[-1] 
-    nfft = next_fast_len(ntimes)  
-    # npairs = len(seed_to_target[0])
-    # nsource = len(np.unique(seed_to_target[0]))
-    ntarget = len(np.unique(seed_to_target[1]))
-
-    if freqs1 is None: 
-        # Assume within-frequency coupling
-        freqs1 = freqs0
-    
-    signal0 = mne_data._data[:, np.unique(seed_to_target[0]), :]
-    signal1 = mne_data._data[:, np.unique(seed_to_target[1]), :]
-
-    signal0_filt = mne.filter.filter_data(signal0, 
-                     mne_data.info['sfreq'], 
-                     l_freq=freqs0[0], 
-                     h_freq=freqs0[1])
-    
-    signal1_filt = mne.filter.filter_data(signal1,
-                        mne_data.info['sfreq'],
-                        l_freq=freqs0[0],
-                        h_freq=freqs0[1])
-    
-    corrs = []
-
-    for ei in range(nevents):
-        signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-        signal0_amp = np.abs(signal0_hilbert)
-        signal1_hilbert = hilbert(signal1_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-        signal1_amp = np.abs(signal1_hilbert)
-
-        # Square and log the analytical amplitude: https://www.nature.com/articles/nn.3101#Sec15
-        signal0_amp *= signal0_amp
-        np.log(signal0, out=signal0)
-        signal1_amp *= signal1_amp
-        np.log(signal1, out=signal1)
-
-        # subtract mean 
-        signal0_amp_nomean = signal0_amp - np.mean(signal0_amp, axis=-1, keepdims=True)
-        signal1_amp_nomean = signal1_amp - np.mean(signal1_amp, axis=-1, keepdims=True)
-
-        # compute variances using linalg.norm (square, sum, sqrt) since mean=0
-        signal0_amp_std = np.linalg.norm(signal0_amp_nomean, axis=-1)
-        signal0_amp_std[signal0_amp_std == 0] = 1
-        signal1_amp_std = np.linalg.norm(signal1_amp_nomean, axis=-1)
-        signal1_amp_std[signal1_amp_std == 0] = 1
-
-        # compute correlation for each source to all targets
-        corr_mat = []
-        for target_ix in range(ntarget): 
-            signal1_amp_elec = np.squeeze(signal1_amp_nomean[target_ix, :])
-            corr = np.sum(signal1_amp_elec * signal0_amp_nomean, axis=1)
-            corr /= signal0_amp_std
-            corr /= signal1_amp_std[target_ix]
-            corr_mat.append(corr)
-            
-        corrs.append(corr_mat)
-
-    all_corrs = np.stack(corrs) # size is (nevents, ntarget, nsource)
-
-    return all_corrs
 
 
 # def compute_indices(elec_df, roi = ['hippocampus', 'anterior_cingulate'], band=[8, 13], band_name='beta'): 
