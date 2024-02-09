@@ -188,7 +188,7 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
 
 def compute_connectivity(mne_data=None, 
                         band=None,
-                        metri=None, 
+                        metric=None, 
                         indices=None, 
                         freqs=None, 
                         n_cycles=None, 
