@@ -105,6 +105,8 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
     Compute the correlation between the amplitude envelope of two signals. 
     Can be within-frequency or between-frequency coupling.
 
+    TODO: Make absolutely sure we are following the order alaid out by seed_to_target!!
+
     Parameters
     ----------
     mne_data : epochs object
@@ -171,7 +173,7 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
         corr_mat = []
         for source_ix in range(nsource):
             for target_ix in range(ntarget): 
-                signal0_amp_elec = np.squeeze(signal1_amp_nomean[source_ix, :])
+                signal0_amp_elec = np.squeeze(signal0_amp_nomean[source_ix, :])
                 signal1_amp_elec = np.squeeze(signal1_amp_nomean[target_ix, :])
                 corr = np.sum(signal1_amp_elec * signal0_amp_elec)
                 corr /= signal0_amp_std[source_ix]
