@@ -24,4 +24,5 @@
     h5io
     mne-connectivity
     numba
+    tensorpac
     nibabel==5.2.0
