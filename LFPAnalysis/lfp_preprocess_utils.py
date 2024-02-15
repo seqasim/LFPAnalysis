@@ -109,10 +109,10 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
-    Meant to mimic the mne baseline
-    for TFR but when the specific baseline period might change across trials. 
+    This function zscores the task data and the baseline data together. Then, it subtracts the mean of the z-scored 
+    baseline from the task data.  
 
-    This presumes you're using trial-level data (check dimensions)
+    TODO: Make this flexible in case the number of events (baseline_mne) ! = (data)
     
     Parameters
     ----------
@@ -148,59 +148,80 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
         freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
         time_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.times.shape[0])[0][0]
+
+        baseline_data = baseline_mne.data
     else:
         ev_axis = ev_axis
         elec_axis = elec_axis
         freq_axis = freq_axis
         time_axis = time_axis
-    
-    # concatenate the baseline period and the data period 
-    if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
-        baseline_data = np.concatenate((baseline_mne.data, data), axis=-1)
-        len_baseline = baseline_mne.data.shape[time_axis]
-    else: 
-        # ugly but flexible bc i don't want to break people's analyses that assume mne input
-        baseline_data = np.concatenate((baseline_mne, data), axis=-1)
-        len_baseline = baseline_mne.shape[time_axis]
 
-    # 1. Compute the mean and std for each trial: 
-    m = np.nanmean(baseline_data, axis=(time_axis, ev_axis))
-    std = np.nanstd(baseline_data, axis=(time_axis, ev_axis))
+        baseline_data = baseline_mne
 
-    # 2. Expand the array
-    m = np.expand_dims(np.expand_dims(m, axis=m.ndim), axis=0)
-    # 3. Copy the data to every time-point
-    m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+    n_channels = data.shape[elec_axis]
+    n_freqs = data.shape[freq_axis]
+    n_data_trials = data.shape[ev_axis]
+    n_data_times = data.shape[time_axis]
 
-    # 2. Expand the array
-    std = np.expand_dims(np.expand_dims(std, axis=std.ndim), axis=0)
-    # 3. Copy the data to every time-point
-    std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+    n_baseline_trials = baseline_data.shape[ev_axis]
+    n_baseline_times = baseline_data.shape[time_axis]
+
+    # Reshape the data to combine across all trials and time points. resulting dimension is (n_datapoints, n_channels, n_freqs)
+    # reshaped_baseline = np.reshape(baseline_data, (n_baseline_trials * n_baseline_times, n_channels, n_freqs))
+    reshaped_baseline = baseline_data.transpose(elec_axis, freq_axis, time_axis, ev_axis).reshape(n_channels, n_freqs, n_baseline_times * n_baseline_trials)
+
+    reshaped_data = data.transpose(elec_axis, freq_axis, time_axis, ev_axis).reshape(n_channels, n_freqs, n_data_times * n_data_trials)
+
+    # concatenate acording to (n_channels, n_freqs)
+    baseline_data_concat = np.concatenate((reshaped_baseline, reshaped_data), axis=-1) 
+
+    # Compute mean and std across all time points for each frequency and electrode
+    m_ = np.nanmean(baseline_data_concat, axis=-1)
+    std_ = np.nanmean(baseline_data_concat, axis=-1)
+
+    # 2. Expand the array to time and events 
+    m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
+    # 3. Copy the data to every time and event
+    m = np.repeat(np.repeat(m, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
+
+    # 4. Do the same for std
+    std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
+    std = np.repeat(np.repeat(std, data.shape[time_axis], axis=time_axis), data.shape[ev_axis], axis=0)
 
     if mode == 'mean':
-        baseline_corrected = baseline_data - m
+        baseline_corrected = data - m
     elif mode == 'ratio':
-        baseline_corrected = baseline_data / m
+        baseline_corrected = data / m
     elif mode == 'logratio':
-        baseline_corrected = np.log10(baseline_data / m)
+        baseline_corrected = np.log10(data / m)
     elif mode == 'percent':
-        baseline_corrected = (baseline_data - m) / m 
+        baseline_corrected = (data - m) / m 
     elif mode == 'zscore':
-        baseline_corrected = (baseline_data - m) / std 
+        zscored_data = (data - m) / std 
+        if n_baseline_trials == n_data_trials: # Let's also subtract the trialwise baseline mean from the zscored data
+            # ref: (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
+
+            m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
+            # 3. Copy the data to every time and event
+            m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+
+            # 4. Do the same for std
+            std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
+            std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+
+            zscored_baseline = (baseline_data-m) / std
+            
+            m_b = np.nanmean(zscored_baseline, axis=(time_axis, ev_axis))
+            m_b = np.expand_dims(np.expand_dims(m_b, axis=m_b.ndim), axis=0)
+            m_b = np.repeat(np.repeat(m_b, zscored_data.shape[time_axis], axis=time_axis), zscored_data.shape[ev_axis], axis=0)
+            
+            baseline_corrected = zscored_data - m_b
+        else:
+            baseline_corrected = zscored_data
     elif mode == 'zlogratio':
-        baseline_corrected = np.log10(baseline_data / m) / std
-
-    # # Can subtract the mean of the baseline period, only, if using the whole trial to z-score (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
+        baseline_corrected = np.log10(data / m) / std
     
-    # 1. Compute the mean across time points and across trials 
-    baseline_only = np.take(baseline_corrected, range(len_baseline), axis=time_axis)
-    data_only = np.take(baseline_corrected, range(len_baseline, len_baseline+data.shape[time_axis]), axis=time_axis)
-    m_b = np.nanmean(baseline_only, axis=(time_axis))
-    m_b = np.expand_dims(m_b, axis=m_b.ndim)
-    m_b = np.repeat(m_b, data_only.shape[time_axis], axis=time_axis)
-    baseline_corrected_data = data_only - m_b
-
-    return baseline_corrected_data 
+    return baseline_corrected
 
 # def baseline_trialwise_TFR_OLD(data=None, baseline_mne=None, mode='zscore', 
 #                             trialwise=True, baseline_only=False, 
