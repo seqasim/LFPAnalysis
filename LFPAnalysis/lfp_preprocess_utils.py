@@ -144,6 +144,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
     # I am doing all the replication later on. But needs to be more flexible in case input is a numpy array instead:
     if type(baseline_mne) in [mne.epochs.Epochs, mne.time_frequency.tfr.EpochsTFR]:
+        # TODO what if you have the same number of events and channels? This will screw up
         elec_axis = np.where(np.array(baseline_mne.data.shape)==len(baseline_mne.ch_names))[0][0]
         ev_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.events.shape[0])[0][0]
         freq_axis = np.where(np.array(baseline_mne.data.shape)==baseline_mne.freqs.shape[0])[0][0]
