@@ -80,7 +80,8 @@ def swap_time_blocks(data, random_state=None):
         permutations
     References
     ----------
-    Bahramisharif et al. 2013 
+    Source: Bahramisharif et al. 2013 
+    Justification: https://www.sciencedirect.com/science/article/pii/S0959438814001640
     """
     
     if random_state is None:
@@ -116,7 +117,7 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
     freqs1 : list or tuple
         Frequency range for the second signal. If None, assume within-frequency coupling.
 
-    Note: inspired by MNE's pairwise orthogonal envelope connectivity metric
+    Note: inspired by MNE's pairwise orthogonal envelope connectivity metric but altered for iEEG data 
     """
 
     nevents = mne_data._data.shape[0]
@@ -325,7 +326,7 @@ def compute_connectivity(mne_data=None,
                 else: 
                     data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                     # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
@@ -389,7 +390,7 @@ def compute_connectivity(mne_data=None,
             if n_surr > 0:
                 data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-                surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+                surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                 # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
@@ -460,7 +461,7 @@ def compute_connectivity(mne_data=None,
                 else:
                     data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                     # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
