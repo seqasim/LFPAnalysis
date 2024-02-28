@@ -275,9 +275,13 @@ def compute_connectivity(mne_data=None,
                     surr_struct[:, :, ns] = surr_conn
                     clear_output(wait=True)
 
-                surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry 
-                z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data 
-                pairwise_connectivity = z_struct[:, :, -1] # extract the real data
+                surr_mean = np.nanmean(surr_struct, axis=-1)
+                surr_std = np.nanstd(surr_struct, axis=-1)
+                pairwise_connectivity = (pairwise_connectivity - surr_mean) / (surr_std)
+                
+                # surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry 
+                # z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data 
+                # pairwise_connectivity = z_struct[:, :, -1] # extract the real data
     elif avg_over_dim == 'time':    
         if metric == 'psi': 
             return (ValueError('Cannot compute psi over time.'))
@@ -330,9 +334,12 @@ def compute_connectivity(mne_data=None,
                     surr_struct[:, :, ns] = surr_conn
                     clear_output(wait=True)
 
-                surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry
-                z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
-                pairwise_connectivity = z_struct[:, :, -1] # extract the real data      
+                surr_mean = np.nanmean(surr_struct, axis=-1)
+                surr_std = np.nanstd(surr_struct, axis=-1)
+                pairwise_connectivity = (pairwise_connectivity - surr_mean) / (surr_std)
+                # surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry
+                # z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
+                # pairwise_connectivity = z_struct[:, :, -1] # extract the real data      
 
         else:
             pairwise_connectivity = np.squeeze(spectral_connectivity_time(data=mne_data, 
@@ -398,9 +405,12 @@ def compute_connectivity(mne_data=None,
                     surr_struct[:, :, ns] = surr_conn
                     clear_output(wait=True)
 
-                surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry
-                z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
-                pairwise_connectivity = z_struct[:, :, -1] # extract the real data            
+                surr_mean = np.nanmean(surr_struct, axis=-1)
+                surr_std = np.nanstd(surr_struct, axis=-1)
+                pairwise_connectivity = (pairwise_connectivity - surr_mean) / (surr_std)
+                # surr_struct[:, :, -1] = pairwise_connectivity # add the real data in as the last entry
+                # z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
+                # pairwise_connectivity = z_struct[:, :, -1] # extract the real data            
 
     return pairwise_connectivity
 
