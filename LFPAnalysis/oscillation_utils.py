@@ -105,8 +105,6 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
     Compute the correlation between the amplitude envelope of two signals. 
     Can be within-frequency or between-frequency coupling.
 
-    TODO: Make absolutely sure we are following the order alaid out by seed_to_target!!
-
     Parameters
     ----------
     mne_data : epochs object
@@ -188,6 +186,83 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
 
     return pairwise_connectivity
 
+def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles):
+
+    n_pairs = len(indices[0])
+    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+
+    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+
+    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+        surr_ch = swap_time_blocks(ch_dat, random_state=None)
+        surr_dat[ix, :, :] = surr_ch
+
+    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+
+    # make a new EpochArray from it
+    surr_mne = mne.EpochsArray(surr_dat, 
+                mne_data.info, 
+                tmin=mne_data.tmin, 
+                events = mne_data.events, 
+                event_id = mne_data.event_id)
+
+    surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
+                                                    indices=indices,
+                                                    method=metric,
+                                                    sfreq=surr_mne.info['sfreq'],
+                                                    mode='cwt_morlet',
+                                                    fmin=band[0], fmax=band[1], faverage=True,
+                                                    cwt_freqs=freqs,
+                                                    cwt_n_cycles=n_cycles,
+                                                    verbose='warning').get_data()[:, 0])
+    if n_pairs == 1:
+        # reshape data
+        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+
+    return surr_conn
+
+
+
+def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms):
+
+    n_pairs = len(indices[0])
+    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+
+    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+
+    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+        surr_ch = swap_time_blocks(ch_dat, random_state=None)
+        surr_dat[ix, :, :] = surr_ch
+
+    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+
+    # make a new EpochArray from it
+    surr_mne = mne.EpochsArray(surr_dat, 
+                mne_data.info, 
+                tmin=mne_data.tmin, 
+                events = mne_data.events, 
+                event_id = mne_data.event_id)
+    
+    surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne, 
+                                freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                                average=False, 
+                                indices=indices, 
+                                method=metric, 
+                                sfreq=surr_mne.info['sfreq'], 
+                                mode='cwt_morlet', 
+                                fmin=band[0], fmax=band[1], faverage=True, 
+                                padding=(buf_ms / 1000), 
+                                n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                                gc_n_lags=15,
+                                verbose='warning').get_data())
+    
+    if n_pairs == 1:
+        # reshape data
+        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+
+    return surr_conn
+
+
 def compute_connectivity(mne_data=None, 
                         band=None,
                         metric=None, 
@@ -197,6 +272,7 @@ def compute_connectivity(mne_data=None,
                         buf_ms=1000, 
                         avg_over_dim='time',
                         n_surr=500,
+                        parallelize=False,
                         band1=None):
     """
     Compute different connectivity metrics using mne.
@@ -238,42 +314,50 @@ def compute_connectivity(mne_data=None,
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
             
             if n_surr > 0:
+                if parallelize == True:
+                    def _process_surrogate_epochs(ns):
+                        print(f'Computing surrogate # {ns}')
+                        surrogate_result = compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles)
+                        return surrogate_result
 
-                data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+                    surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_epochs)(ns) for ns in range(n_surr))
+                    surr_struct = np.stack(surrogates, axis=-1)
+                else: 
+                    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-                surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
 
-                # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
+                    # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
-                for ns in range(n_surr): 
-                    print(f'Computing surrogate # {ns}')
-                    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
-                    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-                        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-                        surr_dat[ix, :, :] = surr_ch
-                    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
-                    # make a new EpochArray from it
-                    surr_mne = mne.EpochsArray(surr_dat, 
-                                mne_data.info, 
-                                tmin=mne_data.tmin, 
-                                events = mne_data.events, 
-                                event_id = mne_data.event_id)
+                    for ns in range(n_surr): 
+                        print(f'Computing surrogate # {ns}')
+                        surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                        for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                            surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                            surr_dat[ix, :, :] = surr_ch
+                        surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                        # make a new EpochArray from it
+                        surr_mne = mne.EpochsArray(surr_dat, 
+                                    mne_data.info, 
+                                    tmin=mne_data.tmin, 
+                                    events = mne_data.events, 
+                                    event_id = mne_data.event_id)
 
-                    surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
-                                                                    indices=indices,
-                                                                    method=metric,
-                                                                    sfreq=surr_mne.info['sfreq'],
-                                                                    mode='cwt_morlet',
-                                                                    fmin=band[0], fmax=band[1], faverage=True,
-                                                                    cwt_freqs=freqs,
-                                                                    cwt_n_cycles=n_cycles,
-                                                                    verbose='warning').get_data()[:, 0])
-                    if n_pairs == 1:
-                        # reshape data
-                        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+                        surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
+                                                                        indices=indices,
+                                                                        method=metric,
+                                                                        sfreq=surr_mne.info['sfreq'],
+                                                                        mode='cwt_morlet',
+                                                                        fmin=band[0], fmax=band[1], faverage=True,
+                                                                        cwt_freqs=freqs,
+                                                                        cwt_n_cycles=n_cycles,
+                                                                        verbose='warning').get_data()[:, 0])
+                        if n_pairs == 1:
+                            # reshape data
+                            surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
-                    surr_struct[:, :, ns] = surr_conn
-                    clear_output(wait=True)
+                        surr_struct[:, :, ns] = surr_conn
+                        clear_output(wait=True)
 
                 surr_mean = np.nanmean(surr_struct, axis=-1)
                 surr_std = np.nanstd(surr_struct, axis=-1)
@@ -365,45 +449,54 @@ def compute_connectivity(mne_data=None,
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
 
             if n_surr > 0:
-                data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+                if parallelize == True:
+                    def _process_surrogate_time(ns):
+                        print(f'Computing surrogate # {ns}')
+                        surrogate_result = compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms)
+                        return surrogate_result
 
-                surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
+                    surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
+                    surr_struct = np.stack(surrogates, axis=-1)
+                else:
+                    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
 
-                # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
+                    surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr+1]) # allocate space for all the surrogates 
 
-                for ns in range(n_surr): 
-                    print(f'Computing surrogate # {ns}')
-                    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
-                    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-                        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-                        surr_dat[ix, :, :] = surr_ch
-                    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
-                    # make a new EpochArray from it
-                    surr_mne = mne.EpochsArray(surr_dat, 
-                                mne_data.info, 
-                                tmin=mne_data.tmin, 
-                                events = mne_data.events, 
-                                event_id = mne_data.event_id)
-                    
-                    surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne, 
-                                                freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
-                                                average=False, 
-                                                indices=indices, 
-                                                method=metric, 
-                                                sfreq=surr_mne.info['sfreq'], 
-                                                mode='cwt_morlet', 
-                                                fmin=band[0], fmax=band[1], faverage=True, 
-                                                padding=(buf_ms / 1000), 
-                                                n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-                                                gc_n_lags=15,
-                                                verbose='warning').get_data())
-                    
-                    if n_pairs == 1:
-                        # reshape data
-                        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+                    # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
-                    surr_struct[:, :, ns] = surr_conn
-                    clear_output(wait=True)
+                    for ns in range(n_surr): 
+                        print(f'Computing surrogate # {ns}')
+                        surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                        for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                            surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                            surr_dat[ix, :, :] = surr_ch
+                        surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                        # make a new EpochArray from it
+                        surr_mne = mne.EpochsArray(surr_dat, 
+                                    mne_data.info, 
+                                    tmin=mne_data.tmin, 
+                                    events = mne_data.events, 
+                                    event_id = mne_data.event_id)
+                        
+                        surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne, 
+                                                    freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                                                    average=False, 
+                                                    indices=indices, 
+                                                    method=metric, 
+                                                    sfreq=surr_mne.info['sfreq'], 
+                                                    mode='cwt_morlet', 
+                                                    fmin=band[0], fmax=band[1], faverage=True, 
+                                                    padding=(buf_ms / 1000), 
+                                                    n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                                                    gc_n_lags=15,
+                                                    verbose='warning').get_data())
+                        
+                        if n_pairs == 1:
+                            # reshape data
+                            surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+
+                        surr_struct[:, :, ns] = surr_conn
+                        clear_output(wait=True)
 
                 surr_mean = np.nanmean(surr_struct, axis=-1)
                 surr_std = np.nanstd(surr_struct, axis=-1)
