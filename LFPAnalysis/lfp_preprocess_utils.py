@@ -1895,7 +1895,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, check_epoch_line_noise=True):
 
     # elec_path=None,
     """
@@ -2079,26 +2079,27 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
     # event_metadata
 
     # 1/19/24: Let's also look for noisy epochs, which can persist even after notch filtering the whole session. 
-    notch_freqs = [60] 
-    notch_ranges = np.concatenate([np.arange(x-3,x+4) for x in notch_freqs]).flatten().tolist()
-    noisy_epochs_dict = {f'{x}':np.nan for x in ev_epochs.ch_names}
+    if check_epoch_line_noise == True:
+        notch_freqs = [60] 
+        notch_ranges = np.concatenate([np.arange(x-3,x+4) for x in notch_freqs]).flatten().tolist()
+        noisy_epochs_dict = {f'{x}':np.nan for x in ev_epochs.ch_names}
 
-    for ch_ in ev_epochs.ch_names:
-        sig = ev_epochs.get_data(picks=[ch_])[:,0,:]
-        noise_evs = []
-        # compute the power spectrum
-        freqs, psds = compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
+        for ch_ in ev_epochs.ch_names:
+            sig = ev_epochs.get_data(picks=[ch_])[:,0,:]
+            noise_evs = []
+            # compute the power spectrum
+            freqs, psds = compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
 
-        for event in np.arange(sig.shape[0]):
-            # Find peaks in the power spectrum
-            peaks, _ = find_peaks(np.log10(psds[event, :]), prominence=1.)  # Adjust threshold as needed
-            peak_freqs = freqs[peaks]
-            # do they intersect with noise ranges?
-            intersection = set(peak_freqs) & set(notch_ranges)
-            if intersection:
-                noise_evs.append(event)
-        ev_epochs.metadata.loc[noise_evs, ch_] = 'noise'
-        # noisy_epochs_dict[ch_] = noise_evs
+            for event in np.arange(sig.shape[0]):
+                # Find peaks in the power spectrum
+                peaks, _ = find_peaks(np.log10(psds[event, :]), prominence=1.)  # Adjust threshold as needed
+                peak_freqs = freqs[peaks]
+                # do they intersect with noise ranges?
+                intersection = set(peak_freqs) & set(notch_ranges)
+                if intersection:
+                    noise_evs.append(event)
+            ev_epochs.metadata.loc[noise_evs, ch_] = 'noise'
+            # noisy_epochs_dict[ch_] = noise_evs
 
     return ev_epochs
 
