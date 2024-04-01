@@ -255,6 +255,7 @@ def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cyc
                                 fmin=band[0], fmax=band[1], faverage=True, 
                                 padding=(buf_ms / 1000), 
                                 n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                                rank=None, 
                                 gc_n_lags=15,
                                 verbose='warning').get_data())
     
@@ -263,6 +264,128 @@ def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cyc
         surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
     return surr_conn
+
+def compute_gc_tr(mne_data=None, 
+                band=None,
+                indices=None, 
+                freqs=None, 
+                n_cycles=None,
+                rank=None, 
+                gc_n_lags=15, 
+                buf_ms=1000, 
+                avg_over_dim='time'): 
+    """
+    Following https://mne.tools/mne-connectivity/stable/auto_examples/granger_causality.html#sphx-glr-auto-examples-granger-causality-py
+    """
+
+    indices_ab = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))  # A => B
+    indices_ba = (np.array([np.unique(indices[1]).tolist()]), np.array([np.unique(indices[0]).tolist()]))  # B => A
+    
+    if avg_over_dim == 'epochs':
+        # compute Granger causality
+        gc_ab = spectral_connectivity_epochs(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],
+            method=["gc"],
+            indices=indices_ab,
+            fmin=band[0], fmax=band[1],
+            rank=rank,
+            gc_n_lags=gc_n_lags) 
+        # A => B
+        gc_ba = spectral_connectivity_epochs(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],
+            method=["gc"],
+            indices=indices_ba,
+            fmin=band[0], fmax=band[1],
+            rank=rank,
+            gc_n_lags=gc_n_lags)  
+        # B => A
+                    
+        # compute GC on time-reversed signals
+        gc_tr_ab = spectral_connectivity_epochs(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],        
+            method=["gc_tr"],
+            indices=indices_ab,
+            fmin=band[0], fmax=band[1],
+            rank=rank,
+            gc_n_lags=gc_n_lags)  
+        # TR[A => B]
+
+        gc_tr_ba = spectral_connectivity_epochs(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],                
+            method=["gc_tr"],
+            indices=indices_ba,
+            fmin=band[0], fmax=band[1],
+            rank=rank,
+            gc_n_lags=gc_n_lags)  
+        # TR[B => A]
+    elif avg_over_dim =='time':
+        # compute Granger causality
+        gc_ab = spectral_connectivity_time(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],
+            method=["gc"],
+            indices=indices_ab,
+            fmin=band[0], fmax=band[1],
+            freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])],
+            rank=rank,
+            padding=(buf_ms / 1000), 
+            n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+            gc_n_lags=gc_n_lags) 
+
+        # A => B
+        gc_ba = spectral_connectivity_time(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],
+            method=["gc"],
+            indices=indices_ba,
+            fmin=band[0], fmax=band[1],
+            freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])],
+            rank=rank,
+            padding=(buf_ms / 1000), 
+            n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+            gc_n_lags=gc_n_lags)  
+        # B => A
+                    
+        # compute GC on time-reversed signals
+        gc_tr_ab = spectral_connectivity_time(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],        
+            method=["gc_tr"],
+            indices=indices_ab,
+            fmin=band[0], fmax=band[1],
+            freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])],
+            rank=rank,
+            padding=(buf_ms / 1000), 
+            n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+            gc_n_lags=gc_n_lags)  
+        # TR[A => B]
+
+        gc_tr_ba = spectral_connectivity_time(
+            mne_data,
+            sfreq = mne_data.info['sfreq'],                
+            method=["gc_tr"],
+            indices=indices_ba,
+            fmin=band[0], fmax=band[1],
+            freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])],
+            rank=rank,
+            padding=(buf_ms / 1000), 
+            n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+            gc_n_lags=gc_n_lags)  
+        # TR[B => A]
+
+    net_gc = gc_ab.get_data() - gc_ba.get_data()  # [A => B] - [B => A]
+
+    # compute net GC on time-reversed signals (TR[A => B] - TR[B => A])
+    net_gc_tr = gc_tr_ab.get_data() - gc_tr_ba.get_data()
+
+    # compute TRGC
+    gc_tr = net_gc - net_gc_tr
+
+    return gc_tr.mean(axis=-1)
 
 
 def compute_connectivity(mne_data=None, 
@@ -287,6 +410,12 @@ def compute_connectivity(mne_data=None,
     :return:
     pairwise connectivity: array of pairwise weights for the connectivity metric with some number of timepoints
     """
+    if metric == 'gr_tc':
+        return (ValueError('Use the function compute_gc_tr'))
+
+    elif metric in ['gc', 'imcoh']: 
+        indices = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))
+
     if avg_over_dim == 'epochs':
         if metric == 'amp': 
             return (ValueError('Cannot compute amplitude-amplitude coupling over epochs.'))
@@ -310,7 +439,12 @@ def compute_connectivity(mne_data=None,
                                                             cwt_freqs=freqs,
                                                             cwt_n_cycles=n_cycles,
                                                             verbose='warning').get_data()[:, 0])
-            n_pairs = len(indices[0])
+            if metric in ['gc', 'imcoh']:
+                # no pairs here: computed over whole multivariate state space 
+                n_pairs=1
+            else: 
+                n_pairs = len(indices[0])
+
             if n_pairs == 1:
                 # reshape data
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
@@ -318,7 +452,7 @@ def compute_connectivity(mne_data=None,
             if n_surr > 0:
                 if parallelize == True:
                     def _process_surrogate_epochs(ns):
-                        print(f'Computing surrogate # {ns}')
+                        print(f'Computing surrogate # {ns} - parallel')
                         surrogate_result = compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles)
                         return surrogate_result
 
@@ -382,7 +516,11 @@ def compute_connectivity(mne_data=None,
                                                      indices, 
                                                      freqs0=band,
                                                      freqs1=band1)
-            n_pairs = len(indices[0])
+            if metric in ['gc', 'imcoh']:
+                # no pairs here: computed over whole multivariate state space 
+                n_pairs=1
+            else: 
+                n_pairs = len(indices[0])
 
             if n_pairs == 1:
                 # reshape data
@@ -438,13 +576,19 @@ def compute_connectivity(mne_data=None,
                                                 fmin=band[0], fmax=band[1], faverage=True, 
                                                 padding=(buf_ms / 1000), 
                                                 n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                                                rank=None,
                                                 gc_n_lags=15,
                                                 verbose='warning').get_data())
             # This returns an array of shape (n_events, n_pairs) 
             # where n_pairs is the number of pairs of channels in indices
             # and n_events is the number of events in the data
 
-            n_pairs = len(indices[0])
+            
+            if metric in ['gc', 'imcoh']:
+                # no pairs here: computed over whole multivariate state space 
+                n_pairs=1
+            else: 
+                n_pairs = len(indices[0])
 
             if n_pairs == 1:
                 # reshape data
@@ -453,7 +597,7 @@ def compute_connectivity(mne_data=None,
             if n_surr > 0:
                 if parallelize == True:
                     def _process_surrogate_time(ns):
-                        print(f'Computing surrogate # {ns}')
+                        print(f'Computing surrogate # {ns} - parallel')
                         surrogate_result = compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms)
                         return surrogate_result
 

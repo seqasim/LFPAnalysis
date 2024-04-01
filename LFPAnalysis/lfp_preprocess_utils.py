@@ -2166,15 +2166,50 @@ def get_bad_epochs_annot(epochs):
 
     return revised_annot
 
-def rename_elec_df_reref(reref_labels, elec_path):
+def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
 
     """
     Sometimes we want to filter and relabel our electrode dataframe based on the renamed channels from the re-referenced data 
     """
-    elec_data = load_elec(elec_path)
+    elec_data = load_elec(elec_path, site=site)
+    
+    
     anode_list = [x.split('-')[0] for x in reref_labels]
-    elec_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
-    elec_df['label'] =  elec_df.label.apply(lambda x: [a for a in anode_list if str(x).lower() in a][0])
+    cathode_list = [x.split('-')[1] for x in reref_labels]
+    
+    # these should be equal length dataframes 
+    anode_df = elec_data[elec_data.label.str.lower().isin(anode_list)]
+    anode_df['label'] =  anode_df.label.apply(lambda x: [a for a in reref_labels if str(x).lower() in a.split('-')[0]][0])
+
+    cathode_df = elec_data[elec_data.label.str.lower().isin(cathode_list)]
+    cathode_df['label'] =  cathode_df.label.apply(lambda x: [a for a in reref_labels if str(x).lower() in a.split('-')[1]][0])
+
+    # Instead of just inheriting anode traits by default
+    # Let's account for the possibility that one of these electrodes (anode or cathode) could be in white matter
+    # get the white matter electrodes 
+    wm_elec_ix_manual = [] 
+    # account for different labeling strategies in manual column
+    white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
+    manual_col = anode_df.keys().str.lower().str.contains('manual')
+    if np.any(manual_col):
+        manual_key = anode_df.keys()[anode_df.keys().str.lower().str.contains('manual')][0]
+        if anode_df[manual_key].dropna().shape[0] == 0:
+            # there are no white matter channels 
+            return anode_df
+        else:
+            wm_elec_ix_manual += [ind for ind, data in anode_df[manual_key].str.lower().items() if data in white_matter_labels]
+    else:
+        warnings.warn('Warning...........No Manual Column!')
+
+    wm_anodes = anode_df['label'].str.lower()[wm_elec_ix_manual].tolist()
+
+    # these are the anodes not in white matter
+    anode_no_wm = anode_df[(~anode_df.label.str.lower().isin(wm_anodes))]
+    
+    # reduce to cathods for elecs with anodes in white matter 
+    cathodes_no_wm = cathode_df[cathode_df.label.str.lower().isin(wm_anodes)]
+
+    elec_df = anode_no_wm.append(cathodes_no_wm, ignore_index=True)
 
     return elec_df
 #
