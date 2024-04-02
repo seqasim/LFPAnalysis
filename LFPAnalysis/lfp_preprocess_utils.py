@@ -524,7 +524,7 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
     
         # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
         #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
-        # wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
+        wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
         oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
 
         # # Correct for false negatives in the autodetection that are corrected by manual examination
