@@ -812,7 +812,7 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
     #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
     
-    # wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and elec_data['label'].str.lower()[ind] not in bad_channels]
+    wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
     if site == 'MSSM':
         oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
 
@@ -2188,6 +2188,7 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
     # Instead of just inheriting anode traits by default
     # Let's account for the possibility that one of these electrodes (anode or cathode) could be in white matter
     # get the white matter electrodes 
+    wm_elec_ix_auto = []
     wm_elec_ix_manual = [] 
     # account for different labeling strategies in manual column
     white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
@@ -2202,7 +2203,12 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
     else:
         warnings.warn('Warning...........No Manual Column!')
 
-    wm_anodes = anode_df['label'].str.lower()[wm_elec_ix_manual].tolist()
+    wm_elec_ix_auto += [ind for ind, data in anode_df['gm'].str.lower().items() if data=='white' and pd.isnull(anode_df[manual_key][ind])]
+
+    # consolidate manual and auto detection 
+    wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
+
+    wm_anodes = anode_df['label'].str.lower()[wm_elec_ix].tolist()
 
     # these are the anodes not in white matter
     anode_no_wm = anode_df[(~anode_df.label.str.lower().isin(wm_anodes))]
