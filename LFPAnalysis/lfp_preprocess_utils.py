@@ -1895,7 +1895,7 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, check_epoch_line_noise=True):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, check_epoch_line_noise=True, detrend=None):
 
     # elec_path=None,
     """
@@ -1979,6 +1979,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
         baseline=baseline, 
         tmin=ev_start_s - buf_s, 
         tmax=ev_end_s + buf_s, 
+        detrend=detrend, 
         reject=None, 
         reject_by_annotation=False,
         preload=True)
