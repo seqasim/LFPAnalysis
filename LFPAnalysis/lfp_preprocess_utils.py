@@ -812,9 +812,9 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
     #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
     
-    wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
     if site == 'MSSM':
         oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
+        wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
 
     # # Correct for false negatives in the autodetection that are corrected by manual examination
     # wm_elec_ix_auto = [x for x in wm_elec_ix_auto if x not in false_negatives]
@@ -1745,10 +1745,10 @@ seeg_only=True, check_bad=True):
                     mne_data = mne_data_temp
 
             #Because of the resampling, the end timings might not match perfectly:https://github.com/mne-tools/mne-python/issues/8257
-            if mne_data_resampled[0].tmax > mne_data.tmax:
-                mne_data_resampled[0].crop(tmin=0, tmax=mne_data.tmax)
-            elif mne_data_resampled[0].tmax < mne_data.tmax:
-                mne_data.crop(tmin=0, tmax=mne_data_resampled[0].tmax)
+            if mne_data_resampled[0].times[-1] > mne_data.times[-1]:
+                mne_data_resampled = [x.crop(tmin=0, tmax=mne_data.times[-1]) for x in mne_data_resampled]
+            elif mne_data_resampled[0].times[-1] < mne_data.times[-1]:
+                mne_data.crop(tmin=0, tmax=mne_data_resampled[0].times[-1])
 
             mne_data.add_channels(mne_data_resampled)
 
@@ -2203,7 +2203,8 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
     else:
         warnings.warn('Warning...........No Manual Column!')
 
-    wm_elec_ix_auto += [ind for ind, data in anode_df['gm'].str.lower().items() if data=='white' and pd.isnull(anode_df[manual_key][ind])]
+    if site == 'MSSM':
+        wm_elec_ix_auto += [ind for ind, data in anode_df['gm'].str.lower().items() if data=='white' and pd.isnull(anode_df[manual_key][ind])]
 
     # consolidate manual and auto detection 
     wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
