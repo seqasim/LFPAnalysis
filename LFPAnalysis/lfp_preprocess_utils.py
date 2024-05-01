@@ -105,7 +105,7 @@ def baseline_avg_TFR(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
-def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', 
+def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
@@ -221,7 +221,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
             baseline_corrected = zscored_data
     elif mode == 'zlogratio':
         baseline_corrected = np.log10(data / m) / std
-    
+
     return baseline_corrected
 
 # def baseline_trialwise_TFR_OLD(data=None, baseline_mne=None, mode='zscore', 
@@ -1537,7 +1537,7 @@ def load_elec(elec_path=None, site='MSSM'):
 
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
-seeg_only=True, check_bad=True):
+seeg_only=True, check_bad=False):
     """
     Make a mne object from the data and electrode files, and save out the sync. 
     Following this step, you can indicate bad electrodes manually.
