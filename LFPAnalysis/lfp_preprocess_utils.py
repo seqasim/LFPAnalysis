@@ -2000,8 +2000,8 @@ detrend=None):
             for ev_ in all_nan_evs_: 
                 # ev_ix = ev_ * mne_data_reref.info['sr']
                 # remove 100 ms before 
-                ev_ix_start = (ev_ix - 0.1) * mne_data_reref.info['sr']
-                ev_ix_end = (ev_ix + 0.1) * mne_data_reref.info['sr']
+                ev_ix_start = np.floor((ev_ - 0.1) * mne_data_reref.info['sfreq']).astype(int)
+                ev_ix_end = np.ceil((ev_ + 0.1) * mne_data_reref.info['sfreq']).astype(int)
                 sig[ev_ix_start:ev_ix_end] = np.nan
             
             mne_data_reref._data[ch_ix, :] = sig
