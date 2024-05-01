@@ -15,6 +15,7 @@ from scipy.signal import hilbert, find_peaks, peak_widths, convolve
 import Levenshtein as lev
 import os
 import warnings
+import json
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     """
@@ -1978,6 +1979,12 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
     
     artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
                                             peak_thresh=IED_args['peak_thresh'])
+
+    # save these out as json in the load path 
+    with open(f'{load_path}/IED_sec_dict.json', 'w') as f:
+        json.dump(IED_sec_dict, f)
+    with open(f'{load_path}/artifact_sec_dict.json', 'w') as f:
+        json.dump(artifact_samps_dict, f)
 
     # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
     for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
