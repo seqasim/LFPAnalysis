@@ -1919,7 +1919,10 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, check_epoch_line_noise=True, detrend=None):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, 
+check_epoch_line_noise=True, 
+nan_artifacts_pre_epoch=True,
+detrend=None):
 
     # elec_path=None,
     """
@@ -1980,26 +1983,28 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
     artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
                                             peak_thresh=IED_args['peak_thresh'])
 
-    # save these out as json in the load path 
-    with open(f'{load_path}/IED_sec_dict.json', 'w') as f:
-        json.dump(IED_sec_dict, f)
-    with open(f'{load_path}/artifact_sec_dict.json', 'w') as f:
-        json.dump(artifact_samps_dict, f)
+    # # save these out as json in the load path 
+    # json_path = os.path.dirname(load_path)
+    # with open(f'{json_path}/IED_sec_dict.json', 'w') as f:
+    #     json.dump(IED_sec_dict, f)
+    # with open(f'{json_path}/artifact_sec_dict.json', 'w') as f:
+    #     json.dump(artifact_samps_dict, f)
 
-    # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
-    for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
-        sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
-        ieds_ = list(IED_sec_dict[ch_])
-        artifacts_ = list(artifact_sec_dict[ch_])
-        all_nan_evs_ = ieds_ + artifacts_
-        for ev_ in all_nan_evs_: 
-            # ev_ix = ev_ * mne_data_reref.info['sr']
-            # remove 100 ms before 
-            ev_ix_start = (ev_ix - 0.1) * mne_data_reref.info['sr']
-            ev_ix_end = (ev_ix + 0.1) * mne_data_reref.info['sr']
-            sig[ev_ix_start:ev_ix_end] = np.nan
-        
-        mne_data_reref._data[ch_ix, :] = sig
+    if nan_artifacts_pre_epoch:
+        # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
+        for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
+            sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
+            ieds_ = list(IED_sec_dict[ch_])
+            artifacts_ = list(artifact_sec_dict[ch_])
+            all_nan_evs_ = ieds_ + artifacts_
+            for ev_ in all_nan_evs_: 
+                # ev_ix = ev_ * mne_data_reref.info['sr']
+                # remove 100 ms before 
+                ev_ix_start = (ev_ix - 0.1) * mne_data_reref.info['sr']
+                ev_ix_end = (ev_ix + 0.1) * mne_data_reref.info['sr']
+                sig[ev_ix_start:ev_ix_end] = np.nan
+            
+            mne_data_reref._data[ch_ix, :] = sig
 
 
     # all behavioral times of interest 
@@ -2069,7 +2074,7 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
     #                 reject_by_annotation=False,
     #                 preload=True)
         
-    # NOTE: I don't demean the data for DC offsets. This is mainly because a large artifact (i.e IEDs) would skew and screw us 
+    # NOTE: I don't demean the data for DC offsets. This is mainly because any undetected large artifact would skew and screw us 
     # before any of the following pre-processing steps, which would be hard to detect later.
 
     # Filter and downsample the epochs 
