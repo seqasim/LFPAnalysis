@@ -1975,11 +1975,30 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
                                             peak_thresh=IED_args['peak_thresh'], 
                                             closeness_thresh=IED_args['closeness_thresh'], 
                                             width_thresh=IED_args['width_thresh'])
+    
+    artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
+                                            peak_thresh=IED_args['peak_thresh'])
+
+    # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
+    for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
+        sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
+        ieds_ = list(IED_sec_dict[ch_])
+        artifacts_ = list(artifact_sec_dict[ch_])
+        all_nan_evs_ = ieds_ + artifacts_
+        for ev_ in all_nan_evs_: 
+            # ev_ix = ev_ * mne_data_reref.info['sr']
+            # remove 100 ms before 
+            ev_ix_start = (ev_ix - 0.1) * mne_data_reref.info['sr']
+            ev_ix_end = (ev_ix + 0.1) * mne_data_reref.info['sr']
+            sig[ev_ix_start:ev_ix_end] = np.nan
+        
+        mne_data_reref._data[ch_ix, :] = sig
+
 
     # all behavioral times of interest 
     beh_ts = [(float(x)*slope + offset) if x != 'None' else np.nan for x in behav_times]
 
-    # any NaN's (e.g. non-responses) should be removed. make sur to remove from the dataframes during later analysis too. 
+    # any NaN's (e.g. non-responses) should be removed. make sure to remove from the dataframes during later analysis too. 
     beh_ts = [x for x in beh_ts if ~np.isnan(x)]
 
     # Make behavioral events.
