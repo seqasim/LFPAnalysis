@@ -1079,7 +1079,30 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     # 
     return bad_channels
 
-def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2): 
+def detect_misc_artifacts(mne_data, peak_thresh=5):
+    """
+    This function detects artifacts (sharp transients) in the LFP signal automatically. 
+    
+    """
+    # 1. take the gradient of the signal: 
+    gradient_signal = np.gradient(mne_data.copy()._data, axis=-1)
+
+    # 2. zscore the gradient of the signal:
+    zscored_gradient = zscore(gradient_signal, axis=-1)
+
+    # 3. find where the zscored gradient is above 5
+    artifact_samps = np.where(np.abs(zscored_gradient) >= peak_thresh)
+
+    artifact_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+    artifact_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+
+    for ch_ in mne_data.ch_names:
+        artifact_samps_dict[ch_] = artifact_samps[0][artifact_samps[1] == mne_data.ch_names.index(ch_)]
+        artifact_sec_dict[ch_] = (artifact_samps_dict[ch_] / mne_data.info['sfreq'])
+
+    return artifact_sec_dict
+
+def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
