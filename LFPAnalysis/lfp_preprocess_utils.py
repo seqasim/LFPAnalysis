@@ -1983,28 +1983,31 @@ detrend=None):
     artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
                                             peak_thresh=IED_args['peak_thresh'])
 
-    # # save these out as json in the load path 
-    # json_path = os.path.dirname(load_path)
-    # with open(f'{json_path}/IED_sec_dict.json', 'w') as f:
-    #     json.dump(IED_sec_dict, f)
-    # with open(f'{json_path}/artifact_sec_dict.json', 'w') as f:
-    #     json.dump(artifact_samps_dict, f)
+    # # save these out as pickles in the load path 
+    dict_path = os.path.dirname(load_path)
+    with open(f'{json_path}/IED_sec_dict.json', 'wb') as f:
+        pickle.dump(IED_sec_dict, f, pickle.HIGHEST_PROTOCOL)
+    with open(f'{json_path}/artifact_sec_dict.json', 'wb') as f:
+        pickle.dump(artifact_samps_dict, f, pickle.HIGHEST_PROTOCOL)
 
-    if nan_artifacts_pre_epoch:
-        # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
-        for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
-            sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
-            ieds_ = list(IED_sec_dict[ch_])
-            artifacts_ = list(artifact_sec_dict[ch_])
-            all_nan_evs_ = ieds_ + artifacts_
-            for ev_ in all_nan_evs_: 
-                # ev_ix = ev_ * mne_data_reref.info['sr']
-                # remove 100 ms before 
-                ev_ix_start = np.floor((ev_ - 0.1) * mne_data_reref.info['sfreq']).astype(int)
-                ev_ix_end = np.ceil((ev_ + 0.1) * mne_data_reref.info['sfreq']).astype(int)
-                sig[ev_ix_start:ev_ix_end] = np.nan
+    #  it doesn't make sense to nan the raw data before computations 
+    # instead, let's just save the indices relative to the epochs and nan them after all is said 
+
+    # if nan_artifacts_pre_epoch:
+    #     # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
+    #     for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
+    #         sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
+    #         ieds_ = list(IED_sec_dict[ch_])
+    #         artifacts_ = list(artifact_sec_dict[ch_])
+    #         all_nan_evs_ = ieds_ + artifacts_
+    #         for ev_ in all_nan_evs_: 
+    #             # ev_ix = ev_ * mne_data_reref.info['sr']
+    #             # remove 100 ms before 
+    #             ev_ix_start = np.floor((ev_ - 0.1) * mne_data_reref.info['sfreq']).astype(int)
+    #             ev_ix_end = np.ceil((ev_ + 0.1) * mne_data_reref.info['sfreq']).astype(int)
+    #             sig[ev_ix_start:ev_ix_end] = np.nan
             
-            mne_data_reref._data[ch_ix, :] = sig
+    #         mne_data_reref._data[ch_ix, :] = sig
 
 
     # all behavioral times of interest 
