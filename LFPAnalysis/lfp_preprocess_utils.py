@@ -1917,6 +1917,45 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
     return mne_data_reref
 
+def _bin_channelwise_times_into_behav_evs(channel_dict_seconds, ev_starts, ev_ends):
+    """
+    feed in a dictionary of format {['channel_name']: [time1,...n]}
+    timepoints should be in seconds
+    every key corresponds to a channel in your mne object
+
+    returns a dataframe of these timepoints binned relative to your behavioral epoch of interest
+    useful for detecting artifacts and IEDs in the signal prior to epoching and carrying over those
+    detections to the epoched data
+    
+    ev_starts and ev_ends should be the start and end of each epoch in seconds 
+    """
+    allts = {f'{x}': np.nan for x in channel_dict_seconds.keys()}
+    for key in channel_dict_seconds.keys():
+        timestamps = channel_dict_seconds[key]
+        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
+
+        # Initialize a dictionary to store the assigned timestamps for each time bin
+        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
+
+        # Iterate through each timestamp and assign it to the appropriate time bin
+        for timestamp in timestamps:
+            for bin_index, (start, end) in enumerate(time_bins):
+                if start <= timestamp <= end:
+                    assigned_timestamps[bin_index].append(timestamp)
+                    break
+        allts[key] = assigned_timestamps
+    # Turn the dictionary into a metadata dataframe 
+    event_metadata = pd.DataFrame(columns=list(channel_dict_seconds.keys()), index=np.arange(len(time_bins)))
+    for ch in list(channel_dict_seconds.keys()):
+        for ev, val in allts[ch].items():
+            if len(val) > 1:    
+                event_metadata[ch].loc[ev] = val
+            else:
+                if ~np.isnan(val): 
+                    event_metadata[ch].loc[ev] = val
+    # Replace all nan with Nones 
+    event_metadata.where(pd.notna(event_metadata), None)
+    return event_metadata
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
 ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, 
@@ -1979,15 +2018,22 @@ detrend=None):
                                             peak_thresh=IED_args['peak_thresh'], 
                                             closeness_thresh=IED_args['closeness_thresh'], 
                                             width_thresh=IED_args['width_thresh'])
+
+    # Bin the IED times into the epoched bins
+    ev_starts = [x - ev_start_s for x in beh_ts]
+    ev_ends = [x + ev_end_s for x in beh_ts]
+    dfs = []
+
+                                        
     
     artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
                                             peak_thresh=IED_args['peak_thresh'])
 
     # # save these out as pickles in the load path 
     dict_path = os.path.dirname(load_path)
-    with open(f'{json_path}/IED_sec_dict.json', 'wb') as f:
+    with open(f'{json_path}/IED_sec_dict.pkl', 'wb') as f:
         pickle.dump(IED_sec_dict, f, pickle.HIGHEST_PROTOCOL)
-    with open(f'{json_path}/artifact_sec_dict.json', 'wb') as f:
+    with open(f'{json_path}/artifact_sec_dict.pkl', 'wb') as f:
         pickle.dump(artifact_samps_dict, f, pickle.HIGHEST_PROTOCOL)
 
     #  it doesn't make sense to nan the raw data before computations 
@@ -2098,39 +2144,6 @@ detrend=None):
     #                 event_metadata[ch].loc[ev] = val
 
     
-    # Bin the IED times into the epoched bins
-    ev_starts = [x - ev_start_s for x in beh_ts]
-    ev_ends = [x + ev_end_s for x in beh_ts]
-    dfs = []
-    allts = {f'{x}': np.nan for x in IED_sec_dict.keys()}
-    for key in IED_sec_dict.keys():
-        timestamps = IED_sec_dict[key]
-        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
-
-        # Initialize a dictionary to store the assigned timestamps for each time bin
-        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
-
-        # Iterate through each timestamp and assign it to the appropriate time bin
-        for timestamp in timestamps:
-            for bin_index, (start, end) in enumerate(time_bins):
-                if start <= timestamp <= end:
-                    assigned_timestamps[bin_index].append(timestamp)
-                    break
-        allts[key] = assigned_timestamps
-
-    # Turn the dictionary into a metadata dataframe 
-    event_metadata = pd.DataFrame(columns=list(IED_sec_dict.keys()), index=np.arange(len(time_bins)))
-
-    for ch in list(allts.keys()):
-        for ev, val in allts[ch].items():
-            if len(val) > 1:    
-                event_metadata[ch].loc[ev] = val
-            else:
-                if ~np.isnan(val): 
-                    event_metadata[ch].loc[ev] = val
-
-    # Replace all nan with Nones 
-    event_metadata.where(pd.notna(event_metadata), None)
 
     ev_epochs.metadata = event_metadata
     # rm_baseline_epochs.metadata = event_metadata
