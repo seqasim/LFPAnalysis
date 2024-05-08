@@ -200,25 +200,25 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         baseline_corrected = (data - m) / m 
     elif mode == 'zscore':
         zscored_data = (data - m) / std 
-        if n_baseline_trials == n_data_trials: # Let's also subtract the trialwise baseline mean from the zscored data
-            # ref: (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
+        # if n_baseline_trials == n_data_trials: # Let's also subtract the trialwise baseline mean from the zscored data
+        #     # ref: (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
 
-            m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
-            # 3. Copy the data to every time and event
-            m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+        #     m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
+        #     # 3. Copy the data to every time and event
+        #     m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
 
-            # 4. Do the same for std
-            std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
-            std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+        #     # 4. Do the same for std
+        #     std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
+        #     std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
 
-            zscored_baseline = (baseline_data-m) / std
+        #     zscored_baseline = (baseline_data-m) / std
             
-            m_b = np.nanmean(zscored_baseline, axis=(time_axis, ev_axis))
-            m_b = np.expand_dims(np.expand_dims(m_b, axis=m_b.ndim), axis=0)
-            m_b = np.repeat(np.repeat(m_b, zscored_data.shape[time_axis], axis=time_axis), zscored_data.shape[ev_axis], axis=0)
+        #     m_b = np.nanmean(zscored_baseline, axis=(time_axis, ev_axis))
+        #     m_b = np.expand_dims(np.expand_dims(m_b, axis=m_b.ndim), axis=0)
+        #     m_b = np.repeat(np.repeat(m_b, zscored_data.shape[time_axis], axis=time_axis), zscored_data.shape[ev_axis], axis=0)
             
-            baseline_corrected = zscored_data - m_b
-        else:
+        #     baseline_corrected = zscored_data - m_b
+        # else:
         baseline_corrected = zscored_data
     elif mode == 'zlogratio':
         baseline_corrected = np.log10(data / m) / std
