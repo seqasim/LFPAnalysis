@@ -15,6 +15,7 @@ from scipy.signal import hilbert, find_peaks, peak_widths, convolve
 import Levenshtein as lev
 import os
 import warnings
+import json
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     """
@@ -199,26 +200,26 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
         baseline_corrected = (data - m) / m 
     elif mode == 'zscore':
         zscored_data = (data - m) / std 
-        if n_baseline_trials == n_data_trials: # Let's also subtract the trialwise baseline mean from the zscored data
-            # ref: (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
+        # if n_baseline_trials == n_data_trials: # Let's also subtract the trialwise baseline mean from the zscored data
+        #     # ref: (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5309795/)
 
-            m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
-            # 3. Copy the data to every time and event
-            m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+        #     m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
+        #     # 3. Copy the data to every time and event
+        #     m = np.repeat(np.repeat(m, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
 
-            # 4. Do the same for std
-            std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
-            std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
+        #     # 4. Do the same for std
+        #     std = np.expand_dims(np.expand_dims(std_, axis=std_.ndim), axis=0)
+        #     std = np.repeat(np.repeat(std, baseline_data.shape[time_axis], axis=time_axis), baseline_data.shape[ev_axis], axis=0)
 
-            zscored_baseline = (baseline_data-m) / std
+        #     zscored_baseline = (baseline_data-m) / std
             
-            m_b = np.nanmean(zscored_baseline, axis=(time_axis, ev_axis))
-            m_b = np.expand_dims(np.expand_dims(m_b, axis=m_b.ndim), axis=0)
-            m_b = np.repeat(np.repeat(m_b, zscored_data.shape[time_axis], axis=time_axis), zscored_data.shape[ev_axis], axis=0)
+        #     m_b = np.nanmean(zscored_baseline, axis=(time_axis, ev_axis))
+        #     m_b = np.expand_dims(np.expand_dims(m_b, axis=m_b.ndim), axis=0)
+        #     m_b = np.repeat(np.repeat(m_b, zscored_data.shape[time_axis], axis=time_axis), zscored_data.shape[ev_axis], axis=0)
             
-            baseline_corrected = zscored_data - m_b
-        else:
-            baseline_corrected = zscored_data
+        #     baseline_corrected = zscored_data - m_b
+        # else:
+        baseline_corrected = zscored_data
     elif mode == 'zlogratio':
         baseline_corrected = np.log10(data / m) / std
 
@@ -1079,7 +1080,30 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     # 
     return bad_channels
 
-def detect_IEDs(mne_data, peak_thresh=4, closeness_thresh=0.25, width_thresh=0.2): 
+def detect_misc_artifacts(mne_data, peak_thresh=6):
+    """
+    This function detects artifacts (sharp transients) in the LFP signal automatically. 
+    
+    """
+    # 1. take the gradient of the signal: 
+    gradient_signal = np.gradient(mne_data.copy()._data, axis=-1)
+
+    # 2. zscore the gradient of the signal:
+    zscored_gradient = zscore(gradient_signal, axis=-1)
+
+    # 3. find where the zscored gradient is above 5
+    artifact_samps = np.where(np.abs(zscored_gradient) >= peak_thresh)
+
+    artifact_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+    artifact_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+
+    for ch_ in mne_data.ch_names:
+        artifact_samps_dict[ch_] = artifact_samps[1][artifact_samps[0] == mne_data.ch_names.index(ch_)]
+        artifact_sec_dict[ch_] = (artifact_samps_dict[ch_] / mne_data.info['sfreq'])
+
+    return artifact_sec_dict
+
+def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
     """
     This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
 
@@ -1893,9 +1917,50 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
     return mne_data_reref
 
+def _bin_channelwise_times_into_behav_evs(channel_dict_seconds, ev_starts, ev_ends):
+    """
+    feed in a dictionary of format {['channel_name']: [time1,...n]}
+    timepoints should be in seconds
+    every key corresponds to a channel in your mne object
+
+    returns a dataframe of these timepoints binned relative to your behavioral epoch of interest
+    useful for detecting artifacts and IEDs in the signal prior to epoching and carrying over those
+    detections to the epoched data
+    
+    ev_starts and ev_ends should be the start and end of each epoch in seconds 
+    """
+    allts = {f'{x}': np.nan for x in channel_dict_seconds.keys()}
+    for key in channel_dict_seconds.keys():
+        timestamps = channel_dict_seconds[key]
+        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
+
+        # Initialize a dictionary to store the assigned timestamps for each time bin
+        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
+
+        # Iterate through each timestamp and assign it to the appropriate time bin
+        for timestamp in timestamps:
+            for bin_index, (start, end) in enumerate(time_bins):
+                if start <= timestamp <= end:
+                    assigned_timestamps[bin_index].append(timestamp - start)
+                    break
+        allts[key] = assigned_timestamps
+    # Turn the dictionary into a metadata dataframe 
+    event_metadata = pd.DataFrame(columns=list(channel_dict_seconds.keys()), index=np.arange(len(time_bins)))
+    for ch in list(channel_dict_seconds.keys()):
+        for ev, val in allts[ch].items():
+            if len(val) > 1:    
+                event_metadata[ch].loc[ev] = val
+            else:
+                if ~np.isnan(val): 
+                    event_metadata[ch].loc[ev] = val
+    # Replace all nan with Nones 
+    event_metadata.where(pd.notna(event_metadata), None)
+    return event_metadata
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, check_epoch_line_noise=True, detrend=None):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, 
+nan_artifacts_pre_epoch=True,
+detrend=None):
 
     # elec_path=None,
     """
@@ -1953,11 +2018,46 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
                                             closeness_thresh=IED_args['closeness_thresh'], 
                                             width_thresh=IED_args['width_thresh'])
 
+    artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
+                                            peak_thresh=IED_args['peak_thresh'])                                        
+
     # all behavioral times of interest 
     beh_ts = [(float(x)*slope + offset) if x != 'None' else np.nan for x in behav_times]
 
-    # any NaN's (e.g. non-responses) should be removed. make sur to remove from the dataframes during later analysis too. 
+    # any NaN's (e.g. non-responses) should be removed. make sure to remove from the dataframes during later analysis too. 
     beh_ts = [x for x in beh_ts if ~np.isnan(x)]
+    
+    # Bin these times into the epoched bins
+    ev_starts = [x - ev_start_s for x in beh_ts]
+    ev_ends = [x + ev_end_s for x in beh_ts]
+
+    IED_df = _bin_channelwise_times_into_behav_evs(IED_sec_dict, ev_starts, ev_ends)
+    artifact_df = _bin_channelwise_times_into_behav_evs(artifact_sec_dict, ev_starts, ev_ends)
+
+    # # save these out as csvs in the load path 
+    bads_path = os.path.dirname(load_path)
+    IED_df.to_csv(f'{bads_path}/{behav_name}_IED_df.csv')
+    artifact_df.to_csv(f'{bads_path}/{behav_name}_artifact_df.csv')
+
+    #  it doesn't make sense to nan the raw data before computations 
+    # instead, let's just save the indices relative to the epochs and nan them after all is said 
+
+    # if nan_artifacts_pre_epoch:
+    #     # NaN out the data corresponding to 100 ms before and after each IED and each artifact: 
+    #     for ch_ix, ch_ in enumerate(mne_data_reref.ch_names):  
+    #         sig = mne_data_reref.get_data(picks=[ch_])[0, :]  
+    #         ieds_ = list(IED_sec_dict[ch_])
+    #         artifacts_ = list(artifact_sec_dict[ch_])
+    #         all_nan_evs_ = ieds_ + artifacts_
+    #         for ev_ in all_nan_evs_: 
+    #             # ev_ix = ev_ * mne_data_reref.info['sr']
+    #             # remove 100 ms before 
+    #             ev_ix_start = np.floor((ev_ - 0.1) * mne_data_reref.info['sfreq']).astype(int)
+    #             ev_ix_end = np.ceil((ev_ + 0.1) * mne_data_reref.info['sfreq']).astype(int)
+    #             sig[ev_ix_start:ev_ix_end] = np.nan
+            
+    #         mne_data_reref._data[ch_ix, :] = sig
+
 
     # Make behavioral events.
     onset_beh = beh_ts
@@ -1983,44 +2083,8 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
         reject=None, 
         reject_by_annotation=False,
         preload=True)
-
-    # # Make baseline epochs to use for baselining 
-    # baseline_ts = [(x*slope + offset) for x in baseline_times]
-    # # Make events 
-    # evs = baseline_ts
-    # durs = np.zeros_like(baseline_ts).tolist()
-    # descriptions = ['baseline']*len(baseline_ts)
-    # # Make mne annotations based on these descriptions
-    # annot = mne.Annotations(onset=evs,
-    #                         duration=durs,
-    #                         description=descriptions)
-    # mne_data_reref.set_annotations(annot)
-    # events_from_annot, event_dict = mne.events_from_annotations(mne_data_reref)
-    # rm_baseline_epochs = mne.Epochs(mne_data_reref, 
-    #     events_from_annot, 
-    #     event_id=event_dict, 
-    #     baseline=None, 
-    #     tmin=base_start_s-buf_s, 
-    #     tmax=base_end_s+buf_s, 
-    #     reject=None, 
-    #     preload=True)
-
-    # buf_ix = int(buf_s*ev_epochs.info['sfreq'])
-    # time_baseline = rm_baseline_epochs._data[:, :, buf_ix:-buf_ix]
-
-    # else: 
-    #     # Then baseline according to fixed baseline
-    #     ev_epochs = mne.Epochs(mne_data_reref, 
-    #                 events_from_annot, 
-    #                 event_id=event_dict, 
-    #                 baseline=fixed_baseline, 
-    #                 tmin=pre_s - buf_s, 
-    #                 tmax=post_s + buf_s, 
-    #                 reject=None, 
-    #                 reject_by_annotation=False,
-    #                 preload=True)
         
-    # NOTE: I don't demean the data for DC offsets. This is mainly because a large artifact (i.e IEDs) would skew and screw us 
+    # NOTE: I don't demean the data for DC offsets. This is mainly because any undetected large artifact would skew and screw us 
     # before any of the following pre-processing steps, which would be hard to detect later.
 
     # Filter and downsample the epochs 
@@ -2028,145 +2092,97 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
         ev_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
         # rm_baseline_epochs.resample(sfreq=ev_epochs.info['sfreq']/downsamp_factor)
 
-    # # Let's make METADATA to assign each event some features, including IEDs. Add behavior on your own
+    # # 1/19/24: Let's also look for noisy epochs, which can persist even after notch filtering the whole session. 
+    # if check_epoch_line_noise == True:
+    #     notch_freqs = [120, 180, 240] 
+    #     notch_ranges = np.concatenate([np.arange(x-3,x+4) for x in notch_freqs]).flatten().tolist()
+    #     noisy_epochs_dict = {f'{x}':np.nan for x in ev_epochs.ch_names}
 
-    # event_metadata = pd.DataFrame(columns=list(IED_times_s.keys()), index=np.arange(len(evs)))
+    #     for ch_ in ev_epochs.ch_names:
+    #         sig = ev_epochs.get_data(picks=[ch_])[:,0,:]
+    #         noise_evs = []
+    #         # compute the power spectrum
+    #         freqs, psds = compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
 
-    # for ch in list(IED_times_s.keys()):
-    #     for ev, val in IED_times_s[ch].items():
-    #         if len(val) > 1:    
-    #             event_metadata[ch].loc[ev] = val
-    #         else:
-    #             if ~np.isnan(val): 
-    #                 event_metadata[ch].loc[ev] = val
-
-    
-    # Bin the IED times into the epoched bins
-    ev_starts = [x - ev_start_s for x in beh_ts]
-    ev_ends = [x + ev_end_s for x in beh_ts]
-    dfs = []
-    allts = {f'{x}': np.nan for x in IED_sec_dict.keys()}
-    for key in IED_sec_dict.keys():
-        timestamps = IED_sec_dict[key]
-        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
-
-        # Initialize a dictionary to store the assigned timestamps for each time bin
-        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
-
-        # Iterate through each timestamp and assign it to the appropriate time bin
-        for timestamp in timestamps:
-            for bin_index, (start, end) in enumerate(time_bins):
-                if start <= timestamp <= end:
-                    assigned_timestamps[bin_index].append(timestamp)
-                    break
-        allts[key] = assigned_timestamps
-
-    # Turn the dictionary into a metadata dataframe 
-    event_metadata = pd.DataFrame(columns=list(IED_sec_dict.keys()), index=np.arange(len(time_bins)))
-
-    for ch in list(allts.keys()):
-        for ev, val in allts[ch].items():
-            if len(val) > 1:    
-                event_metadata[ch].loc[ev] = val
-            else:
-                if ~np.isnan(val): 
-                    event_metadata[ch].loc[ev] = val
-
-    # Replace all nan with Nones 
-    event_metadata.where(pd.notna(event_metadata), None)
-
-    ev_epochs.metadata = event_metadata
-    # rm_baseline_epochs.metadata = event_metadata
-    # event_metadata
-
-    # 1/19/24: Let's also look for noisy epochs, which can persist even after notch filtering the whole session. 
-    if check_epoch_line_noise == True:
-        notch_freqs = [60] 
-        notch_ranges = np.concatenate([np.arange(x-3,x+4) for x in notch_freqs]).flatten().tolist()
-        noisy_epochs_dict = {f'{x}':np.nan for x in ev_epochs.ch_names}
-
-        for ch_ in ev_epochs.ch_names:
-            sig = ev_epochs.get_data(picks=[ch_])[:,0,:]
-            noise_evs = []
-            # compute the power spectrum
-            freqs, psds = compute_spectrum(sig, ev_epochs.info['sfreq'], method='welch', avg_type='median')
-
-            for event in np.arange(sig.shape[0]):
-                # Find peaks in the power spectrum
-                peaks, _ = find_peaks(np.log10(psds[event, :]), prominence=1.)  # Adjust threshold as needed
-                peak_freqs = freqs[peaks]
-                # do they intersect with noise ranges?
-                intersection = set(peak_freqs) & set(notch_ranges)
-                if intersection:
-                    noise_evs.append(event)
-            ev_epochs.metadata.loc[noise_evs, ch_] = 'noise'
-            # noisy_epochs_dict[ch_] = noise_evs
+    #         for event in np.arange(sig.shape[0]):
+    #             # Find peaks in the power spectrum
+    #             peaks, _ = find_peaks(np.log10(psds[event, :]), prominence=3.)  # Adjust threshold as needed
+    #             peak_freqs = freqs[peaks]
+    #             # do they intersect with noise ranges?
+    #             intersection = set(peak_freqs) & set(notch_ranges)
+    #             if intersection:
+    #                 noise_evs.append(event)
+    #         # ev_epochs.metadata.loc[noise_evs, ch_] = 'noise'
+    #         noisy_epochs_dict[ch_] = noise_evs
+    #     noise_df = pd.DataFrame    
+    #     # save out the noisy epochs 
+    #     noise_df.to_csv(f'{bads_path}/noise_df.csv')
 
     return ev_epochs
 
-def get_bad_epochs_by_chan(epochs):
-    """
-    Most of the time, we will want to simply identify all the bad epochs (IED, 60Hz) on a given channel to exclude from analysis.
-    If for some reason you need to split this by category of bad channel, rewrite.
-    """
+# def get_bad_epochs_by_chan(epochs):
+#     """
+#     Some of the time, we will want to simply identify all the bad epochs (IED, 60Hz) on a given channel to exclude from analysis.
+#     If for some reason you need to split this by category of bad channel, rewrite.
+#     """
      
-    good_epochs = {f'{x}': np.nan for x in epochs.ch_names}
-    bad_epochs = {f'{x}': np.nan for x in epochs.ch_names}
+#     good_epochs = {f'{x}': np.nan for x in epochs.ch_names}
+#     bad_epochs = {f'{x}': np.nan for x in epochs.ch_names}
 
-    for ch_ix, ch_name in enumerate(epochs.ch_names):
-        ch_data = epochs._data[:, ch_ix:ch_ix+1, :]
-        bad_epochs[ch_name] = np.where(epochs.metadata[epochs.ch_names[ch_ix]].notnull())[0]
-        good_epochs[ch_name] = np.delete(np.arange(ch_data.shape[0]), bad_epochs[ch_name])
+#     for ch_ix, ch_name in enumerate(epochs.ch_names):
+#         ch_data = epochs._data[:, ch_ix:ch_ix+1, :]
+#         bad_epochs[ch_name] = np.where(epochs.metadata[epochs.ch_names[ch_ix]].notnull())[0]
+#         good_epochs[ch_name] = np.delete(np.arange(ch_data.shape[0]), bad_epochs[ch_name])
 
-    return good_epochs, bad_epochs
+#     return good_epochs, bad_epochs
 
-def get_bad_epochs_annot(epochs): 
-    """
-    We might want to extract the annotations for the bad epochs so we can make mne objects out of just them
-    """
+# def get_bad_epochs_annot(epochs): 
+#     """
+#     We might want to extract the annotations for the bad epochs so we can make mne objects out of just them
+#     """
 
-    onset_60Hz = [] 
-    duration_60Hz = [] 
-    descriptions_60Hz = [] 
-    ch_names_60Hz = []
+#     onset_60Hz = [] 
+#     duration_60Hz = [] 
+#     descriptions_60Hz = [] 
+#     ch_names_60Hz = []
 
-    onset_IED = [] 
-    duration_IED = [] 
-    descriptions_IED = [] 
-    ch_names_IED = []
+#     onset_IED = [] 
+#     duration_IED = [] 
+#     descriptions_IED = [] 
+#     ch_names_IED = []
 
-    # Make bad events.
-    for ch_ix, ch_name in enumerate(epochs.ch_names):
-        # find categories of bad events
-        bad_events_60Hz = np.where(epochs.metadata[ch_name]=='noise')[0]
-        nbad_60Hz = len(bad_events_60Hz)
-        if nbad_60Hz > 0:
-            onset_60Hz+=behav_times[bad_events_60Hz].values.tolist()
-            duration_60Hz+=np.zeros_like(bad_events_60Hz).tolist()
-            descriptions_60Hz+=['bad_events_60Hz'] * nbad_60Hz
-            ch_names_60Hz+=[[ch_name] for x in range(nbad_60Hz)]
+#     # Make bad events.
+#     for ch_ix, ch_name in enumerate(epochs.ch_names):
+#         # find categories of bad events
+#         bad_events_60Hz = np.where(epochs.metadata[ch_name]=='noise')[0]
+#         nbad_60Hz = len(bad_events_60Hz)
+#         if nbad_60Hz > 0:
+#             onset_60Hz+=behav_times[bad_events_60Hz].values.tolist()
+#             duration_60Hz+=np.zeros_like(bad_events_60Hz).tolist()
+#             descriptions_60Hz+=['bad_events_60Hz'] * nbad_60Hz
+#             ch_names_60Hz+=[[ch_name] for x in range(nbad_60Hz)]
 
-        bad_events_IED = np.where(epochs.metadata[ch_name].apply(lambda x: isinstance(x, list)))[0]
-        nbad_IED = len(bad_events_IED)
-        if nbad_IED > 0:
-            onset_IED+=behav_times[bad_events_IED].values.tolist()
-            duration_IED+=np.zeros_like(bad_events_IED).tolist()
-            descriptions_IED+=['bad_events_IED'] * nbad_IED
-            ch_names_IED+=[[ch_name] for x in range(nbad_IED)]
+#         bad_events_IED = np.where(epochs.metadata[ch_name].apply(lambda x: isinstance(x, list)))[0]
+#         nbad_IED = len(bad_events_IED)
+#         if nbad_IED > 0:
+#             onset_IED+=behav_times[bad_events_IED].values.tolist()
+#             duration_IED+=np.zeros_like(bad_events_IED).tolist()
+#             descriptions_IED+=['bad_events_IED'] * nbad_IED
+#             ch_names_IED+=[[ch_name] for x in range(nbad_IED)]
 
-    # merge all events and remake the epochs: 
-    bad_onsets =  onset_60Hz + onset_IED
-    bad_duration = duration_60Hz + duration_IED
-    bad_descriptions =  descriptions_60Hz + descriptions_IED
-    bad_ch_names = ch_names_60Hz + ch_names_IED
+#     # merge all events and remake the epochs: 
+#     bad_onsets =  onset_60Hz + onset_IED
+#     bad_duration = duration_60Hz + duration_IED
+#     bad_descriptions =  descriptions_60Hz + descriptions_IED
+#     bad_ch_names = ch_names_60Hz + ch_names_IED
 
-    # Make mne annotations based on these descriptions
-    revised_annot = mne.Annotations(onset=bad_onsets,
-                            duration=bad_duration,
-                            description=bad_descriptions,
-                            ch_names=bad_ch_names)
+#     # Make mne annotations based on these descriptions
+#     revised_annot = mne.Annotations(onset=bad_onsets,
+#                             duration=bad_duration,
+#                             description=bad_descriptions,
+#                             ch_names=bad_ch_names)
 
-    return revised_annot
+#     return revised_annot
 
 def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
 
