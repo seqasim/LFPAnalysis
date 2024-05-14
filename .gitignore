@@ -1,5 +1,4 @@
 # repo specific files we don't need to include 
-data
 scripts/Condensed Notebook Memory-Bandit.ipynb
 
 # Jupyter Notebook
