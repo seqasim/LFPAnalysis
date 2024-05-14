@@ -3,6 +3,8 @@ scripts/Condensed Notebook Memory-Bandit.ipynb
 
 # Jupyter Notebook
 .ipynb_checkpoints
+LFPAnalysis/.ipynb_checkpoints
+scripts/.ipynb_checkpoints
 
 # IPython
 profile_default/
@@ -10,6 +12,7 @@ ipython_config.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+LFPAnalysis/__pycache__
 *.py[cod]
 *$py.class
 
