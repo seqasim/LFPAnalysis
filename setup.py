@@ -27,5 +27,9 @@ setup(
     url=github_url,
     author=', '.join(authors), 
     packages=find_packages(),   
+    package_data={'your_package': ['data/*']},
+    include_package_data=True,
     install_requires=required,
 )
+
+    
