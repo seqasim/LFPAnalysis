@@ -176,9 +176,9 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_
 
     # concatenate acording to (n_channels, n_freqs)
     if include_epoch_in_baseline:
-        include_epoch_in_baseline = np.concatenate((reshaped_baseline, reshaped_data), axis=-1) 
+        baseline_data_concat = np.concatenate((reshaped_baseline, reshaped_data), axis=-1) 
     else: 
-        include_epoch_in_baseline = reshaped_baseline
+        baseline_data_concat = reshaped_baseline
 
     # Compute mean and std across all time points for each frequency and electrode
     m_ = np.nanmean(baseline_data_concat, axis=-1)
