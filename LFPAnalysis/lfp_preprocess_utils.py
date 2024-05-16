@@ -106,7 +106,7 @@ def baseline_avg_TFR(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
-def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
+def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_epoch_in_baseline=True,
                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
     
     """
@@ -175,7 +175,10 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore',
     reshaped_data = data.transpose(elec_axis, freq_axis, time_axis, ev_axis).reshape(n_channels, n_freqs, n_data_times * n_data_trials)
 
     # concatenate acording to (n_channels, n_freqs)
-    baseline_data_concat = np.concatenate((reshaped_baseline, reshaped_data), axis=-1) 
+    if include_epoch_in_baseline:
+        include_epoch_in_baseline = np.concatenate((reshaped_baseline, reshaped_data), axis=-1) 
+    else: 
+        include_epoch_in_baseline = reshaped_baseline
 
     # Compute mean and std across all time points for each frequency and electrode
     m_ = np.nanmean(baseline_data_concat, axis=-1)
