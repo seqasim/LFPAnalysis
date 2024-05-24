@@ -27,7 +27,7 @@ setup(
     url=github_url,
     author=', '.join(authors), 
     packages=find_packages(),   
-    package_data={'your_package': ['data/*']},
+    package_data={'LFPAnalysis': ['data/*']},
     include_package_data=True,
     install_requires=required,
 )
