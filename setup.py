@@ -27,7 +27,7 @@ setup(
     url=github_url,
     author=', '.join(authors), 
     packages=find_packages(),   
-    package_data={'LFPAnalysis': ['data/*', 'LFPAnalysis/.xlsx']},
+    package_data={'LFPAnalysis': ['data/*', 'LFPAnalysis/*.xlsx']},
     include_package_data=True,
     install_requires=required,
 )
