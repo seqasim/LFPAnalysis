@@ -96,7 +96,7 @@ def baseline_avg_TFR(data, baseline, mode='zscore'):
     elif mode == 'ratio':
         baseline_corrected = data / m
     elif mode == 'logratio':
-        baseline_corrected = np.log10(data / m)
+        baseline_corrected = 10 * np.log10(data / m)
     elif mode == 'percent':
         baseline_corrected = (data - m) / m 
     elif mode == 'zscore':
@@ -198,7 +198,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_
     elif mode == 'ratio':
         baseline_corrected = data / m
     elif mode == 'logratio':
-        baseline_corrected = np.log10(data / m)
+        baseline_corrected = 10 * np.log10(data / m)
     elif mode == 'percent':
         baseline_corrected = (data - m) / m 
     elif mode == 'zscore':
