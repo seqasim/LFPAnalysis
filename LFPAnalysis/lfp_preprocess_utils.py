@@ -1727,12 +1727,20 @@ seeg_only=True, check_bad=False):
             ncs_files = glob(f'{load_path}/LFP*.ncs')
 
             # load the connection table .csv
-            connect_table_path = glob(f'{elec_path}/*Connection*Table*.csv')[0]
+            connect_table_path = glob(f'{elec_path}/*Connection*Table*.csv')
             if not connect_table_path: 
-                print('Manually enter the path to the Iowa connection table:')
-                connect_table_path = glob(input())
+                elec_table_path = glob(f'{elec_path}/*_KN.xlsx')[0]
+                seeg_names = iowa_utils.extract_names_elec_table(elec_table_path)
+                eeg_names = None
+                resp_names = None
+                ekg_names = None 
+                drop_names = None
+                # print('Manually enter the path to the Iowa connection table:')
+                # connect_table_path = glob(input())
+            else:
+                connect_table_path = connect_table_path[0]
+                eeg_names, resp_names, ekg_names, seeg_names, drop_names = iowa_utils.extract_names_connect_table(connect_table_path)
 
-            eeg_names, resp_names, ekg_names, seeg_names, drop_names = iowa_utils.extract_names_connect_table(connect_table_path)
         if not seeg_names: 
             raise NameError('no seeg channels specified')
         else:

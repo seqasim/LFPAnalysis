@@ -1,6 +1,7 @@
 import pandas as pd 
 import numpy as np 
 from itertools import chain
+from LFPAnalysis import lfp_preprocess_utils
 
 def extract_names_connect_table(connect_table_path):
     """
@@ -94,6 +95,20 @@ def extract_names_connect_table(connect_table_path):
 
     return eeg_names, resp_names, ekg_names, seeg_names, drop_names
 
+def extract_names_elec_table(elec_table_path):
+    """
+    In some instances we just have Kiril's electrode table. In this case, we need a different extractor for 
+    the data 
+    """
+
+    elec_data = lfp_preprocess_utils.load_elec(elec_table_path, site='UI')
+
+    seeg_chs = elec_data[elec_data.ElectrodeType=='Depth'].Channel.values
+
+    seeg_names = [f'LFPx{ch}'.lower() for ch in seeg_chs]
+
+    return seeg_names
+
 # def rename_mne_channels(mne_data, connect_table_path):
 #     """ 
 #     """ 
@@ -119,7 +134,7 @@ def extract_names_connect_table(connect_table_path):
 
 #     return mapping_name
 
-def rename_men_channels(mne_data, location_table_path):
+def rename_mne_channels(mne_data, location_table_path):
     """
     """
 
