@@ -1469,7 +1469,8 @@ def load_elec(elec_path=None, site='MSSM'):
             # KN excel files: 
             elec_data_all_sheets = pd.read_excel(elec_path, sheet_name=None)
             # Grab the most recent sheet in the dataframe
-            elec_data = elec_data_all_sheets[list(elec_data_all_sheets.keys())[-1]]
+            sheets = [x for x in list(elec_data_all_sheets.keys()) if 'notes' not in x.lower()]
+            elec_data = elec_data_all_sheets[sheets[-1]]
             elec_data.dropna(subset=['Contact'], inplace=True)
             elec_data.reset_index(drop=True, inplace=True)
 
