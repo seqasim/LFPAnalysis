@@ -391,7 +391,7 @@ def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, freqs):
     for chan_name in allts.keys():
         for epoch in allts[chan_name].keys(): 
             if allts[chan_name][epoch]: # if not empty
-                tfr = np.squeeze(epoched_data.copy().pick_channels([chan_name])[0]._data)
+                tfr = np.squeeze(epoched_data.copy().pick([chan_name])[0]._data)
                 for ix, ripple in enumerate(allts[chan_name][epoch]):
                     spectral_data = np.nanmean(tfr[:, ripple[0]:ripple[1]], axis=1)
                     peaks = scipy.signal.find_peaks(spectral_data)[0]
@@ -757,11 +757,11 @@ def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, 
 
     # First, compute FOOOF across all trials
                 
-    ev_dict = {'feedback_start': [-0.5, 1.5]}
+    # ev_dict = {'feedback_start': [-0.5, 1.5]}
 
     dfs = []
     # Can pick the epoch depending on the event being selected
-    chan_epochs = MNE_object.copy().pick_channels([chan_name])
+    chan_epochs = MNE_object.copy().pick([chan_name])
 
     # FOOOF across all trials: 
     FOOOFGroup_res, df_all = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event_name][0], tmax=ev_dict[event_name][1], 
@@ -779,7 +779,7 @@ def compute_FOOOF_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, 
     df_conds = []
     for cond in conditions: 
 
-        chan_epochs = MNE_object[cond].copy().pick_channels([chan_name])
+        chan_epochs = MNE_object[cond].copy().pick([chan_name])
 
         FOOOFGroup_res, df_temp = FOOOF_compute_epochs(chan_epochs, tmin=ev_dict[event_name][0], tmax=ev_dict[event_name][1], 
                                                         band_dict=band_dict, **kwargs)
