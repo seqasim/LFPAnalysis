@@ -1,7 +1,5 @@
 # repo specific files we don't need to include 
 scripts/Condensed Notebook Memory-Bandit.ipynb
-LFPAnalysis/Subject.py
-LFPAnalysis/Task.py
 
 # Jupyter Notebook
 .ipynb_checkpoints
