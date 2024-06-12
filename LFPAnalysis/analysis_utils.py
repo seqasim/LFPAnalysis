@@ -472,10 +472,11 @@ def FOOOF_compute_epochs(epochs, tmin=0, tmax=1.5, **kwargs):
                                                 tmax=tmax,
                                                 verbose=False)
                                                 
-    psds, freqs = epo_spectrum.get_data(return_freqs=True)
+    psds = epo_spectrum._data
+    freqs = epo_spectrum.freqs
             
     # average across epochs
-    psd_trial_avg = np.average(psds, axis=0) 
+    psd_trial_avg = np.nanmean(psds, axis=0)
 
     # Initialize a FOOOFGroup object, with desired settings
     FOOOFGroup_res = FOOOFGroup(peak_width_limits=kwargs['peak_width_limits'], 
