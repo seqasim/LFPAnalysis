@@ -24,7 +24,14 @@ def select_rois_picks(elec_data, chan_name, manual_col='collapsed_manual'):
     """
 
     # Load the YBA ROI labels, custom assigned by Salman: 
-    file_path = pkg_resources.resource_filename('LFPAnalysis', 'data/YBA_ROI_labelled.xlsx')
+    # file_path = pkg_resources.resource_filename('LFPAnalysis', 'data/YBA_ROI_labelled.xlsx')
+    # Get the path to the data directory
+    data_dir = pkg_resources.resource_filename('LFPAnalysis', '../data')
+
+    # Construct the full path to your file
+    file_path = os.path.join(data_dir, 'YBA_ROI_labelled.xlsx')
+
+    print(file_path)
     YBA_ROI_labels = pd.read_excel(file_path)
     YBA_ROI_labels['Long.name'] = YBA_ROI_labels['Long.name'].str.lower().str.replace(" ", "")
 
