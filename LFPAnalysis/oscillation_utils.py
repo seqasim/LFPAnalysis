@@ -394,7 +394,7 @@ def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cyc
                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                     rank=None, 
-                    gc_n_lags=7, 
+                    gc_n_lags=gc_n_lags, 
                     buf_ms=buf_ms, 
                     avg_over_dim='time')
             
@@ -413,7 +413,7 @@ def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cyc
                                     padding=(buf_ms / 1000), 
                                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                                     rank=None, 
-                                    gc_n_lags=7,
+                                    gc_n_lags=gc_n_lags,
                                     verbose='warning').get_data())
     
     if n_pairs == 1:
@@ -433,7 +433,8 @@ def compute_connectivity(mne_data=None,
                         avg_over_dim='time',
                         n_surr=500,
                         parallelize=False,
-                        band1=None):
+                        band1=None,
+                        gc_n_lags=7):
     """
     Compute different connectivity metrics using mne.
     :param eeg_mne: MNE formatted EEG
@@ -630,7 +631,7 @@ def compute_connectivity(mne_data=None,
                             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                             rank=None, 
-                            gc_n_lags=7, 
+                            gc_n_lags=gc_n_lags, 
                             buf_ms=buf_ms, 
                             avg_over_dim='time')
                     
@@ -649,7 +650,7 @@ def compute_connectivity(mne_data=None,
                                                     padding=(buf_ms / 1000), 
                                                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                                                     rank=None,
-                                                    gc_n_lags=7,
+                                                    gc_n_lags=gc_n_lags,
                                                     verbose='warning').get_data())
                 # This returns an array of shape (n_events, n_pairs) 
                 # where n_pairs is the number of pairs of channels in indices
@@ -706,7 +707,7 @@ def compute_connectivity(mne_data=None,
                                                     fmin=band[0], fmax=band[1], faverage=True, 
                                                     padding=(buf_ms / 1000), 
                                                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-                                                    gc_n_lags=7,
+                                                    gc_n_lags=gc_n_lags,
                                                     verbose='warning').get_data())
                         
                         if n_pairs == 1:
