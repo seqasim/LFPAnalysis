@@ -9,8 +9,109 @@ from tqdm import tqdm
 # from joblib import Parallel, delayed
 from multiprocessing import Pool
 
+import patsy
+from statsmodels.api import OLS
+import tqdm
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 import warnings 
 warnings.filterwarnings('ignore')
+
+def fit_permuted_model(y_permuted, X):
+    """
+    Convenience function for running backend OLS with surrogates
+    """
+    return OLS(y_permuted, X).fit().params
+
+def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=False):
+    """
+
+    A quick way to perform single-electrode regression with many permutations: 
+    # Example usage:
+    # data = pd.DataFrame({'y': y, 'x1': x1, 'x2': x2, 'category': ['A', 'B', 'A', 'B', ...]})
+    # formula = 'y ~ x1 + x2 + C(category)'
+    # results = permutation_regression_zscore(data, formula, plot_res=True)
+    # print(results)
+
+    """
+    # Perform original regression
+    y, X = patsy.dmatrices(formula, data, return_type='dataframe')
+    original_model = OLS(y, X).fit()
+    
+    # Extract original coefficients
+    original_params = original_model.params
+    
+    # Prepare data for permutations
+    y_values = y.values.ravel()
+    X_values = X.values
+    
+    # Perform permutations
+    permuted_params = []
+    permuted_y_values = []
+    for _ in tqdm(range(n_permutations), desc="Permutations"):
+        y_permuted = np.random.permutation(y_values)
+        permuted_params.append(fit_permuted_model(y_permuted, X_values))
+        permuted_y_values.append(y_permuted)
+    
+    # Convert to numpy array for faster computations
+    permuted_params = np.array(permuted_params)
+    
+    # Compute z-scores
+    permuted_means = np.mean(permuted_params, axis=0)
+    permuted_stds = np.std(permuted_params, axis=0)
+    z_scores = (original_params - permuted_means) / permuted_stds
+    
+    # Compute p-values from z-scores
+    p_values = 2 * (1 - stats.norm.cdf(np.abs(z_scores)))
+    
+    # Prepare results
+    results = pd.DataFrame({
+        'Original_Estimate': original_params,
+        'Permuted_Mean': permuted_means,
+        'Permuted_Std': permuted_stds,
+        'Z_Score': z_scores,
+        'P_Value': p_values
+    })
+    
+    # Plotting
+    if plot_res:
+        features = [col for col in X.columns if col != 'Intercept']
+        n_features = len(features)
+        fig, axes = plt.subplots(n_features, 1, figsize=(3*n_features, 3*n_features), squeeze=False, dpi=300)
+        
+        for i, feature in enumerate(features):
+            ax = axes[i, 0]
+            
+            # Plot permuted data first (in black)
+            for j in range(min(100, n_permutations)):  # Limit to 100 permutations for clarity
+                sns.regplot(x=X[feature], y=permuted_y_values[j], ax=ax, scatter=False,
+                            line_kws={'color': 'black', 'alpha': 0.05}, ci=None)
+            
+            # Plot original data (in red)
+            sns.regplot(x=X[feature], y=y_values, ax=ax, scatter_kws={'alpha': 0.5}, 
+                        line_kws={'color': 'red', 'label': 'Original'}, ci=None)
+            
+            # Add z-score and p-value to the plot
+            orig_param = original_params[i+1]
+            z_score = z_scores[i+1]
+            p_value = p_values[i+1]
+            ax.text(0.05, 0.95, f'Beta: {orig_param:.2f}\nZ-score: {z_score:.2f}\np-value: {p_value:.3f}', 
+                    transform=ax.transAxes, verticalalignment='top', 
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            ax.set_title(f'{feature} vs y')
+            ax.legend()
+            
+            # Despine the plot
+            sns.despine(ax=ax)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    return results
+
+
 
 def time_resolved_regression(timeseries, regressors, win_len=100, slide_len=25, standardize=True, sr=None): 
     """
