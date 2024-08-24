@@ -361,7 +361,7 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
     return surr_conn
 
 
-def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms):
+def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags=15):
 
     n_pairs = len(indices[0])
     data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
@@ -671,7 +671,7 @@ def compute_connectivity(mne_data=None,
                 if parallelize == True:
                     def _process_surrogate_time(ns):
                         print(f'Computing surrogate # {ns} - parallel')
-                        surrogate_result = compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms)
+                        surrogate_result = compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags)
                         return surrogate_result
 
                     surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
