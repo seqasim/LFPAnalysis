@@ -11,9 +11,10 @@ from multiprocessing import Pool
 
 import patsy
 from statsmodels.api import OLS
-import tqdm
+from tqdm import tqdm
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy import stats
 
 import warnings 
 warnings.filterwarnings('ignore')
@@ -111,9 +112,9 @@ def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=F
     
     return results
 
-
-
-def time_resolved_regression(timeseries, regressors, win_len=100, slide_len=25, standardize=True, sr=None): 
+def time_resolved_regression_single_channel(timeseries=None, regressors=None, 
+                             win_len=100, slide_len=25,
+                             standardize=True, smooth=False, permute=False):
     """
     In this function, if you provide a 2D array of z-scored time-varying neural data and a sert of regressors, 
     this function will run a time-resolved generalized linear model with the provided regressor dataframe. 
@@ -135,49 +136,47 @@ def time_resolved_regression(timeseries, regressors, win_len=100, slide_len=25, 
         Step size for the time-resolved regression.
     standardize : bool
         Whether to standardize the regressors. The default is True.
-    sr : int
-        Sampling rate of the data. The default is None.
+    standardize : bool
+        Whether to bin the timeseries according to win_len and slide_len. The default is Fault.
     """
 
-    # Smooth the timeseries (easier to do here than to store smoothed data)
-    smoothed_data = np.zeros([timeseries.shape[0], (timeseries.shape[1] // slide_len) - (win_len//slide_len - 1)])
-    for trial in range(timeseries.shape[0]):
-        smoothed_data[trial, :] = [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
-
-    # Standardize the regressors: 
+    # Optional: standardize the regressors
     if standardize:
-        # slight twist on the zscore for regression: http://www.stat.columbia.edu/~gelman/research/published/standardizing7.pdf
-        # sp.stats.zscore(x)
-        regressors = regressors.apply(lambda x: (x - np.nanmean(x))/(2*np.nanstd(x)) )
+        regressors = regressors.apply(lambda x: (x - np.nanmean(x))/(2*np.nanstd(x)))
 
+    # Optional: bin the data
+    if smooth: 
+        # Smooth the timeseries (easier to do here than to store smoothed data)
+        sig = np.zeros([signal.shape[0], (signal.shape[1] // slide_len) - (win_len//slide_len - 1)])
+        for trial in range(signal.shape[0]):
+            sig[trial, :] = [np.nanmean(signal[trial, i:i+win_len]) for i in range(0, signal.shape[1], slide_len) if i+win_len <= signal.shape[1]]
+    else:
+        sig = signal
 
-    # Stack all the predictors:
-    X = np.column_stack([regressors.values])
-    X = sm.add_constant(X)
-
-    beta_coefficients_array = []
-    for ts in range(smoothed_data.shape[1]):
-        model = sm.OLS(smoothed_data[:, ts], X)
-        results = model.fit()
-        # Extract beta coefficients and store them
-        beta_coefficients_array.append(results.params)
+    all_res = []
+    # write the regression formula
+    formula = f'sig ~ 1+'+'+'.join(regressor.keys())
+    for ts in range(sig.shape[-1]):
+        regressors['sig'] = sig[:, ts]
+        if permute:
+            results = permutation_regression_zscore(regressors,
+            formula,
+            n_permutations=500, 
+            plot_res=False)
+            results['ts'] = ts
+        else:
+            y, X = patsy.dmatrices(formula, regressors, return_type='dataframe')
+            original_model = OLS(y, X).fit()
+            # Prepare results
+            results = pd.DataFrame({
+                'Original_Estimate': original_model.params,
+                'Original_BSE': original_model.bse,
+                'P_Value': original_model.pvalues,
+                'ts':ts
+            })
+        all_res.append(results)
         
-    beta_coefficients_array = np.array(beta_coefficients_array)
-
-    regress_df = pd.DataFrame(columns=regressors.keys())
-
-    # skip the intercept
-    regress_df[f'Intercept']= beta_coefficients_array[:, 0]
-    # add the data: 
-    for ix, feature in enumerate(regressors.keys()):
-        # skip the intercept
-        regress_df[f'{feature}']= beta_coefficients_array[:, ix+1]
-
-    regress_df['sample'] = np.arange(0, timeseries.shape[1] - (win_len), slide_len) + win_len/2
-    if sr is not None:
-        regress_df['ts'] = regress_df['sample'] * (1000/sr)
-    
-    return regress_df
+    return pd.concat(all_res)
 
 def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100, slide_len=25, standardize=True, sr=None, nsurr=500):
 
