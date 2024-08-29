@@ -114,7 +114,7 @@ def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=F
 
 def time_resolved_regression_single_channel(timeseries=None, regressors=None, 
                              win_len=100, slide_len=25,
-                             standardize=True, smooth=False, permute=False):
+                             standardize=True, smooth=False, permute=False, sr=500):
     """
     In this function, if you provide a 2D array of z-scored time-varying neural data and a sert of regressors, 
     this function will run a time-resolved generalized linear model with the provided regressor dataframe. 
@@ -138,6 +138,8 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
         Whether to standardize the regressors. The default is True.
     standardize : bool
         Whether to bin the timeseries according to win_len and slide_len. The default is Fault.
+    sr: int
+        sampling rate to determine the proper timing of the resulting timeseries of coefficients
     """
 
     # Optional: standardize the regressors
@@ -146,10 +148,13 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
 
     # Optional: bin the data
     if smooth: 
+        slices = np.lib.stride_tricks.sliding_window_view(np.arange(timeseries.shape[-1]), win_len)[::slide_len]
+        midpoints = np.ceil(np.mean(slices, axis=1))
         # Smooth the timeseries (easier to do here than to store smoothed data)
-        sig = np.zeros([timeseries.shape[0], (timeseries.shape[1] // slide_len) - (win_len//slide_len - 1)])
-        for trial in range(timeseries.shape[0]):
-            sig[trial, :] = [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
+        sig = np.zeros([timeseries.shape[0], slices.shape[0]])
+        for stride in range(slices.shape[0]):
+            sig[:, stride] = np.nanmean(timeseries[:, slices[stride]], axis=1)
+            # [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
     else:
         sig = timeseries
 
@@ -172,145 +177,153 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
                 'Original_Estimate': original_model.params,
                 'Original_BSE': original_model.bse,
                 'P_Value': original_model.pvalues,
-                'ts':ts
+                'ts': ts 
             })
         all_res.append(results)
         
-    return pd.concat(all_res)
+    all_res = pd.concat(all_res)
 
-def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100, slide_len=25, standardize=True, sr=None, nsurr=500):
+    if smooth: # assign the timestamp to the middle of each bin in samples
+        for ts_i in all_res.ts.unique():
+            all_res.loc[all_res.ts==ts_i, 'ts'] = midpoints[ts_i] * (1000/sr)
+    else:
+        all_res['ts'] = all_res['ts'] * (1000/sr)
 
-    """
-    This utilizes the prior function to run permutations.
+    return all_res
 
-    Parameters
-    ----------
-    nsurr : int 
-        Number of permutations to run. 
-    """
+# def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100, slide_len=25, standardize=True, sr=None, nsurr=500):
 
-    regress_df = time_resolved_regression(timeseries, regressors, win_len, slide_len, standardize, sr)
+#     """
+#     This utilizes the prior function to run permutations.
 
-    # Generate permuted timeseries 
-    shuffles = np.random.randint(1, timeseries.shape[1], nsurr)
-    all_surrs = []
+#     Parameters
+#     ----------
+#     nsurr : int 
+#         Number of permutations to run. 
+#     """
 
-    # the following is a bit hacky if running in parallel        
-    # progress_bar = tqdm(np.arange(nsurr), ascii=True, desc='Computing Surrogate Regressions', position=0, leave=True)
+#     regress_df = time_resolved_regression(timeseries, regressors, win_len, slide_len, standardize, sr)
 
-    # This one line is important. We shuffle in time, AND across trials! 
-    surrogate_data_list = [np.random.permutation(np.roll(timeseries, shuffles[surr], axis=1)) for surr in range(nsurr)]
+#     # Generate permuted timeseries 
+#     shuffles = np.random.randint(1, timeseries.shape[1], nsurr)
+#     all_surrs = []
+
+#     # the following is a bit hacky if running in parallel        
+#     # progress_bar = tqdm(np.arange(nsurr), ascii=True, desc='Computing Surrogate Regressions', position=0, leave=True)
+
+#     # This one line is important. We shuffle in time, AND across trials! 
+#     surrogate_data_list = [np.random.permutation(np.roll(timeseries, shuffles[surr], axis=1)) for surr in range(nsurr)]
     
-    for surr in range(nsurr): 
-        # Re-run regression with permuted timeseries 
-        surr_df = time_resolved_regression(surrogate_data_list[surr], regressors, win_len, slide_len, standardize, sr)
-        surr_df['nsurr'] = surr
-        all_surrs.append(surr_df)
+#     for surr in range(nsurr): 
+#         # Re-run regression with permuted timeseries 
+#         surr_df = time_resolved_regression(surrogate_data_list[surr], regressors, win_len, slide_len, standardize, sr)
+#         surr_df['nsurr'] = surr
+#         all_surrs.append(surr_df)
 
-    all_surrs = pd.concat(all_surrs)
+#     all_surrs = pd.concat(all_surrs)
 
-    return all_surrs
+#     return all_surrs
 
-# Now we want to put this all together into a slightly clunky function that is meant to be used for running the regression
-# over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
+# # Now we want to put this all together into a slightly clunky function that is meant to be used for running the regression
+# # over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
     
-def compute_time_resolved_regression_parallel(chan_name, TFR_object, subj_id, elec_df, event_name, bands=['hfa'],
-                             win_len=100, step_size=25, nsurr=500, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses',
-                             do_save=False):
-    """
+# def compute_time_resolved_regression_parallel(chan_name, TFR_object, subj_id, elec_df, event_name, bands=['hfa'],
+#                              win_len=100, step_size=25, nsurr=500, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses',
+#                              do_save=False):
+#     """
 
-    Turn the TFR object into a dataframe, extract the time-resolved features, 
-    and run a time-resolved regression at whatever bands you want. 
+#     Turn the TFR object into a dataframe, extract the time-resolved features, 
+#     and run a time-resolved regression at whatever bands you want. 
 
-    Note: If using more than one band, we will need more multiple comparisons correction.
+#     Note: If using more than one band, we will need more multiple comparisons correction.
 
-    Parameters
-    ----------
-    chan_name : str
-        Name of the channel to be analyzed.
-    TFR_object : mne.time_frequency.AverageTFR
-        TFR object to be analyzed.
-    subj_id : str
-        Subject ID.
-    elec_df : pandas.DataFrame
-        Dataframe containing electrode information.
-        Note: input this way (rather than a region str) to enable easy parallelism 
-    event : str
-        Event to be analyzed.
-    bands : list
-        List of bands to be analyzed. The default is ['theta', 'alpha', 'beta', 'slowgamma', 'hfa'].
-    win_len : int
-        Length of the window for the time-resolved regression. The default is 50.
-    step_size : int
-        Step size for the time-resolved regression. The default is 10.
-    nsurr : int
-        Number of surrogates to be run. The default is 500.
-    save_path : str
-        Base path to save the resulting dataframe. Saving, rather than returning, is handy for parallelized code across big data. 
-    do_save : bool
-        Whether to save or return the dataframe. 
-    """
+#     Parameters
+#     ----------
+#     chan_name : str
+#         Name of the channel to be analyzed.
+#     TFR_object : mne.time_frequency.AverageTFR
+#         TFR object to be analyzed.
+#     subj_id : str
+#         Subject ID.
+#     elec_df : pandas.DataFrame
+#         Dataframe containing electrode information.
+#         Note: input this way (rather than a region str) to enable easy parallelism 
+#     event : str
+#         Event to be analyzed.
+#     bands : list
+#         List of bands to be analyzed. The default is ['theta', 'alpha', 'beta', 'slowgamma', 'hfa'].
+#     win_len : int
+#         Length of the window for the time-resolved regression. The default is 50.
+#     step_size : int
+#         Step size for the time-resolved regression. The default is 10.
+#     nsurr : int
+#         Number of surrogates to be run. The default is 500.
+#     save_path : str
+#         Base path to save the resulting dataframe. Saving, rather than returning, is handy for parallelized code across big data. 
+#     do_save : bool
+#         Whether to save or return the dataframe. 
+#     """
     
-    pow_df = TFR_object.copy().pick_channels([chan_name]).to_data_frame()
-    # Rename the frequencies according to band 
-    pow_df['fband'] = pow_df.freq.apply(lambda x: 'theta' if x<10 else 'alpha' if (x>=10) & (x<14) else 'beta' if (x>=14) & (x<30) else 'slowgamma' if (x>=30) & (x<55) else 'hfa')
-    # Average across frequencies within a band, rename some columns 
-    tt_df = pow_df.groupby(['epoch', 'fband', 'time']).mean().reset_index().drop(columns=['freq']).rename(columns={'epoch':'trial', f'{chan_name}':'tfr'})
-    TFR_object.metadata['trial'] = tt_df['trial'].unique()
-    # Merge in task details 
-    tfr_def_freq = tt_df.merge(TFR_object.metadata, on=['trial'])
+#     pow_df = TFR_object.copy().pick_channels([chan_name]).to_data_frame()
+#     # Rename the frequencies according to band 
+#     pow_df['fband'] = pow_df.freq.apply(lambda x: 'theta' if x<10 else 'alpha' if (x>=10) & (x<14) else 'beta' if (x>=14) & (x<30) else 'slowgamma' if (x>=30) & (x<55) else 'hfa')
+#     # Average across frequencies within a band, rename some columns 
+#     tt_df = pow_df.groupby(['epoch', 'fband', 'time']).mean().reset_index().drop(columns=['freq']).rename(columns={'epoch':'trial', f'{chan_name}':'tfr'})
+#     TFR_object.metadata['trial'] = tt_df['trial'].unique()
+#     # Merge in task details 
+#     tfr_def_freq = tt_df.merge(TFR_object.metadata, on=['trial'])
     
-    # TFR-specific setup (function is more general) 
-    band_regress_dfs = []
+#     # TFR-specific setup (function is more general) 
+#     band_regress_dfs = []
 
-    for fband in tfr_def_freq.fband.unique():
-        if fband not in bands:
-            continue
-        else:
-            ntrials = tfr_def_freq.trials.unique().shape[0]
-            nsamples = pow_df.time.unique().shape[0]
-            features = ['rpe', 'DPRIME']
+#     for fband in tfr_def_freq.fband.unique():
+#         if fband not in bands:
+#             continue
+#         else:
+#             ntrials = tfr_def_freq.trials.unique().shape[0]
+#             nsamples = pow_df.time.unique().shape[0]
+#             features = ['rpe', 'DPRIME']
 
-            analysis_df = tfr_def_freq[tfr_def_freq.fband==fband]
-            # trim the timeseries by one sample???
-            timeseries = analysis_df.tfr.values.reshape(ntrials, nsamples)
-            regressors = analysis_df[features].drop_duplicates()
+#             analysis_df = tfr_def_freq[tfr_def_freq.fband==fband]
+#             # trim the timeseries by one sample???
+#             timeseries = analysis_df.tfr.values.reshape(ntrials, nsamples)
+#             regressors = analysis_df[features].drop_duplicates()
 
-            regress_df = statistics_utils.time_resolved_regression(timeseries, regressors, win_len, step_size, do_zscore=True, sr=TFR_object.info['sfreq'])
-            all_surrs = statistics_utils.time_resolved_regression_perm(timeseries, regressors, win_len, step_size, do_zscore=True, sr=TFR_object.info['sfreq'], nsurr=nsurr)
+#             regress_df = statistics_utils.time_resolved_regression(timeseries, regressors, win_len, step_size, do_zscore=True, sr=TFR_object.info['sfreq'])
+#             all_surrs = statistics_utils.time_resolved_regression_perm(timeseries, regressors, win_len, step_size, do_zscore=True, sr=TFR_object.info['sfreq'], nsurr=nsurr)
 
-            merged_df = pd.merge(all_surrs, regress_df, on=['ts', 'sample'], suffixes=('_df2', '_df1'))
+#             merged_df = pd.merge(all_surrs, regress_df, on=['ts', 'sample'], suffixes=('_df2', '_df1'))
 
-            # Compute the p-values and correct them across time. 
-            # Note that I am conducting two-way tests because I am interested in both positive and negative regression betas
+#             # Compute the p-values and correct them across time. 
+#             # Note that I am conducting two-way tests because I am interested in both positive and negative regression betas
             
-            # Now let's correct ACROSS TIMEPOINTS. 
-            # TODO: implement multiple comparisons corrections across bands if analyzing multiple bands.
-            for feature in regressors.keys():
+#             # Now let's correct ACROSS TIMEPOINTS. 
+#             # TODO: implement multiple comparisons corrections across bands if analyzing multiple bands.
+#             for feature in regressors.keys():
 
-                # Count the number of entries for 'rpe' in df2 that exceed the value in df1
-                p_upper= (merged_df[f'{feature}_df2'] > merged_df[f'{feature}_df1']).groupby(merged_df['sample']).sum()/nsurr
-                _, p_upper_adjusted, _, _ = multitest.multipletests(p_upper, method='fdr_bh')
-                p_lower= (merged_df[f'{feature}_df2'] < merged_df[f'{feature}_df1']).groupby(merged_df['sample']).sum()/nsurr
-                _, p_lower_adjusted, _, _ = multitest.multipletests(p_lower, method='fdr_bh')
+#                 # Count the number of entries for 'rpe' in df2 that exceed the value in df1
+#                 p_upper= (merged_df[f'{feature}_df2'] > merged_df[f'{feature}_df1']).groupby(merged_df['sample']).sum()/nsurr
+#                 _, p_upper_adjusted, _, _ = multitest.multipletests(p_upper, method='fdr_bh')
+#                 p_lower= (merged_df[f'{feature}_df2'] < merged_df[f'{feature}_df1']).groupby(merged_df['sample']).sum()/nsurr
+#                 _, p_lower_adjusted, _, _ = multitest.multipletests(p_lower, method='fdr_bh')
 
-                regress_df[f'{feature}_p_upper_fdr'] = p_upper_adjusted
-                regress_df[f'{feature}_p_lower_fdr'] = p_lower_adjusted
+#                 regress_df[f'{feature}_p_upper_fdr'] = p_upper_adjusted
+#                 regress_df[f'{feature}_p_lower_fdr'] = p_lower_adjusted
 
-            regress_df['fband'] = fband
-            band_regress_dfs.append(regress_df)
+#             regress_df['fband'] = fband
+#             band_regress_dfs.append(regress_df)
 
-    band_regress_df = pd.concat(band_regress_dfs)
-    band_regress_df['chan'] = chan_name
-    band_regress_df['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
-    band_regress_df['subj'] = subj_id
+#     band_regress_df = pd.concat(band_regress_dfs)
+#     band_regress_df['chan'] = chan_name
+#     band_regress_df['region'] = elec_df[elec_df.label==chan_name].salman_region.values[0]
+#     band_regress_df['subj'] = subj_id
     
-    if do_save:
-        # TODO: replace this with your own path structure.... 
-        band_regress_df.to_csv(f'{save_path}/{subj_id}/scratch/TFR/{event_name}/dfs/{chan_name}_time_regressed_surr.csv', index=False)
-    else: 
-        return band_regress_df
-    # print(f'done with subject {subj_id} channel {chan_name}')
+#     if do_save:
+#         # TODO: replace this with your own path structure.... 
+#         band_regress_df.to_csv(f'{save_path}/{subj_id}/scratch/TFR/{event_name}/dfs/{chan_name}_time_regressed_surr.csv', index=False)
+#     else: 
+#         return band_regress_df
+#     # print(f'done with subject {subj_id} channel {chan_name}')
 
     
 
