@@ -147,15 +147,15 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
     # Optional: bin the data
     if smooth: 
         # Smooth the timeseries (easier to do here than to store smoothed data)
-        sig = np.zeros([signal.shape[0], (signal.shape[1] // slide_len) - (win_len//slide_len - 1)])
-        for trial in range(signal.shape[0]):
-            sig[trial, :] = [np.nanmean(signal[trial, i:i+win_len]) for i in range(0, signal.shape[1], slide_len) if i+win_len <= signal.shape[1]]
+        sig = np.zeros([timeseries.shape[0], (timeseries.shape[1] // slide_len) - (win_len//slide_len - 1)])
+        for trial in range(timeseries.shape[0]):
+            sig[trial, :] = [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
     else:
-        sig = signal
+        sig = timeseries
 
     all_res = []
     # write the regression formula
-    formula = f'sig ~ 1+'+'+'.join(regressor.keys())
+    formula = f'sig ~ 1+'+'+'.join(regressors.keys())
     for ts in range(sig.shape[-1]):
         regressors['sig'] = sig[:, ts]
         if permute:
