@@ -113,7 +113,7 @@ def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=F
     return results
 
 def time_resolved_regression_single_channel(timeseries=None, regressors=None, 
-                             win_len=100, slide_len=25,
+                             win_len=100, slide_len=25, ts_index=None,
                              standardize=True, smooth=False, permute=False, sr=500):
     """
     In this function, if you provide a 2D array of z-scored time-varying neural data and a sert of regressors, 
@@ -189,6 +189,9 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
     else:
         all_res['ts'] = all_res['ts'] * (1000/sr)
 
+    if ts_index is not None:
+        all_res['time'] = ts_index #[ts_index[int(t)] for t in all_res.ts]
+    
     return all_res
 
 # def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100, slide_len=25, standardize=True, sr=None, nsurr=500):
