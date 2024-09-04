@@ -254,8 +254,9 @@ def find_clusters(roi_df, t_col='ts', cluster_p_thr=0.05, min_cluster_size=3):
     )
 
     # Filter clusters by minimum size
-    if min_cluster_size:
-        cluster_tstats = cluster_tstats[cluster_tstats.cluster_size >= min_cluster_size]
+    if not cluster_tstats.empty:
+        if min_cluster_size:
+            cluster_tstats = cluster_tstats[cluster_tstats.cluster_size >= min_cluster_size]
     
     return roi_ttest, cluster_tstats
 
@@ -343,25 +344,29 @@ def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p
     # Compute actual statistics
     roi_ttest, cluster_tstats = find_clusters(roi_df, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
 
-    # Generate permutation-based null distribution
-    null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
+    # check if any clusters identified; if not, then no need to do permutation testing
+    if not cluster_tstats.empty:
+        # Generate permutation-based null distribution
+        null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
 
-    # Add min and max values of the null distribution to cluster statistics
-    cluster_tstats['null_min'] = np.min(null_distribution)
-    cluster_tstats['null_max'] = np.max(null_distribution)
+        # Add min and max values of the null distribution to cluster statistics
+        cluster_tstats['null_min'] = np.min(null_distribution)
+        cluster_tstats['null_max'] = np.max(null_distribution)
 
-    # Compute FWE-corrected p-values and mask based on significance threshold
-    cluster_tstats['fwe_pval'] = cluster_tstats['abs_sum_tstat'].apply(
-        lambda x: np.mean(np.abs(null_distribution) >= np.abs(x))
-    )
-    cluster_tstats['fwe_mask'] = cluster_tstats['fwe_pval'] < fwe_thr
+        # Compute FWE-corrected p-values and mask based on significance threshold
+        cluster_tstats['fwe_pval'] = cluster_tstats['abs_sum_tstat'].apply(
+            lambda x: np.mean(np.abs(null_distribution) >= np.abs(x))
+        )
+        cluster_tstats['fwe_mask'] = cluster_tstats['fwe_pval'] < fwe_thr
 
-    # create fwe_mask in roi_ttest based on cluster_tstats
-    thresholded_clusters = np.unique(cluster_tstats.index.values)
-    roi_ttest['fwe_mask'] = roi_ttest['cluster'].apply(lambda x: x in thresholded_clusters)
+        # create fwe_mask in roi_ttest based on cluster_tstats
+        thresholded_clusters = np.unique(cluster_tstats.index.values)
+        roi_ttest['fwe_mask'] = roi_ttest['cluster'].apply(lambda x: x in thresholded_clusters)
 
-    if output_null:
-        return roi_ttest, cluster_tstats, null_distribution
+        if output_null:
+            return roi_ttest, cluster_tstats, null_distribution
+        else:
+            return roi_ttest, cluster_tstats
     else:
         return roi_ttest, cluster_tstats
 
