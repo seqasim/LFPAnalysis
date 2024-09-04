@@ -276,7 +276,7 @@ def ts_permutation_test(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.
     Returns:
         list: Null distribution of the summed t-statistics of the largest cluster.
     """
-    def get_largest_cluster_stat(roi_df, t_col='ts', cluster_p_thr=0.05, min_cluster_size=3, random_state=None):
+    def get_largest_cluster_stat(roi_df, t_col='ts', cluster_p_thr=0.05, min_cluster_size=3, random_state=None, verbose=False):
         """
         Performs a single permutation test by shuffling the 'ts' values and computing the largest summed t-statistic.
         
@@ -308,13 +308,18 @@ def ts_permutation_test(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.
         return largest_cluster_sum_tstat
 
     # Parallel computation of permutation tests
-    null_distribution = Parallel(n_jobs=n_jobs)(
-        delayed(get_largest_cluster_stat)(roi_df, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size, random_state=iter) for iter in tqdm(range(n_permutations))
-    )
+    if verbose:
+        null_distribution = Parallel(n_jobs=n_jobs)(
+            delayed(get_largest_cluster_stat)(roi_df, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size, random_state=iter) for iter in tqdm(range(n_permutations))
+        )
+    else:
+        null_distribution = Parallel(n_jobs=n_jobs)(
+            delayed(get_largest_cluster_stat)(roi_df, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size, random_state=iter) for iter in range(n_permutations)
+        )
 
     return null_distribution
 
-def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.05, fwe_thr=.05, min_cluster_size=3, output_null=False):
+def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.05, fwe_thr=.05, min_cluster_size=3, output_null=False, verbose=False):
     """
     Perform cluster-based permutation test across all electrodes at each timepoint and compute FWE p-values.
 
@@ -347,7 +352,7 @@ def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p
     # check if any clusters identified; if not, then no need to do permutation testing
     if not cluster_tstats.empty:
         # Generate permutation-based null distribution
-        null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
+        null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size, verbose=verbose)
 
         # Add min and max values of the null distribution to cluster statistics
         cluster_tstats['null_min'] = np.min(null_distribution)
