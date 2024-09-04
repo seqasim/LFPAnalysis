@@ -213,7 +213,7 @@ def find_clusters(roi_df, t_col='ts', cluster_p_thr=0.05, min_cluster_size=3):
     """
     # sort df by t_col
     roi_df = roi_df.sort_values(t_col)
-    
+
     # One-sample t-test at each ts
     roi_ttest = roi_df.groupby(t_col).apply(
         lambda x: pd.Series(
@@ -313,7 +313,7 @@ def ts_permutation_test(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.
 
     return null_distribution
 
-def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr, fwe_thr, min_cluster_size=3, output_null=False):
+def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p_thr=.05, fwe_thr=.05, min_cluster_size=3, output_null=False):
     """
     Perform cluster-based permutation test across all electrodes at each timepoint and compute FWE p-values.
 
