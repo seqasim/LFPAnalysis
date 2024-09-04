@@ -324,7 +324,8 @@ def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p
     - output_null: Whether to output the null distribution (default: False).
 
     Returns:
-    - cluster_tstats: DataFrame with cluster statistics and FWE-corrected p-values.
+    - roi_ttest: DataFrame with t-statistics and p-values for each timepoint.
+    - cluster_tstats: DataFrame with summed t-statistics for each cluster identified.
     - null_distribution: List of summed t-statistics
 
 
