@@ -190,7 +190,7 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
         all_res['ts'] = all_res['ts'] * (1000/sr)
 
     if ts_index is not None:
-        all_res['time'] = ts_index #[ts_index[int(t)] for t in all_res.ts]
+        all_res['time'] = [ts_index[int(t*(sr/1000))] for t in ts['ts'].values]
     
     return all_res
 
