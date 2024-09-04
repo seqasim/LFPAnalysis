@@ -211,6 +211,9 @@ def find_clusters(roi_df, t_col='ts', cluster_p_thr=0.05, min_cluster_size=3):
     Returns:
         pd.DataFrame: DataFrame with summed t-statistics for each cluster.
     """
+    # sort df by t_col
+    roi_df = roi_df.sort_values(t_col)
+    
     # One-sample t-test at each ts
     roi_ttest = roi_df.groupby(t_col).apply(
         lambda x: pd.Series(
