@@ -344,7 +344,7 @@ def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p
     roi_ttest, cluster_tstats = find_clusters(roi_df, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
 
     # Generate permutation-based null distribution
-    null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
+    null_distribution = ts_permutation_test(roi_df, n_permutations=n_permutations, t_col=t_col, cluster_p_thr=cluster_p_thr, min_cluster_size=min_cluster_size)
 
     # Add min and max values of the null distribution to cluster statistics
     cluster_tstats['null_min'] = np.min(null_distribution)
@@ -355,6 +355,10 @@ def cluster_based_permutation(roi_df, n_permutations=1000, t_col='ts', cluster_p
         lambda x: np.mean(np.abs(null_distribution) >= np.abs(x))
     )
     cluster_tstats['fwe_mask'] = cluster_tstats['fwe_pval'] < fwe_thr
+
+    # create fwe_mask in roi_ttest based on cluster_tstats
+    thresholded_clusters = np.unique(cluster_tstats.index.values)
+    roi_ttest['fwe_mask'] = roi_ttest['cluster'].apply(lambda x: x in thresholded_clusters)
 
     if output_null:
         return roi_ttest, cluster_tstats, null_distribution
