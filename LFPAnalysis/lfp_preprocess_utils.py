@@ -182,7 +182,7 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_
 
     # Compute mean and std across all time points for each frequency and electrode
     m_ = np.nanmean(baseline_data_concat, axis=-1)
-    std_ = np.nanmean(baseline_data_concat, axis=-1)
+    std_ = np.nanstd(baseline_data_concat, axis=-1)
 
     # 2. Expand the array to time and events 
     m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
