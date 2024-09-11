@@ -449,6 +449,9 @@ def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_sample
     
     return baseline_corrected 
 
+
+
+
 def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site='MSSM', average=False):
     """
     Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
@@ -2250,3 +2253,178 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
 
     return elec_df
 #
+
+def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_path, save_path,
+                            IED_artifact_thresh=True, uncaptured_z_thresh=True, output='save'):
+    
+    """
+    This function computes the TFRs for the baseline and task events of interest, and baselines the task events of interest
+
+    Parameters
+    ----------
+    baseline_event : dict
+        Dictionary with the key being the name of the baseline event, and the value being a list of the start and end time of the baseline event
+    task_events : dict
+        Dictionary with the key being the name of the task event, and the value being a list of the start and end time of the task event    
+    freqs : array
+        The frequencies of interest for the TFR
+    n_cycles : float
+        The number of cycles for the Morlet wavelet
+    load_path : str
+        The path to the directory where the epochs are stored
+    save_path : str
+        The path to the directory where the TFRs will be saved
+    IED_artifact_thresh : bool
+        If True, will remove 100 ms before and after IEDs and artifacts from the TFRs
+    uncaptured_z_thresh : bool
+        If True, will iteratively remove absurd z-scores from the TFRs
+    output : str
+        If 'save', will save the TFRs to the save_path
+        If 'return', will return the TFRs
+        If 'both', will save and return the TFRs
+    
+    """
+    
+    
+    baseline_name = list(baseline_event.keys())[0]
+    
+    # load baseline epochs
+    baseline_epochs_reref = mne.read_epochs(f'{load_path}/{baseline_name}-epo.fif', preload=True)
+    
+    # compute TFR
+    baseline_power  = mne.time_frequency.tfr_morlet(baseline_epochs_reref, 
+                                          freqs=freqs, 
+                                          n_cycles=n_cycles, 
+                                          picks=baseline_epochs_reref.ch_names,
+                                          use_fft=True, 
+                                          n_jobs=-1, 
+                                          output='power', 
+                                          return_itc=False, 
+                                          average=False)
+    
+
+    # Crop the data to the appropriate 
+    baseline_power.crop(tmin=baseline_event[baseline_name][0], 
+                        tmax=baseline_event[baseline_name][1])
+    
+    
+    if IED_artifact_thresh:
+        # NAN out the bad data
+        # THE following will now LOAD in dataframes that indicate IED and artifact time points in your data
+        IED_df = pd.read_csv(f'{load_path}/{baseline_name}_IED_df.csv') 
+        artifact_df = pd.read_csv(f'{load_path}/{baseline_name}_artifact_df.csv') 
+
+
+        # Now, let's iterate through each channel, and each ied/artifact, and NaN 100 ms before and after these timepoints
+        for ch_ix, ch_name in enumerate(baseline_epochs_reref.ch_names): 
+            ied_ev_list = IED_df[ch_name].dropna().index.tolist()
+            artifact_ev_list = artifact_df[ch_name].dropna().index.tolist() 
+            for ev_ in ied_ev_list: 
+                for ied_ in literal_eval(IED_df[ch_name].iloc[ev_]):
+                    # remove 100 ms before 
+                    ev_ix_start = np.max([0, np.floor((ied_- 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
+                    # remove 100 ms after 
+                    ev_ix_end = np.min([baseline_power.data.shape[-1], np.ceil((ied_ + 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
+                    baseline_power.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+            for ev_ in artifact_ev_list: 
+                for artifact_ in literal_eval(artifact_df[ch_name].iloc[ev_]):
+                    # remove 100 ms before 
+                    ev_ix_start = np.max([0, np.floor((artifact_- 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
+                    # remove 100 ms after
+                    ev_ix_end = np.min([baseline_power.data.shape[-1], np.ceil((artifact_ + 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
+                    baseline_power.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+    
+    # remove epochs from memory
+    del baseline_epochs_reref
+    
+    # Now we will deal with the task events of interest   
+    
+    # make the output path for the z-scored TFRs
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        
+    for event in task_events.keys():
+        
+        event_epochs_reref = mne.read_epochs(f'{load_path}/{event}-epo.fif', preload=True)
+                    
+        temp_pow = mne.time_frequency.tfr_morlet(event_epochs_reref, 
+                                                 freqs=freqs, 
+                                                 n_cycles=n_cycles,
+                                                 picks=event_epochs_reref.ch_names, 
+                                                 use_fft=True, 
+                                                 n_jobs=-1, 
+                                                 output='power', 
+                                                 return_itc=False, 
+                                                 average=False)
+    
+        temp_pow.crop(tmin=task_events[event][0], tmax=task_events[event][1])
+        
+        if IED_artifact_thresh:
+            # NAN out the bad data
+            # THE following will now LOAD in dataframes that indicate IED and artifact time points in your data
+            IED_df = pd.read_csv(f'{load_path}/{event}_IED_df.csv') 
+            artifact_df = pd.read_csv(f'{load_path}/{event}_artifact_df.csv') 
+
+            # Now, let's iterate through each channel, and each ied/artifact, and NaN 100 ms before and after these timepoints
+            for ch_ix, ch_name in enumerate(event_epochs_reref.ch_names): 
+                ied_ev_list = IED_df[ch_name].dropna().index.tolist()
+                artifact_ev_list = artifact_df[ch_name].dropna().index.tolist() 
+                for ev_ in ied_ev_list: 
+                    for ied_ in literal_eval(IED_df[ch_name].iloc[ev_]):
+                        # remove 100 ms before 
+                        ev_ix_start = np.max([0, np.floor((ied_- 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
+                        # remove 100 ms after
+                        ev_ix_end = np.min([temp_pow.data.shape[-1], np.ceil((ied_ + 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
+                        temp_pow.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+                for ev_ in artifact_ev_list: 
+                    for artifact_ in literal_eval(artifact_df[ch_name].iloc[ev_]):
+                        # remove 100 ms before 
+                        ev_ix_start = np.max([0, np.floor((artifact_- 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
+                        # remove 100 ms after
+                        ev_ix_end = np.min([temp_pow.data.shape[-1], np.ceil((artifact_ + 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
+                        temp_pow.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan    
+    
+        # Compute first pass of baseline
+        baseline_corrected_power = baseline_trialwise_TFR(data=temp_pow.data, include_epoch_in_baseline=False, 
+                                                                       baseline_mne=baseline_power.data, 
+                                                                       mode='zscore', ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3)
+            
+        # Let's iteratively nan out absurd z-scores (10 std above baseline???) that escaped our artifact detection, noise removal, and baselining
+        if uncaptured_z_thresh: 
+            absurdity_threshold = 10
+            max_iter = 10
+            large_z_flag=True 
+
+            iteration = 0
+
+            while (large_z_flag==True) & (iteration<max_iter): 
+                print(f'baseline z-score iteration # {iteration}')
+                # Baseline by all the baseline periods in the session
+                baseline_corrected_power = baseline_trialwise_TFR(data=temp_pow.data, include_epoch_in_baseline=False, 
+                                      baseline_mne=baseline_power.data, 
+                                      mode='zscore', ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3)
+
+                large_z_mask = np.where(np.abs(baseline_corrected_power)>absurdity_threshold)
+                if large_z_mask[0].shape[0] == 0:
+                    # no more large z
+                    large_z_flag = False
+                else:
+                    # NaN it out in the event of interest prior to re-running the baseline z-score to prevent
+                    # contamination of all z's
+                    temp_pow.data[large_z_mask] = np.nan
+
+                iteration +=1
+        
+        zpow = mne.time_frequency.EpochsTFR(event_epochs_reref.info, baseline_corrected_power, 
+                                    temp_pow.times, freqs)
+
+        zpow.metadata = event_epochs_reref.metadata
+        
+        if output == 'save':
+            zpow.save(f'{save_path}/{event}-tfr.h5', overwrite=True)
+        elif output == 'return': 
+            return zpow 
+        elif output == 'both':
+            zpow.save(f'{save_path}/{event}-tfr.h5', overwrite=True)
+            return zpow 
+        
