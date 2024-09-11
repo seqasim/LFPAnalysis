@@ -16,6 +16,8 @@ import Levenshtein as lev
 import os
 import warnings
 import json
+from ast import literal_eval
+
 
 def mean_baseline_time(data, baseline, mode='zscore'): 
     """
