@@ -191,6 +191,81 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
 
     return all_res
 
+def mixed_effects_electrodes(model_df, predictor, re_var='participant', plot=True):
+    """
+    This function is for instances in which you've computed an electrode-level measure
+    and you want to know if this measure is significant in a region. 
+    
+    Your first inclination might be to do a t-test of the population of all electrodes in the region against 0. 
+    
+    However, different patients contribute different numbers of electrodes, 
+    and an effect might be driven by just the electrodes in one patient! 
+    
+    So, we want to do a mixed-effects regression with subject as a random effect to assess
+    whether this region effect, grouped across electrodes, is consistent across patients
+    
+    Parameters
+    ----------
+    model_df : pd.DataFrame
+        A dataframe with columns for the predictor variable and the random effect variable
+    predictor : str
+        The name of the column in model_df that contains the predictor variable
+    re_var : str
+        The name of the column in model_df that contains the random effect variable
+    plot : bool
+        Whether to plot the results
+
+    Returns
+    -------
+    results : statsmodels.regression.mixed_linear_model.MixedLMResults
+        The results of the mixed-effects regression
+    
+    
+    """
+    
+    model = smf.mixedlm(f"{predictor} ~ 1", data=model_df, groups=f'{re_var}')
+    results = model.fit()
+    
+    if plot:
+        # Create a scatter plot of individual data points
+        fig, ax = plt.subplots(1, 1, figsize=(10, 5), dpi=300)
+        sns.stripplot(x=f'{re_var}', y=f'{predictor}', data=model_df, 
+                      jitter=True, alpha=0.6, color="gray", s=6, ax=ax)
+
+        # plot the mean line
+        subject_means = model_df.groupby(f'{re_var}')[f'{predictor}'].mean()
+
+        sns.boxplot(showmeans=True,
+                    meanline=True,
+                    meanprops={'color': 'k', 'ls': '-', 'lw': 2},
+                    medianprops={'visible': False},
+                    whiskerprops={'visible': False},
+                    zorder=10,
+                    x=subject_means.index,
+                    y=subject_means.values,
+                    showfliers=False,
+                    showbox=False,
+                    showcaps=False,
+                    ax=ax)
+
+        # # Overlay the subject means
+
+        # Plot the overall mean from the mixed-effects model
+        overall_mean = results.fe_params['Intercept']
+        ci = results.conf_int().loc['Intercept']
+        
+        plt.axhline(overall_mean, color="blue", linestyle="--", label=f"Overall Mean: {overall_mean:.2f}")
+        plt.axhline(ci[0], color='red', linestyle='--')
+        plt.axhline(ci[1], color='red', linestyle='--')
+
+        plt.axhline(0, color='black')
+        sns.despine()
+        
+    return results
+    
+    
+    
+
 # def time_resolved_regression_perm(timeseries=None, regressors=None, win_len=100, slide_len=25, standardize=True, sr=None, nsurr=500):
 
 #     """
