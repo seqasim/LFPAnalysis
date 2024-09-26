@@ -213,7 +213,8 @@ def compute_gc_tr(mne_data=None,
             indices=indices_ab,
             fmin=band[0], fmax=band[1],
             rank=rank,
-            gc_n_lags=gc_n_lags) 
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR') 
         # A => B
         gc_ba = spectral_connectivity_epochs(
             mne_data,
@@ -222,7 +223,8 @@ def compute_gc_tr(mne_data=None,
             indices=indices_ba,
             fmin=band[0], fmax=band[1],
             rank=rank,
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # B => A
                     
         # compute GC on time-reversed signals
@@ -233,7 +235,8 @@ def compute_gc_tr(mne_data=None,
             indices=indices_ab,
             fmin=band[0], fmax=band[1],
             rank=rank,
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # TR[A => B]
 
         gc_tr_ba = spectral_connectivity_epochs(
@@ -243,7 +246,8 @@ def compute_gc_tr(mne_data=None,
             indices=indices_ba,
             fmin=band[0], fmax=band[1],
             rank=rank,
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # TR[B => A]
     elif avg_over_dim =='time':
         # compute Granger causality
@@ -257,7 +261,8 @@ def compute_gc_tr(mne_data=None,
             rank=rank,
             padding=(buf_ms / 1000), 
             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-            gc_n_lags=gc_n_lags) 
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR') 
 
         # A => B
         gc_ba = spectral_connectivity_time(
@@ -270,7 +275,8 @@ def compute_gc_tr(mne_data=None,
             rank=rank,
             padding=(buf_ms / 1000), 
             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # B => A
                     
         # compute GC on time-reversed signals
@@ -284,7 +290,8 @@ def compute_gc_tr(mne_data=None,
             rank=rank,
             padding=(buf_ms / 1000), 
             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # TR[A => B]
 
         gc_tr_ba = spectral_connectivity_time(
@@ -297,7 +304,8 @@ def compute_gc_tr(mne_data=None,
             rank=rank,
             padding=(buf_ms / 1000), 
             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-            gc_n_lags=gc_n_lags)  
+            gc_n_lags=gc_n_lags,
+            verbose='ERROR')  
         # TR[B => A]
 
     net_gc = gc_ab.get_data() - gc_ba.get_data()  # [A => B] - [B => A]
@@ -308,12 +316,15 @@ def compute_gc_tr(mne_data=None,
     # compute TRGC
     gc_tr = net_gc - net_gc_tr
 
-    return gc_tr.mean(axis=-1)
+    if avg_over_dim =='time':
+        return gc_tr.mean(axis=-1)
+    else:
+        return np.squeeze(gc_tr)
 
-def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, buf_ms=1000):
+def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, gc_n_lags=15, buf_ms=1000):
 
     n_pairs = len(indices[0])
-    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+    data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
     surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
 
@@ -328,7 +339,8 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
                 mne_data.info, 
                 tmin=mne_data.tmin, 
                 events = mne_data.events, 
-                event_id = mne_data.event_id)
+                event_id = mne_data.event_id,
+                verbose='ERROR')
 
     if metric == 'psi':
         surr_conn = np.squeeze(phase_slope_index(surr_mne,
@@ -340,6 +352,26 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
                                                     cwt_n_cycles=n_cycles,
                                                     verbose='warning').get_data()[:, 0])
 
+    elif metric == 'granger':
+        # I don't want to compute multivariate GC, so refactor the indices: 
+        surr_conn = []
+
+        for ix, _ in enumerate(indices[0]):
+            gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+        
+            surr_gc = compute_gc_tr(mne_data=surr_mne, 
+                    band=band,
+                    indices=gc_indices, 
+                    freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                    n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                    rank=None, 
+                    gc_n_lags=gc_n_lags, 
+                    buf_ms=buf_ms, 
+                    avg_over_dim='epochs')
+            
+            surr_conn.append(surr_gc)
+            
+        surr_conn = np.vstack(surr_conn)
     else:
         surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
                                                         indices=indices,
@@ -349,14 +381,15 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
                                                         fmin=band[0], fmax=band[1], faverage=True,
                                                         cwt_freqs=freqs,
                                                         cwt_n_cycles=n_cycles,
-                                                        verbose='warning').get_data()[:, 0])
-    if n_pairs == 1:
-        # reshape data
-        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+                                                       verbose='ERROR').get_data()[:, 0])
+    if metric != 'granger':
+        if n_pairs == 1:
+            # reshape data
+            surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
-    # crop the buffer now:
-    buf_rs = int((buf_ms/1000) * surr_mne.info['sfreq'])
-    surr_conn = surr_conn[:, buf_rs:-buf_rs]
+        # crop the buffer now:
+        buf_rs = int((buf_ms/1000) * surr_mne.info['sfreq'])
+        surr_conn = surr_conn[:, buf_rs:-buf_rs]
 
     return surr_conn
 
@@ -364,7 +397,7 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
 def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags=15):
 
     n_pairs = len(indices[0])
-    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+    data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
     surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
 
@@ -379,7 +412,8 @@ def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cyc
                 mne_data.info, 
                 tmin=mne_data.tmin, 
                 events = mne_data.events, 
-                event_id = mne_data.event_id)
+                event_id = mne_data.event_id,
+                verbose='ERROR')
 
     if metric == 'granger':
         # I don't want to compute multivariate GC, so refactor the indices: 
@@ -465,6 +499,27 @@ def compute_connectivity(mne_data=None,
                                                                     cwt_n_cycles=n_cycles,
                                                                     verbose='warning').get_data()[:, 0])
             # return pairwise_connectivity
+        elif metric == 'granger':
+            # I don't want to compute multivariate GC, so refactor the indices: 
+            pairwise_connectivity = []
+
+            for ix, _ in enumerate(indices[0]):
+                gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+            
+                gc = compute_gc_tr(mne_data=mne_data, 
+                        band=band,
+                        indices=gc_indices, 
+                        freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                        n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                        rank=None, 
+                        gc_n_lags=gc_n_lags, 
+                        buf_ms=buf_ms, 
+                        avg_over_dim='epochs')
+                
+                pairwise_connectivity.append(gc)
+                
+            pairwise_connectivity = np.vstack(pairwise_connectivity)
+
         else:
             pairwise_connectivity = np.squeeze(spectral_connectivity_epochs(mne_data,
                                                             indices=indices,
@@ -481,32 +536,32 @@ def compute_connectivity(mne_data=None,
         else: 
             n_pairs = len(indices[0])
 
-        if n_pairs == 1:
-            # reshape data
-            pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
-            
-        # # crop the buffer now:
-        buf_rs = int((buf_ms/1000) * mne_data.info['sfreq'])
-        pairwise_connectivity = pairwise_connectivity[:, buf_rs:-buf_rs]
+        if metric != 'granger':
+            if n_pairs == 1:
+                # reshape data
+                pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
+            # # crop the buffer now:
+            buf_rs = int((buf_ms/1000) * mne_data.info['sfreq'])
+            pairwise_connectivity = pairwise_connectivity[:, buf_rs:-buf_rs]
 
         if n_surr > 0:
             if parallelize == True:
                 def _process_surrogate_epochs(ns):
-                    print(f'Computing surrogate # {ns} - parallel')
-                    surrogate_result = compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, buf_ms=buf_ms)
+                    # print(f'Computing surrogate # {ns} - parallel')
+                    surrogate_result = compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, gc_n_lags=gc_n_lags, buf_ms=buf_ms)
                     return surrogate_result
 
                 surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_epochs)(ns) for ns in range(n_surr))
                 surr_struct = np.stack(surrogates, axis=-1)
             else: 
-                data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+                data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
                 surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                 # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
                 for ns in range(n_surr): 
-                    print(f'Computing surrogate # {ns}')
+                    # print(f'Computing surrogate # {ns}')
                     surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
                     for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
                         surr_ch = swap_time_blocks(ch_dat, random_state=None)
@@ -528,6 +583,27 @@ def compute_connectivity(mne_data=None,
                                                                     cwt_freqs=freqs,
                                                                     cwt_n_cycles=n_cycles,
                                                                     verbose='warning').get_data()[:, 0])
+                    elif metric == 'granger':
+                        # I don't want to compute multivariate GC, so refactor the indices: 
+                        surr_conn = []
+
+                        for ix, _ in enumerate(indices[0]):
+                            gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+                        
+                            surr_gc = compute_gc_tr(mne_data=surr_mne, 
+                                    band=band,
+                                    indices=gc_indices, 
+                                    freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                                    n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                                    rank=None, 
+                                    gc_n_lags=gc_n_lags, 
+                                    buf_ms=buf_ms, 
+                                    avg_over_dim='epochs')
+                            
+                            surr_conn.append(surr_gc)
+                            
+                        surr_conn = np.vstack(surr_conn)
+
                     else:
                         surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
                                                                         indices=indices,
@@ -538,12 +614,12 @@ def compute_connectivity(mne_data=None,
                                                                         cwt_freqs=freqs,
                                                                         cwt_n_cycles=n_cycles,
                                                                         verbose='warning').get_data()[:, 0])
-                    if n_pairs == 1:
-                        # reshape data
-                        surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
-
-                    # crop the surrogate: 
-                    surr_conn = surr_conn[:, buf_rs:-buf_rs]
+                    if metric != 'granger':
+                        if n_pairs == 1:
+                            # reshape data
+                            surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
+                        # crop the surrogate: 
+                        surr_conn = surr_conn[:, buf_rs:-buf_rs]
 
                     surr_struct[:, :, ns] = surr_conn
                     clear_output(wait=True)
@@ -580,14 +656,14 @@ def compute_connectivity(mne_data=None,
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
 
             if n_surr > 0:
-                data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+                data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
                 surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                 # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
                 for ns in range(n_surr): 
-                    print(f'Computing surrogate # {ns}')
+                    # print(f'Computing surrogate # {ns}')
                     surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
                     for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
                         surr_ch = swap_time_blocks(ch_dat, random_state=None)
@@ -670,21 +746,21 @@ def compute_connectivity(mne_data=None,
             if n_surr > 0:
                 if parallelize == True:
                     def _process_surrogate_time(ns):
-                        print(f'Computing surrogate # {ns} - parallel')
+                        # print(f'Computing surrogate # {ns} - parallel')
                         surrogate_result = compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags)
                         return surrogate_result
 
                     surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
                     surr_struct = np.stack(surrogates, axis=-1)
                 else:
-                    data = np.swapaxes(mne_data.get_data(), 0, 1) # swap so now it's chan, events, times 
+                    data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
                     surr_struct = np.zeros([pairwise_connectivity.shape[0], n_pairs, n_surr]) # allocate space for all the surrogates 
 
                     # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
                     for ns in range(n_surr): 
-                        print(f'Computing surrogate # {ns}')
+                        # print(f'Computing surrogate # {ns}')
                         surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
                         for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
                             surr_ch = swap_time_blocks(ch_dat, random_state=None)
