@@ -102,6 +102,30 @@ def swap_time_blocks(data, random_state=None):
     
     return np.concatenate(surr, axis=-1)
 
+def make_seed_target_df(elec_df, epochs, source_roi, target_roi): 
+    
+    """
+    Create arrays of indices for mapping electrodes for connectivity analyses. Use the Epoch
+    ch_names list itself to find the index of the electrode within the mne object 
+    
+    """
+    
+    seed_target_df = pd.DataFrame(columns=['seed', 'target'], index=['l', 'r'])
+
+    for hemi in ['l', 'r']:
+        source_ix = mne.pick_channels(epochs.ch_names, include=elec_df[(elec_df.hemisphere==hemi) & (elec_df.salman_region==source_roi)].label.values)
+        target_ix = mne.pick_channels(epochs.ch_names, include=elec_df[(elec_df.hemisphere==hemi) & (elec_df.salman_region==target_roi)].label.values)
+
+        seed_target_df['seed'][hemi] = source_ix
+
+        seed_target_df['target'][hemi] = target_ix
+
+    seed_target_df = seed_target_df[
+                (seed_target_df['seed'].map(lambda d: len(d) > 0)) & (seed_target_df['target'].map(lambda d: len(d) > 0))]
+    
+    return seed_target_df
+    
+
 def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
     """
     Compute the correlation between the amplitude envelope of two signals. 
