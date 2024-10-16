@@ -1897,6 +1897,9 @@ def compute_eBOSC_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, 
 
     """
 
+    if not os.path.exists(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs'):
+        os.makedirs(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs')
+
     data_df = MNE_object.copy().pick_channels([chan_name]).to_data_frame(time_format=None)
 
     # parameters for eBOSC

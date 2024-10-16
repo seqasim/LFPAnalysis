@@ -1,0 +1,16 @@
+label,BN246label,x,y,z,mni_x,mni_y,mni_z,gm,NMM,Anat,AnatMacro,BN246,YBA_1,ManualExamination,Notes,salman_region,hemisphere
+racas1-racas2,A24rv_R,2.21384716,40.5554222,-7.5923647,4.00029874,31.5898381,-7.0866478,Gray,Right ACgG anterior cingulate gyrus,Area s24,R ACC,R CG,Right cingulate gyrus D,,,ACC,r
+racas2-racas3,A24rv_R,3.41324162,42.1536652,-3.5963805,5.19364742,33.1358575,-1.7538661,Gray,Right ACgG anterior cingulate gyrus,Area 33,R ACC,R CG,Right cingulate gyrus D,,,ACC,r
+racas3-racas4,A24rv_R,4.61263609,43.3523474,1.1988005,6.24813044,34.2468153,4.5461881,Gray,Right ACgG anterior cingulate gyrus,Area 33,R ACC,R CG,Right cingulate gyrus E,,,ACC,r
+racas4-racas5,A24rv_R,5.81203055,44.9505904,5.59438312,7.61196094,35.7829381,10.2844932,Gray,Right ACgG anterior cingulate gyrus,Area 33,R ACC,R CG,Right cingulate gyrus F,WM,,Unknown,r
+racas5-racas6,A32sg_R,7.01142502,46.9483942,9.98996574,9.04689706,37.5874551,16.01783,Gray,Right ACgG anterior cingulate gyrus,Unknown,R ACC,R CG,Right cingulate gyrus G,,,ACC,r
+racas6-racas7,A9m_R,8.21081948,48.5466372,13.9859499,10.4841754,38.9043867,21.1895896,Gray,Right MSFG superior frontal gyrus medial segment,Unknown,R ACC,R SFG,Right superior frontal gyrus 1 A,,,dmPFC,r
+racas8-racas9,Unknown,10.6096084,53.3413662,22.3775167,13.4800575,43.1960597,32.2192636,White,Right Cerebral White Matter,Unknown,R Superior Frontal Gyrus,Unknown,Unknown,WM,,Unknown,r
+racas9-racas10,A9l_R,11.4092047,55.3391699,25.9739025,14.3349902,44.9635525,36.907822,Gray,Right SFG superior frontal gyrus,Unknown,R Superior Frontal Gyrus,R SFG,Right superior frontal gyrus 2 C,,,dmPFC,r
+rmolf1-rmolf2,A13_R,7.01142502,41.3545437,-23.9759,9.79441686,33.0258587,-27.313912,Gray,Right MOrG medial orbital gyrus,Area Fo1,R Rectal Gyrus,R OrG,Right frontal orbital 4 B,,,OFC,r
+rmolf10-rmolf11,IFS_R,42.5934608,44.1514689,0.79920208,48.3958873,34.1044232,6.67349781,Gray,Right TrIFG triangular part of the inferior frontal gyrus,Area 45,R IFG (p Triangularis),R IFG,Right middle pars triangularis A,,,vlPFC,r
+rmolf2-rmolf3,A11l_R,10.6096084,41.3545437,-21.178711,13.5857452,32.8142511,-23.488034,Gray,Right MOrG medial orbital gyrus,Area Fo1,R Superior Orbital Gyrus,R OrG,Right frontal orbital 4 B,,,OFC,r
+rmolf3-rmolf4,A11l_R,14.60759,41.3545437,-18.78112,17.856656,32.6030191,-19.916883,White,Right MOrG medial orbital gyrus,Area Fo3,R Superior Orbital Gyrus,R OrG,Unknown,WM,,OFC,r
+rmolf4-rmolf5,A11l_R,18.6055715,41.3545437,-15.983932,22.1541746,32.3011558,-15.879958,Gray,Right MOrG medial orbital gyrus,Area Fo3,R Superior Orbital Gyrus,R OrG,Right frontal orbital 4 C,,,OFC,r
+rmolf5-rmolf6,A11l_R,23.0033512,41.7541044,-13.186743,26.8750997,32.3500225,-11.683896,Gray,Right POrG posterior orbital gyrus,Area Fo3,R IFG (p Orbitalis),R OrG,Right frontal orbital 4 D,,,OFC,r
+rmolf9-rmolf10,A44op_R,38.9952774,43.7519082,-1.5983884,44.4077195,33.9979624,3.57169229,White,Right Cerebral White Matter,Unknown,R IFG (p Triangularis),R IFG,Right middle pars triangularis A,WM,,IFG,r
