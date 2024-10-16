@@ -1,6 +1,6 @@
     pandas==1.5.3
     seaborn==0.12.1
-    mne==1.2.3
+    mne>=1.2.3
     neurodsp==2.2.0
     ipykernel==6.19.4
     openpyxl==3.0.10
