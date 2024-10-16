@@ -46,7 +46,7 @@ pip install git+https://github.com/seqasim/LFPAnalysis.git
 ## Updating
 
 ```
-pip install --upgrade git+https://github.com/seqasim/LFPAnalysis.git
+pip install --upgrade --force-reinstall git+https://github.com/seqasim/LFPAnalysis.git 
 ```
 
 ## Where to start? 
