@@ -15,8 +15,8 @@ dependencies:
   - brotli-bin=1.0.9=h166bdaf_8
   - brotlipy=0.7.0=py310h5764c6d_1005
   - bzip2=1.0.8=h7f98852_4
-  - ca-certificates=2022.12.7=ha878542_0
-  - certifi=2022.12.7=pyhd8ed1ab_0
+  - ca-certificates=2024.7.4=hbcca054_0
+  - certifi=2024.7.4=pyhd8ed1ab_0
   - cffi=1.15.1=py310h255011f_3
   - charset-normalizer=2.1.1=pyhd8ed1ab_0
   - colorama=0.4.6=pyhd8ed1ab_0
@@ -73,17 +73,16 @@ dependencies:
   - libxcb=1.13=h7f98852_1004
   - libzlib=1.2.13=h166bdaf_4
   - markupsafe=2.1.2=py310h1fa729e_0
-  - matplotlib-base=3.4.3=py310h23f4a51_2
   - matplotlib-inline=0.1.6=pyhd8ed1ab_0
-  - mne-base=1.2.3=pyh57928b3_0
   - munkres=1.1.4=pyh9f0ad1d_0
   - nbformat=5.7.3=pyhd8ed1ab_0
+  - nbstripout=0.7.1=pyhd8ed1ab_0
   - ncurses=6.3=h27087fc_1
   - nest-asyncio=1.5.6=pyhd8ed1ab_0
   - neurodsp=2.2.0=pyhd8ed1ab_0
   - openjpeg=2.5.0=hfec8fc6_2
   - openpyxl=3.0.10=py310h5764c6d_2
-  - openssl=3.0.7=h0b41bf4_2
+  - openssl=3.3.1=h4bc722e_2
   - packaging=23.0=pyhd8ed1ab_0
   - pandas=1.5.3=py310h9b08913_0
   - parso=0.8.3=pyhd8ed1ab_0
@@ -101,7 +100,6 @@ dependencies:
   - ptyprocess=0.7.0=pyhd3deb0d_0
   - pure_eval=0.2.2=pyhd8ed1ab_0
   - pycparser=2.21=pyhd8ed1ab_0
-  - pygments=2.14.0=pyhd8ed1ab_0
   - pyopenssl=23.0.0=pyhd8ed1ab_0
   - pyparsing=3.0.9=pyhd8ed1ab_0
   - pyrsistent=0.19.3=py310h1fa729e_0
@@ -139,16 +137,59 @@ dependencies:
   - zipp=3.11.0=pyhd8ed1ab_0
   - zstd=1.5.2=h6239696_4
   - pip:
-    - dcor==0.6
-    - emd==0.5.5
-    - joblib==1.2.0
-    - levenshtein==0.20.9
-    - llvmlite==0.39.1
-    - numba==0.56.4
-    - numpy==1.21.6
-    - pycatch22==0.4.2
-    - pyyaml==6.0
-    - rapidfuzz==2.13.7
-    - sparse==0.13.0
-    - tabulate==0.9.0
+      - babel==2.16.0
+      - cftime==1.6.3
+      - click==8.1.7
+      - cloudpickle==3.0.0
+      - contourpy==1.2.0
+      - dcor==0.6
+      - distributed==2023.11.0
+      - emd==0.5.5
+      - fcwt==0.1.18
+      - fonttools==4.47.2
+      - fsspec==2023.10.0
+      - ghp-import==2.1.0
+      - h5io==0.1.9
+      - h5py==3.9.0
+      - joblib==1.2.0
+      - lazy-loader==0.3
+      - levenshtein==0.20.9
+      - llvmlite==0.39.1
+      - locket==1.0.0
+      - markdown==3.7
+      - matplotlib==3.8.2
+      - mergedeep==1.3.4
+      - mkdocs==1.6.1
+      - mkdocs-get-deps==0.2.0
+      - mkdocs-material==9.5.42
+      - mkdocs-material-extensions==1.3.1
+      - mne==1.6.1
+      - mne-connectivity==0.7.0.dev0
+      - msgpack==1.0.7
+      - netcdf4==1.6.5
+      - numba==0.56.4
+      - numpy==1.23.5
+      - paginate==0.5.7
+      - partd==1.4.1
+      - pathspec==0.12.1
+      - pycatch22==0.4.2
+      - pygments==2.18.0
+      - pymdown-extensions==10.11.2
+      - pyyaml==6.0
+      - pyyaml-env-tag==0.1
+      - rapidfuzz==2.13.7
+      - regex==2024.9.11
+      - scikit-base==0.5.1
+      - scikit-learn==1.3.0
+      - sktime==0.22.0
+      - sortedcontainers==2.4.0
+      - sparse==0.13.0
+      - tabulate==0.9.0
+      - tblib==3.0.0
+      - tensorpac==0.6.5
+      - threadpoolctl==3.2.0
+      - toolz==0.12.0
+      - watchdog==5.0.3
+      - xarray==2024.1.1
+      - zict==3.0.0
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis
