@@ -1,6 +1,5 @@
-    pandas
+    mne-connectivity
     seaborn
-    mne
     neurodsp==2.2.0
     ipykernel
     openpyxl
@@ -8,9 +7,7 @@
     ipywidgets
     ipyevents
     fooof==1.0.0
-    joblib
     dcor
-    joblib
     llvmlite
     pyyaml
     sparse
@@ -20,9 +17,7 @@
     pycatch22
     wheel
     notebook
-    scikit-learn
     h5io
-    mne-connectivity
     numba
     tensorpac
     nibabel
