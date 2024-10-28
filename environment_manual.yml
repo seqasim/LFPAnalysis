@@ -3,18 +3,5 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - pandas
-  - seaborn
-  - scipy
-  - mne-base
-  - ca-certificates
-  - certifi
-  - openssl
-  - neurodsp
-  - ipykernel
-  - openpyxl
-  - ipywidgets
-  - ipyevents
-  - fooof
-  - python=3.10
+  - mne-connectivity
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis
