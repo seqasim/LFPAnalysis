@@ -37,17 +37,32 @@ Some important misc notes if you're on MSSM's MINERVA server (I will compile her
 
 ## Installation
 
+Installation requires git + conda. 
+In your terminal, type:
+
 ```
+cd path_to_install
+git clone https://github.com/seqasim/LFPAnalysis.git
+conda env create -f environment_manual.yml
+```
+
+<!-- ```
 conda create --name lfp_env pip requests git python=3.10.8
 conda activate lfp_env
 pip install git+https://github.com/seqasim/LFPAnalysis.git
-```
+``` -->
 
 ## Updating
 
+To update the code to reflect changes in the repository:
 ```
+cd path_to_install
+git pull
+```
+
+<!-- ```
 pip install --upgrade --force-reinstall git+https://github.com/seqasim/LFPAnalysis.git 
-```
+``` -->
 
 ## Where to start? 
 
