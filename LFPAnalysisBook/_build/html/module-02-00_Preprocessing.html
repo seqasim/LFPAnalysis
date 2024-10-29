@@ -1,0 +1,1182 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Pre-processing &#8212; LFP Analysis Book</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!-- 
+    this give us a css class that will be invisible only if js is disabled 
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=26a4bc78f4c0ddb94549" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=26a4bc78f4c0ddb94549" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=a3416100" />
+    <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=13237357" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=26a4bc78f4c0ddb94549"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=26a4bc78f4c0ddb94549" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=26a4bc78f4c0ddb94549" />
+
+    <script src="_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="_static/togglebutton.js?v=4a39c7ea"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'module-02-00_Preprocessing';</script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Introduction to LFP Analysis" href="module-01-00_Introduction.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">LFP Analysis Book</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="intro.html">
+                    LFP Analysis Toolkit
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="module-01-00_Introduction.html">Introduction to LFP Analysis</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Pre-processing</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/module-02-00_Preprocessing.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Pre-processing</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#if-using-your-own-data-pre-process-run-1x">IF USING YOUR OWN DATA: Pre-process (run 1x):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data-default-bipolar">Re-reference the data (default=bipolar):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#now-look-at-the-data-to-manually-remove-channels">NOW look at the data to manually remove channels:</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sync-behavioral-and-neural-data">Sync behavioral and neural data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-your-behavioral-data">Load your behavioral data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#make-epochs">Make epochs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-do-i-go-from-here">Where do I go from here?</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="pre-processing">
+<h1>Pre-processing<a class="headerlink" href="#pre-processing" title="Link to this heading">#</a></h1>
+<p>In this notebook, I aim to roll through an analysis across a few patients which can easily be extended for all of the  patients in your cohort. To do so, we will use the pre-processing functions that are written out more explicitly in the step-by-step notebooks.</p>
+<p><strong>This is the notebook you should copy and edit for your own actual analyses</strong></p>
+<p>======================================================================================================================</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">mne</span>
+<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">from</span> <span class="nn">matplotlib.backends.backend_pdf</span> <span class="kn">import</span> <span class="n">PdfPages</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">zscore</span><span class="p">,</span> <span class="n">linregress</span><span class="p">,</span> <span class="n">ttest_ind</span><span class="p">,</span> <span class="n">ttest_rel</span><span class="p">,</span> <span class="n">ttest_1samp</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">mne.preprocessing.bads</span> <span class="kn">import</span> <span class="n">_find_outliers</span>
+<span class="kn">import</span> <span class="nn">os</span> 
+<span class="kn">import</span> <span class="nn">joblib</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">clear_output</span>
+<span class="kn">import</span> <span class="nn">warnings</span> 
+
+<span class="c1"># I only want to see warnings once</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><strong>ACTION</strong>: If you have installed the LFPAnalysis you must append the local path!</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">sys</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;/Users/salmanqasim/Documents/GitRepos/LFPAnalysis&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">LFPAnalysis</span> <span class="kn">import</span> <span class="n">lfp_preprocess_utils</span><span class="p">,</span> <span class="n">sync_utils</span><span class="p">,</span> <span class="n">analysis_utils</span><span class="p">,</span> <span class="n">nlx_utils</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="if-using-your-own-data-pre-process-run-1x">
+<h2>IF USING YOUR OWN DATA: Pre-process (run 1x):<a class="headerlink" href="#if-using-your-own-data-pre-process-run-1x" title="Link to this heading">#</a></h2>
+<p>In the pre-processing functions below, we:</p>
+<ol class="arabic simple">
+<li><p>load the raw data (either a .edf file or a folder of .nlx files) into mne objects for use with the mne toolbox: <a class="reference external" href="https://mne.tools/stable/index.html">https://mne.tools/stable/index.html</a>.</p></li>
+<li><p>load the localized electrode names from the .csv or .xlsx file listing their MNI coordinates into the mne object</p></li>
+<li><p>filter and resample as necessary</p></li>
+<li><p>re-reference</p></li>
+</ol>
+<p><strong>NOTE</strong>: this notebook is meant to use the sample data, stored locally in the repo. This local data was pre-processed using the follow cell, which you will need to uncomment and modify according to your own data folders.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># for ix, subj_id in enumerate(subj_ids): </span>
+<span class="c1">#     site = subj_sites[ix]</span>
+<span class="c1">#     format = subj_formats[ix]</span>
+    
+<span class="c1">#     print(f&#39;Working on subj {subj_id}&#39;)</span>
+    
+<span class="c1">#     # Set paths</span>
+<span class="c1">#     load_path = f&#39;{base_dir}/projects/guLab/Salman/EMU/{subj_id}/neural/Day1&#39;</span>
+<span class="c1">#     elec_path = f&#39;{base_dir}/projects/guLab/Salman/EMU/{subj_id}/anat/&#39;</span>
+<span class="c1">#     save_path = f&#39;{base_dir}/projects/guLab/Salman/EphysAnalyses/{subj_id}/neural/Day1&#39;</span>
+    
+<span class="c1">#     # Check if path exists for saving, and if not, make it</span>
+<span class="c1">#     if not os.path.exists(save_path):</span>
+<span class="c1">#         os.makedirs(save_path)</span>
+
+<span class="c1">#     # electrode files could either be csv or excel</span>
+<span class="c1">#     elec_files = glob(f&#39;{elec_path}/*.csv&#39;) + glob(f&#39;{elec_path}/*.xlsx&#39;)</span>
+<span class="c1">#     # There should really only be one, so grab it with the zero-index </span>
+<span class="c1">#     elec_file = elec_files[0]</span>
+
+<span class="c1">#     # Make MNE file</span>
+<span class="c1">#     mne_data = lfp_preprocess_utils.make_mne(load_path=load_path, </span>
+<span class="c1">#                                              elec_path=elec_file,</span>
+<span class="c1">#                                              format=format,</span>
+<span class="c1">#                                              return_data=True,</span>
+<span class="c1">#                                              site=site,</span>
+<span class="c1">#                                              check_bad=False) # changed this to not annotate anything as bad </span>
+
+<span class="c1">#     # Save this data so that you don&#39;t need this step again:</span>
+<span class="c1">#     mne_data.save(f&#39;{save_path}/raw_ieeg.fif&#39;, overwrite=True)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="re-reference-the-data-default-bipolar">
+<h2>Re-reference the data (default=bipolar):<a class="headerlink" href="#re-reference-the-data-default-bipolar" title="Link to this heading">#</a></h2>
+<p>We re-reference the data to get rid of shared noise, cleaning the data to leave what we assume is local biological activity.</p>
+<div class="cell tag_hide-output docutils container">
+<div class="cell_input above-output-prompt docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">site</span> <span class="o">=</span> <span class="s1">&#39;MSSM&#39;</span> <span class="c1"># where the data was recorded, e.g. &#39;MSSM&#39;, &#39;UI&#39;</span>
+<span class="nb">format</span> <span class="o">=</span> <span class="s1">&#39;edf&#39;</span> <span class="c1"># the format the data, e.g. &#39;edf&#39;, &#39;nlx&#39;</span>
+    
+<span class="c1"># Set load path</span>
+<span class="n">load_path</span> <span class="o">=</span> <span class="s1">&#39;/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data&#39;</span>
+
+<span class="c1"># Load electrode file </span>
+<span class="n">elec_file</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_labels.xlsx&#39;</span>
+
+<span class="c1"># Make MNE file</span>
+<span class="n">mne_data</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw_fif</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_ieeg.fif&#39;</span><span class="p">,</span> <span class="n">preload</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="c1"># Re-reference neural data</span>
+<span class="n">mne_data_reref</span> <span class="o">=</span> <span class="n">lfp_preprocess_utils</span><span class="o">.</span><span class="n">ref_mne</span><span class="p">(</span><span class="n">mne_data</span><span class="o">=</span><span class="n">mne_data</span><span class="p">,</span> 
+                                              <span class="n">elec_path</span><span class="o">=</span><span class="n">elec_file</span><span class="p">,</span> 
+                                              <span class="n">method</span><span class="o">=</span><span class="s1">&#39;bipolar&#39;</span><span class="p">,</span> 
+                                              <span class="n">site</span><span class="o">=</span><span class="n">site</span><span class="p">)</span>
+
+<span class="c1"># Save this data so that you don&#39;t need this step again:</span>
+<span class="n">mne_data_reref</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_ieeg_bp.fif&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Should also save out re-referenced elec_file: </span>
+
+<span class="n">elec_data</span> <span class="o">=</span> <span class="n">lfp_preprocess_utils</span><span class="o">.</span><span class="n">load_elec</span><span class="p">(</span><span class="n">elec_file</span><span class="p">)</span>
+<span class="n">anode_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">mne_data_reref</span><span class="o">.</span><span class="n">ch_names</span><span class="p">]</span>
+<span class="n">elec_df</span> <span class="o">=</span> <span class="n">elec_data</span><span class="p">[</span><span class="n">elec_data</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">anode_list</span><span class="p">)]</span>
+<span class="n">elec_df</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="o">=</span>  <span class="n">elec_df</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">[</span><span class="n">a</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">mne_data_reref</span><span class="o">.</span><span class="n">ch_names</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">a</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]][</span><span class="mi">0</span><span class="p">])</span>
+
+<span class="c1"># Add region to the data frame </span>
+
+<span class="n">manual_col</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">elec_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s1">&#39;manual&#39;</span> <span class="ow">in</span> <span class="n">col</span><span class="o">.</span><span class="n">lower</span><span class="p">()][</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">all_regions</span> <span class="o">=</span> <span class="p">[]</span> 
+<span class="k">for</span> <span class="n">chan_name</span> <span class="ow">in</span> <span class="n">elec_df</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">unique</span><span class="p">():</span>
+    <span class="n">elec_region</span> <span class="o">=</span> <span class="n">analysis_utils</span><span class="o">.</span><span class="n">select_rois_picks</span><span class="p">(</span><span class="n">elec_df</span><span class="p">,</span> <span class="n">chan_name</span><span class="p">,</span> <span class="n">manual_col</span><span class="o">=</span><span class="n">manual_col</span><span class="p">)</span>
+    <span class="n">all_regions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elec_region</span><span class="p">)</span> 
+
+<span class="n">elec_df</span><span class="p">[</span><span class="s1">&#39;salman_region&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">all_regions</span>
+<span class="n">elec_df</span><span class="p">[</span><span class="s1">&#39;hemisphere&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">elec_df</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+<span class="n">elec_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_labels_bp&#39;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            
+</pre></div>
+</div>
+</div>
+<details class="hide below-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell output</span>
+<span class="expanded">Hide code cell output</span>
+</summary>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Opening raw data file /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg.fif...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Isotrak not found
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 394061 =      0.000 ...   788.122 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Reading 0 ... 394061  =      0.000 ...   788.122 secs...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>sEEG channel type selected for re-referencing
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Creating RawArray with float64 data, n_channels=15, n_times=394062
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 394061 =      0.000 ...   788.122 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Added the following bipolar channels:
+racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas6-racas7, racas8-racas9, racas9-racas10, rmolf1-rmolf2, rmolf2-rmolf3, rmolf3-rmolf4, rmolf4-rmolf5, rmolf5-rmolf6, rmolf9-rmolf10, rmolf10-rmolf11
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Overwriting existing file.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Writing /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg_bp.fif
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Closing /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg_bp.fif
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[done]
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<ul class="simple">
+<li><p>mne_data: a Raw mne object, where the data has been loaded, filtered for line noise, parsed for different data types, and resampled if necessary.</p></li>
+<li><p>mne_data_reref: an mne object containing re-referenced data (either white matter or bipolar)</p></li>
+</ul>
+</section>
+<section id="now-look-at-the-data-to-manually-remove-channels">
+<h2>NOW look at the data to manually remove channels:<a class="headerlink" href="#now-look-at-the-data-to-manually-remove-channels" title="Link to this heading">#</a></h2>
+<p>After bipolar referencing:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># %matplotlib notebook </span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # Scroll up/down and left/right using your keyboard. CLICK on a channel to turn it &#39;grey&#39; and mark as a &#39;bad&#39; channel. </span>
+<span class="c1"># # If you click a grey channel again it will unmark it. </span>
+
+<span class="c1"># mne_data_reref = mne.io.read_raw_fif(f&#39;{load_path}/sample_ieeg_bp.fif&#39;, preload=True)</span>
+<span class="c1"># fig = mne_data_reref.plot(start=0, duration=120, n_channels=30, </span>
+<span class="c1">#                       scalings=mne_data_reref._data.max()/30</span>
+<span class="c1">#                      )</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # ALSO look at the power spectra! </span>
+<span class="c1"># # You can click on channels here to identify them, and go back to the viz above to mark them as noise if need be</span>
+
+<span class="c1"># mne_data_reref.compute_psd().plot()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>If you have ran the preprocessing above, load the data instead:</p>
+<div class="cell tag_hide-output docutils container">
+<div class="cell_input above-output-prompt docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">load_path</span> <span class="o">=</span> <span class="s1">&#39;/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data&#39;</span>
+
+<span class="n">elec_file</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_labels.xlsx&#39;</span>
+
+<span class="n">elec_data</span> <span class="o">=</span> <span class="n">lfp_preprocess_utils</span><span class="o">.</span><span class="n">load_elec</span><span class="p">(</span><span class="n">elec_file</span><span class="p">)</span>
+
+<span class="n">mne_data_reref</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw_fif</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_ieeg_bp.fif&#39;</span><span class="p">,</span> <span class="n">preload</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">photodiode_data</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw_fif</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_photodiode.fif&#39;</span><span class="p">,</span> <span class="n">preload</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<details class="hide below-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell output</span>
+<span class="expanded">Hide code cell output</span>
+</summary>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Opening raw data file /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg_bp.fif...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 394061 =      0.000 ...   788.122 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Reading 0 ... 394061  =      0.000 ...   788.122 secs...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Opening raw data file /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_photodiode.fif...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Isotrak not found
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 807039 =      0.000 ...   788.124 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Reading 0 ... 807039  =      0.000 ...   788.124 secs...
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<ul class="simple">
+<li><p>mne_dict: a dictionary containing all of your subjects’ re-referenced mne data</p></li>
+<li><p>photodiode_dict: a dictionary containing all of your subjects’ photodiode data</p></li>
+<li><p>elec_dict: a dictionary containing the paths to your subjects’ electrode data</p></li>
+</ul>
+</section>
+<section id="sync-behavioral-and-neural-data">
+<h2>Sync behavioral and neural data<a class="headerlink" href="#sync-behavioral-and-neural-data" title="Link to this heading">#</a></h2>
+<p>Here, we perform a critical step: computing the time offset between the computer that recorded the neural data and the laptop that featured the experiment.</p>
+<p>The function here only requires a <strong>subset</strong> of detected sync signals (i.e. photodiode deflections) to be detected to successfully compute this offset.</p>
+<p>First, you may need to MANUALLY clean the photodiode signal if the recording quality is poor. Load it, plot it, and try to isolate/amplify the pulses.</p>
+<div class="cell tag_hide-output docutils container">
+<div class="cell_input above-output-prompt docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">time_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_ts.csv&#39;</span><span class="p">)</span>
+<span class="c1"># Load in the timestamps pertaining to your sync. If your task had a square pop up, for example, grab the times for that square&#39;s appearance from the behavioral logs.</span>
+<span class="c1"># Below, I do this for my own task&#39;s Psychopy output, but yours is probably coded differently. </span>
+
+<span class="c1"># Synchronize to the photodiode or whatever your neural sync signal is</span>
+<span class="n">height</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">windSize</span> <span class="o">=</span> <span class="mi">15</span>
+<span class="n">smoothSize</span> <span class="o">=</span> <span class="mi">11</span>
+
+<span class="n">slope</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="n">sync_utils</span><span class="o">.</span><span class="n">synchronize_data</span><span class="p">(</span><span class="n">time_df</span><span class="p">[</span><span class="s1">&#39;beh_ts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> 
+                                            <span class="n">photodiode_data</span><span class="p">,</span> 
+                                            <span class="n">smoothSize</span><span class="o">=</span><span class="n">smoothSize</span><span class="p">,</span> <span class="n">windSize</span><span class="o">=</span><span class="n">windSize</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="n">height</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">slope</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<details class="hide below-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell output</span>
+<span class="expanded">Hide code cell output</span>
+</summary>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>28 blocks
+.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...............
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>..
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>..
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...
+
+found matches for 150 of 428 pulses
+0.9999892560991055
+-228.2080128605071
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<ul class="simple">
+<li><p>slopes: a dictionary containing the slopes (should be ~ 1) for each subject</p></li>
+<li><p>offsets: a dictionary containing the offsets for each subject</p></li>
+</ul>
+</section>
+<section id="load-your-behavioral-data">
+<h2>Load your behavioral data<a class="headerlink" href="#load-your-behavioral-data" title="Link to this heading">#</a></h2>
+<p>You probably have a separate notebook for processing the behavioral data for your task. Load the processed dataframe here:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">behav_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_beh.csv&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">behav_data</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)[[</span><span class="s1">&#39;trials&#39;</span><span class="p">,</span> <span class="s1">&#39;feedback_start&#39;</span><span class="p">,</span> <span class="s1">&#39;baseline_start&#39;</span><span class="p">]]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>trials</th>
+      <th>feedback_start</th>
+      <th>baseline_start</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>243.239158</td>
+      <td>244.929025</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>248.344187</td>
+      <td>250.043187</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>254.083059</td>
+      <td>255.790670</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>258.148220</td>
+      <td>259.838892</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>261.943712</td>
+      <td>263.620631</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+</section>
+<section id="make-epochs">
+<h2>Make epochs<a class="headerlink" href="#make-epochs" title="Link to this heading">#</a></h2>
+<p>Make epochs and remove IEDs. Currently just doing this for one example period - when subjects receive feedback.</p>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>I also segment a baseline period for every event of interest.</p></li>
+<li><p>I apply a buffer period of 1.0 seconds - this will be helpful when we compute spectrograms later.</p></li>
+<li><p>The IED count for every channel is added to the epoch metadata</p></li>
+</ul>
+<p>(I’m a little dumb, so my baseline is a fixation cross AFTER the trial, rather than before. A bit silly if you ask me.)</p>
+<div class="cell tag_hide-output docutils container">
+<div class="cell_input above-output-prompt docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># set some windows of interest </span>
+
+<span class="n">buf</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="c1"># this is the buffer before and after that we use to limit edge effects for TFRs</span>
+
+<span class="n">IED_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;peak_thresh&#39;</span><span class="p">:</span><span class="mi">5</span><span class="p">,</span>
+           <span class="s1">&#39;closeness_thresh&#39;</span><span class="p">:</span><span class="mf">0.25</span><span class="p">,</span> 
+           <span class="s1">&#39;width_thresh&#39;</span><span class="p">:</span><span class="mf">0.2</span><span class="p">}</span>
+
+<span class="n">evs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;feedback_start&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">],</span>
+       <span class="s1">&#39;baseline_start&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">]}</span>
+
+<span class="n">load_path</span> <span class="o">=</span> <span class="s1">&#39;/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data&#39;</span>
+
+<span class="n">epochs_all_evs</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">evs</span><span class="p">}</span>
+<span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">evs</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+    <span class="n">pre</span> <span class="o">=</span> <span class="n">evs</span><span class="p">[</span><span class="n">event</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">post</span> <span class="o">=</span> <span class="n">evs</span><span class="p">[</span><span class="n">event</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">fixed_baseline</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">behav_times</span> <span class="o">=</span> <span class="n">behav_data</span><span class="p">[</span><span class="n">event</span><span class="p">]</span>
+
+    <span class="c1"># THE following function will now SAVE out dataframes that indicate IED and artifact time points in your data</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">lfp_preprocess_utils</span><span class="o">.</span><span class="n">make_epochs</span><span class="p">(</span><span class="n">load_path</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_ieeg_bp.fif&#39;</span><span class="p">,</span> 
+                                              <span class="n">slope</span><span class="o">=</span><span class="n">slope</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> 
+                                              <span class="n">behav_name</span><span class="o">=</span><span class="n">event</span><span class="p">,</span> <span class="n">behav_times</span><span class="o">=</span><span class="n">behav_times</span><span class="p">,</span>
+                                              <span class="n">ev_start_s</span><span class="o">=</span><span class="n">pre</span><span class="p">,</span> <span class="n">ev_end_s</span><span class="o">=</span><span class="n">post</span><span class="p">,</span> <span class="n">buf_s</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">downsamp_factor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">IED_args</span><span class="o">=</span><span class="n">IED_args</span><span class="p">,</span> <span class="n">detrend</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+
+    <span class="n">epochs_all_evs</span><span class="p">[</span><span class="n">event</span><span class="p">]</span> <span class="o">=</span> <span class="n">epochs</span>
+    <span class="n">epochs_all_evs</span><span class="p">[</span><span class="n">event</span><span class="p">]</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">load_path</span><span class="si">}</span><span class="s1">/sample_</span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s1">-epo.fif&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<details class="hide below-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell output</span>
+<span class="expanded">Hide code cell output</span>
+</summary>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Opening raw data file /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg_bp.fif...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 394061 =      0.000 ...   788.122 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Reading 0 ... 394061  =      0.000 ...   788.122 secs...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Filtering raw data in 1 contiguous segment
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Setting up band-pass filter from 25 - 80 Hz
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>FIR filter parameters
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>---------------------
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Designing a one-pass, zero-phase, non-causal bandpass filter:
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Windowed time-domain design (firwin) method
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Hamming window with 0.0194 passband ripple and 53 dB stopband attenuation
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Lower passband edge: 25.00
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Lower transition bandwidth: 6.25 Hz (-6 dB cutoff frequency: 21.88 Hz)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Upper passband edge: 80.00 Hz
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Upper transition bandwidth: 20.00 Hz (-6 dB cutoff frequency: 90.00 Hz)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Filter length: 265 samples (0.530 s)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.8s remaining:    0.4s
+[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.8s finished
+[Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
+[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
+[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.1s finished
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Used Annotations descriptions: [&#39;feedback_start&#39;]
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Not setting metadata
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>80 matching events found
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No baseline correction applied
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 projection items activated
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Using data from preloaded Raw for 80 events and 2001 original time points ...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 bad epochs dropped
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Overwriting existing file.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Overwriting existing file.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Opening raw data file /Users/salmanqasim/Documents/GitRepos/LFPAnalysis/data/sample_ieeg_bp.fif...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>    Range : 0 ... 394061 =      0.000 ...   788.122 secs
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Ready.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Reading 0 ... 394061  =      0.000 ...   788.122 secs...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Filtering raw data in 1 contiguous segment
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Setting up band-pass filter from 25 - 80 Hz
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>FIR filter parameters
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>---------------------
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Designing a one-pass, zero-phase, non-causal bandpass filter:
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Windowed time-domain design (firwin) method
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Hamming window with 0.0194 passband ripple and 53 dB stopband attenuation
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Lower passband edge: 25.00
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Lower transition bandwidth: 6.25 Hz (-6 dB cutoff frequency: 21.88 Hz)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Upper passband edge: 80.00 Hz
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Upper transition bandwidth: 20.00 Hz (-6 dB cutoff frequency: 90.00 Hz)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>- Filter length: 265 samples (0.530 s)
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
+[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
+[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.1s finished
+[Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
+[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.2s finished
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Used Annotations descriptions: [&#39;baseline_start&#39;]
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Not setting metadata
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>80 matching events found
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>No baseline correction applied
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 projection items activated
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Using data from preloaded Raw for 80 events and 1376 original time points ...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 bad epochs dropped
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Overwriting existing file.
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Overwriting existing file.
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<ul class="simple">
+<li><p>epochs_all_evs: dictionary containing the epochs for all of your subjects’ re-referenced data</p></li>
+</ul>
+<p>Plot and examine the epochs if you’d like:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># %matplotlib notebook</span>
+<span class="c1"># fig = epochs_all_subjs_all_evs[&#39;MS007&#39;][&#39;feedback_start&#39;].plot(n_epochs=10, n_channels=10)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># # Need this following line to save the annotations to the epochs object </span>
+<span class="c1"># fig.fake_keypress(&#39;a&#39;)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="where-do-i-go-from-here">
+<h2>Where do I go from here?<a class="headerlink" href="#where-do-i-go-from-here" title="Link to this heading">#</a></h2>
+<p>At this point, you’ve successfuly pre-processed your iEEG data and sliced it around your timepoints of interest. These epochs are going to be the currency for many of your subsequent analyses, so make sure you TRUST THEM before proceeding to the other notebooks for analyses.</p>
+<p>From here, you can move on to the:</p>
+<ol class="arabic simple">
+<li><p>FOOOF: a notebook for computing power-spectra across trials and fitting their peaks</p></li>
+<li><p>TFRPlotsAndStatistics: a notebook for computing time-frequency spectra (trial-level), and computing several different statistics or simply saving the data out in dataframes.</p></li>
+<li><p>OscillationDetection(BOSC): a notebook for computing sliding burst detection and saving the data out in dataframes</p></li>
+<li><p>TimeResolvedRegression: a notebook for computing regression analysis at each timepoint of a timeseries. TFR-extracted band power is used as example.</p></li>
+<li><p>ConnectivityAnalysis: a notebook for computing different synchrony measures between electrodes.</p></li>
+</ol>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "lfpanalysis"
+        },
+        kernelOptions: {
+            name: "lfpanalysis",
+            path: "./."
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'lfpanalysis'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="module-01-00_Introduction.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Introduction to LFP Analysis</p>
+      </div>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#if-using-your-own-data-pre-process-run-1x">IF USING YOUR OWN DATA: Pre-process (run 1x):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data-default-bipolar">Re-reference the data (default=bipolar):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#now-look-at-the-data-to-manually-remove-channels">NOW look at the data to manually remove channels:</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sync-behavioral-and-neural-data">Sync behavioral and neural data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-your-behavioral-data">Load your behavioral data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#make-epochs">Make epochs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-do-i-go-from-here">Where do I go from here?</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Salman E. Qasim
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=26a4bc78f4c0ddb94549"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=26a4bc78f4c0ddb94549"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

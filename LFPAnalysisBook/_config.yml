@@ -1,0 +1,59 @@
+# Book settings
+# Learn more at https://jupyterbook.org/customize/config.html
+
+#######################################################################################
+title: LFP Analysis Book
+author: Salman E. Qasim
+# logo: logo.png
+only_build_toc_files: false
+#######################################################################################
+
+#######################################################################################
+# Execution settings
+execute:
+  timeout: 5000
+  execute_notebooks: auto  # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
+  cache: ""  # A path to the jupyter cache that will be used to store execution artifacs. Defaults to `_build/.jupyter_cache/` docs/.jupyter_cache/
+  exclude_output: false
+  exclude_input: false
+  remove_code_source: false
+  remove_cell_outputs: true
+#######################################################################################
+
+
+# # Define the name of the latex output file for PDF builds
+# latex:
+#   latex_documents:
+#     targetname: book.tex
+
+# # Add a bibtex file so that we can create citations
+# bibtex_bibfiles:
+#   - references.bib
+
+#######################################################################################
+# Information about where the book exists on the web
+repository:
+  url: https://github.com/seqasim/LFPAnalysis/tree/main  # Online location of your book
+  path_to_book: LFPAnalysisBook  # Optional path to your book, relative to the repository root
+  branch: master  # Which branch of the repository should be used when creating links (optional)
+
+#######################################################################################
+# Launch button settings
+launch_buttons:
+  notebook_interface: "classic"  # The interface interactive links will activate ["classic", "jupyterlab"]
+  colab_url: ""
+  binderhub_url: ""
+  thebe: false  # Add a thebe button to pages (requires the repository to run on Binder)
+
+#######################################################################################
+
+#######################################################################################
+# # Advanced and power-user settings
+# sphinx:
+#   extra_extensions:   # A list of extra extensions to load by Sphinx.
+#   - sphinx_inline_tabs
+#   config:   # key-value pairs to directly over-ride the Sphinx configuration
+#     mathjax_path: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+latex:
+  latex_engine: pdflatex  # one of 'pdflatex', 'xelatex' (recommended for unicode), 'luatex', 'platex', 'uplatex'

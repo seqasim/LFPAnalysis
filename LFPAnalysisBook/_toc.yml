@@ -1,0 +1,16 @@
+# Table of contents
+# Learn more at https://jupyterbook.org/customize/toc.html
+
+format: jb-book
+root: intro
+chapters:
+# - file: markdown
+- file: module-01-00_Introduction
+# - file: module-01-01_Git_Python
+- file: module-02-00_Preprocessing
+# - file: module-03-00_PowerSpectralDensity
+# - file: module-04-00_TimeFrequencyAnalysis
+# - file: module-05-00_Coherence
+# - file: module-06-00_CrossFrequencyCoupling
+# - file: module-07-00_Statistics
+# - file: markdown-notebooks
