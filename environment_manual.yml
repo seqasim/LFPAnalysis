@@ -3,5 +3,27 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - mne
   - mne-connectivity
+  - seaborn
+  - statsmodels
+  - numba
+  - ipython
+  - ipyevents
+  - ipywidgets
+  - ipykernel
+  - openpyxl
+  - dcor
+  - llvmlite
+  - pyyaml
+  - sparse
+  - tabulate
+  - levenshtein
+  - pycatch22
+  - wheel
+  - notebook
+  - h5io
+  - tensorpac
+  - neurodsp=2.2.0
+  - fooof=1.0.0
 prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis
