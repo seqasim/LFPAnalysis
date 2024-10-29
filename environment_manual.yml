@@ -3,6 +3,9 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - python=3.10.8
+  - pip
+  - requests
   - mne
   - mne-connectivity
   - seaborn
@@ -26,4 +29,3 @@ dependencies:
   - tensorpac
   - neurodsp=2.2.0
   - fooof=1.0.0
-prefix: /sc/arion/work/qasims01/test-env/envs/LFPAnalysis
