@@ -1,39 +1,17 @@
 # LFPAnalysis
 
-The motivation for this package is that any member of the Saez or Gu lab should be able to:
-
-
-1. load raw EDF or Neuralynx LFP data into mne (https://mne.tools/stable/index.html)
-
-2. preprocess it according to best practices (to the best of my knowledge and experience)
-
-3. sync it to their behavioral task 
-
-4. extract spectral information with minimal confusion 
-
-5. perform (mostly) non-parametric statistical analyses with this data. 
-
-I am experimenting with making this a fully self-contained Python package that people can download using pip.
+This package was motivated by the need to get data from an .edf or .nlx file into an MNE structure as easily as possible, preprocess it according to best practices, sync it to behavioral data, and extract spectral information fom it. 
 
 
 The LFPAnalysis folder contains functions split into separate utility libraries depending on what they do. 
 
 The scripts folder contains notebooks of examples using the functions to process our data. 
 
-Eventually, the "data" folder will hold sample test data for people to play around with. 
-
-I have never written a Python package before so I may screw up some logistical aspects of how this is organized or setup. I am generally trying to follow that system laid out here: https://goodresearch.dev/index.html
-
+The "data" folder holds sample test data for people to play around with. 
 
 Most of the Python packages you need here should come from the install for mne: https://mne.tools/stable/install/manual_install.html#manual-install
 
-If missing anything, consult the environment.yml file. 
-
-Some important misc notes if you're on MSSM's MINERVA server (I will compile here as I go and make a more comprehensive guide to using Minerva later): 
-
-1. Make sure your conda environment points away from the default /hpc/user/ directory as this runs out of space quite quickly. See: https://labs.icahn.mssm.edu/minervalab/documentation/conda/
-
-2. If you want to run batch jobs in Jupyter on Minerva: https://labs.icahn.mssm.edu/minervalab/documentation/python-and-jupyter-notebook/
+If missing anything, consult the environment.yml file, which has the fully detailed package information (though not all are necessary).
 
 ## Installation
 
