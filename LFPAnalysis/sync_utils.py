@@ -1,9 +1,8 @@
 import numpy as np
 import scipy.stats
 import warnings
-from scipy.stats import spearmanr, pearsonr
+from scipy.stats import pearsonr
 from collections import defaultdict 
-import matplotlib.pyplot as plt
 
 # Utility functions for synchronization
 

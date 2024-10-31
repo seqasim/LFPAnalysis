@@ -1,14 +1,9 @@
 # In this libray I want to write some functions that make certain statistical analyses easier to run 
 
-import scipy as sp
 import numpy as np
 import pandas as pd 
-import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from tqdm import tqdm
-# from joblib import Parallel, delayed
-from multiprocessing import Pool
-
 import patsy
 from statsmodels.api import OLS
 from tqdm import tqdm
@@ -24,6 +19,9 @@ def fit_permuted_model(y_permuted, X):
     Convenience function for running backend OLS with surrogates
     """
     return OLS(y_permuted, X).fit().params
+
+# TODO: Write a generalized class for time-resolved analyses that can be used for any input function like 
+# fit_permuted_model seen above. 
 
 def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=False):
     """

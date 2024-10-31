@@ -5,11 +5,8 @@ import scipy as sp
 import math
 import pandas as pd
 import mne
-import pickle 
-import joblib
 import fooof
 from fooof import FOOOFGroup
-from matplotlib.backends.backend_pdf import PdfPages
 import os
 import pycatch22
 import pkg_resources

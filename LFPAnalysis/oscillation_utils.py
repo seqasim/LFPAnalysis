@@ -1,13 +1,3 @@
-"""
-eBOSC IN PROGRESS: 
-
-Pulled largely from Julian Q. Kosciessa at
-https://github.com/jkosciessa/eBOSC_py 
-
-"""
-
-
-
 import numpy as np
 import pandas as pd
 import numpy.matlib
@@ -15,13 +5,10 @@ import scipy.io as sio
 from pathlib import Path
 import statsmodels.api as sm
 from scipy.stats.distributions import chi2
-from mne_connectivity import phase_slope_index, seed_target_indices, spectral_connectivity_epochs, spectral_connectivity_time
+from mne_connectivity import phase_slope_index, spectral_connectivity_epochs, spectral_connectivity_time
 import mne
 from scipy.signal import hilbert
 from mne.filter import next_fast_len
-from tqdm import tqdm
-from scipy.stats import zscore
-import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from joblib import delayed, Parallel
 
@@ -81,8 +68,7 @@ def swap_time_blocks(data, random_state=None):
         permutations
     References
     ----------
-    Source: Bahramisharif et al. 2013 
-    Justification: https://www.sciencedirect.com/science/article/pii/S0959438814001640
+    Source: https://www.sciencedirect.com/science/article/pii/S0959438814001640
     """
     
     if random_state is None:

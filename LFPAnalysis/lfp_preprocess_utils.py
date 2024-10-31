@@ -4,18 +4,15 @@ import re
 import difflib 
 from mne.preprocessing.bads import _find_outliers
 from scipy.stats import kurtosis, zscore
-import neurodsp
-from neurodsp.spectral import compute_spectrum
 import mne
 from glob import glob
 from LFPAnalysis import nlx_utils, lfp_preprocess_utils, iowa_utils
 import pandas as pd
 from mne.filter import next_fast_len
-from scipy.signal import hilbert, find_peaks, peak_widths, convolve
+from scipy.signal import find_peaks, peak_widths
 import Levenshtein as lev
 import os
 import warnings
-import json
 from ast import literal_eval
 
 
