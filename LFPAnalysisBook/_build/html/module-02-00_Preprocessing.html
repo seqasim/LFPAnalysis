@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Pre-processing &#8212; LFP Analysis Book</title>
+    <title>Preprocessing raw data &#8212; LFP Analysis Book</title>
   
   
   
@@ -34,7 +34,7 @@
     <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=a3416100" />
     <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=13237357" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css?v=be8a1c11" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
   
@@ -63,7 +63,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'module-02-00_Preprocessing';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Introduction to LFP Analysis" href="module-01-00_Introduction.html" />
+    <link rel="prev" title="Electrode Localization" href="module-01-02_ElectrodeLocalization.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -162,8 +162,9 @@
             </li>
         </ul>
         <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="module-01-00_Introduction.html">Introduction to LFP Analysis</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-01-00_BroadIntroduction.html">Broad Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module-01-02_ElectrodeLocalization.html">Electrode Localization</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Preprocessing raw data</a></li>
 </ul>
 
     </div>
@@ -294,7 +295,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Pre-processing</h1>
+    <h1>Preprocessing raw data</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -304,8 +305,9 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#import-packages">Import packages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#if-using-your-own-data-pre-process-run-1x">IF USING YOUR OWN DATA: Pre-process (run 1x):</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data-default-bipolar">Re-reference the data (default=bipolar):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data">Re-reference the data:</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#now-look-at-the-data-to-manually-remove-channels">NOW look at the data to manually remove channels:</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sync-behavioral-and-neural-data">Sync behavioral and neural data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-your-behavioral-data">Load your behavioral data</a></li>
@@ -322,27 +324,18 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="pre-processing">
-<h1>Pre-processing<a class="headerlink" href="#pre-processing" title="Link to this heading">#</a></h1>
-<p>In this notebook, I aim to roll through an analysis across a few patients which can easily be extended for all of the  patients in your cohort. To do so, we will use the pre-processing functions that are written out more explicitly in the step-by-step notebooks.</p>
-<p><strong>This is the notebook you should copy and edit for your own actual analyses</strong></p>
-<p>======================================================================================================================</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="preprocessing-raw-data">
+<h1>Preprocessing raw data<a class="headerlink" href="#preprocessing-raw-data" title="Link to this heading">#</a></h1>
+<p>So you’ve recorded data in the Epilepsy monitoring unit - congratulations! What now? How do we load that data into a format that plays nice with Python, preprocess that data, and save it in a re-usable way?</p>
+<p>The LFPAnalysis codebase  contains a lot of functions to help with this. You can always dig into what those functions are doing (I encourage this) but in the notebooks I will simply show you how to <strong>use</strong> these functions.</p>
+<section id="import-packages">
+<h2>Import packages<a class="headerlink" href="#import-packages" title="Link to this heading">#</a></h2>
+<p>First, import Python packages and code you’ll need:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">mne</span>
-<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
-<span class="kn">from</span> <span class="nn">matplotlib.backends.backend_pdf</span> <span class="kn">import</span> <span class="n">PdfPages</span>
-<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
-<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">zscore</span><span class="p">,</span> <span class="n">linregress</span><span class="p">,</span> <span class="n">ttest_ind</span><span class="p">,</span> <span class="n">ttest_rel</span><span class="p">,</span> <span class="n">ttest_1samp</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="kn">from</span> <span class="nn">mne.preprocessing.bads</span> <span class="kn">import</span> <span class="n">_find_outliers</span>
-<span class="kn">import</span> <span class="nn">os</span> 
-<span class="kn">import</span> <span class="nn">joblib</span>
-<span class="kn">import</span> <span class="nn">pickle</span>
-<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
-<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">clear_output</span>
 <span class="kn">import</span> <span class="nn">warnings</span> 
 
 <span class="c1"># I only want to see warnings once</span>
@@ -360,13 +353,15 @@
 </div>
 </div>
 </div>
+<p>Import the custom functions from LFPAnalysis that we want</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">LFPAnalysis</span> <span class="kn">import</span> <span class="n">lfp_preprocess_utils</span><span class="p">,</span> <span class="n">sync_utils</span><span class="p">,</span> <span class="n">analysis_utils</span><span class="p">,</span> <span class="n">nlx_utils</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">LFPAnalysis</span> <span class="kn">import</span> <span class="n">lfp_preprocess_utils</span><span class="p">,</span> <span class="n">sync_utils</span><span class="p">,</span> <span class="n">analysis_utils</span>
 </pre></div>
 </div>
 </div>
 </div>
+</section>
 <section id="if-using-your-own-data-pre-process-run-1x">
 <h2>IF USING YOUR OWN DATA: Pre-process (run 1x):<a class="headerlink" href="#if-using-your-own-data-pre-process-run-1x" title="Link to this heading">#</a></h2>
 <p>In the pre-processing functions below, we:</p>
@@ -380,8 +375,8 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># for ix, subj_id in enumerate(subj_ids): </span>
-<span class="c1">#     site = subj_sites[ix]</span>
-<span class="c1">#     format = subj_formats[ix]</span>
+<span class="c1">#     site = subj_sites[ix] # where the data was recorded, e.g. &#39;MSSM&#39;, &#39;UI&#39;</span>
+<span class="c1">#     format = subj_formats[ix] # the format the data, e.g. &#39;edf&#39;, &#39;nlx&#39;</span>
     
 <span class="c1">#     print(f&#39;Working on subj {subj_id}&#39;)</span>
     
@@ -413,10 +408,14 @@
 </div>
 </div>
 </div>
+<p>If you are not using your own data (e.g. trying out the sample data) then you can just proceed from this point onwards.</p>
 </section>
-<section id="re-reference-the-data-default-bipolar">
-<h2>Re-reference the data (default=bipolar):<a class="headerlink" href="#re-reference-the-data-default-bipolar" title="Link to this heading">#</a></h2>
+<section id="re-reference-the-data">
+<h2>Re-reference the data:<a class="headerlink" href="#re-reference-the-data" title="Link to this heading">#</a></h2>
 <p>We re-reference the data to get rid of shared noise, cleaning the data to leave what we assume is local biological activity.</p>
+<p>Read more in <a class="reference external" href="https://link.springer.com/chapter/10.1007/978-3-031-20910-9_28">this nice chapter from Parish et al.</a></p>
+<p>Here, note that we default to a bipolar configuration. This is my personal preference for my datasets but you have the freedom to use a white matter reference as well. I have not implemented a Laplacian or common-average referencing scheme yet.</p>
+<p>Note also that re-referencing requires modifying the electrode dataframes that contain the names and regions of each electrode. This is pretty easy in the bipolar montage but keep in mind if you implement a different method for this.</p>
 <div class="cell tag_hide-output docutils container">
 <div class="cell_input above-output-prompt docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">site</span> <span class="o">=</span> <span class="s1">&#39;MSSM&#39;</span> <span class="c1"># where the data was recorded, e.g. &#39;MSSM&#39;, &#39;UI&#39;</span>
@@ -514,7 +513,6 @@ racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
-/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
@@ -524,17 +522,9 @@ racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
-/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
-/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
@@ -548,6 +538,17 @@ racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
+/Users/salmanqasim/Documents/GitRepos/LFPAnalysis/LFPAnalysis/../data/YBA_ROI_labelled.xlsx
 </pre></div>
 </div>
 </div>
@@ -683,7 +684,7 @@ racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas
 .
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...............
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>................
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>.
@@ -692,16 +693,16 @@ racas1-racas2, racas2-racas3, racas3-racas4, racas4-racas5, racas5-racas6, racas
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>..
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>.
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>..
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>..
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>...
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>.
 
 found matches for 150 of 428 pulses
 0.9999892560991055
@@ -903,7 +904,7 @@ found matches for 150 of 428 pulses
 [Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.8s finished
 [Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
 [Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
-[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.1s finished
+[Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.2s finished
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Used Annotations descriptions: [&#39;feedback_start&#39;]
@@ -988,12 +989,12 @@ found matches for 150 of 428 pulses
 </pre></div>
 </div>
 <div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
-[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
+[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.0s
 [Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.1s finished
 [Parallel(n_jobs=-1)]: Using backend LokyBackend with 10 concurrent workers.
 </pre></div>
 </div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.1s remaining:    0.1s
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=-1)]: Done  10 out of  15 | elapsed:    0.2s remaining:    0.1s
 [Parallel(n_jobs=-1)]: Done  15 out of  15 | elapsed:    0.2s finished
 </pre></div>
 </div>
@@ -1093,12 +1094,12 @@ found matches for 150 of 428 pulses
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="module-01-00_Introduction.html"
+       href="module-01-02_ElectrodeLocalization.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Introduction to LFP Analysis</p>
+        <p class="prev-next-title">Electrode Localization</p>
       </div>
     </a>
 </div>
@@ -1118,8 +1119,9 @@ found matches for 150 of 428 pulses
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#import-packages">Import packages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#if-using-your-own-data-pre-process-run-1x">IF USING YOUR OWN DATA: Pre-process (run 1x):</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data-default-bipolar">Re-reference the data (default=bipolar):</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#re-reference-the-data">Re-reference the data:</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#now-look-at-the-data-to-manually-remove-channels">NOW look at the data to manually remove channels:</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sync-behavioral-and-neural-data">Sync behavioral and neural data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-your-behavioral-data">Load your behavioral data</a></li>

@@ -818,43 +818,9 @@ def compute_connectivity(mne_data=None,
     return pairwise_connectivity
 
 
-# def compute_indices(elec_df, roi = ['hippocampus', 'anterior_cingulate'], band=[8, 13], band_name='beta'): 
-#     """
-#     Use mne connectivity to compute the spectral connectivity between electrodes 
-#     the first roi is the seed. the second roi is the target. 
-#     """
 
+########################################################################################
 
-#         # set a mask for the right electrodes 
-#         right_elec_mask = [elec_df.hemisphere=='r']
-#         seed_target_df = pd.DataFrame(columns=['seed', 'target'], index=['left', 'right'])
-#         seed_target_df['seed']['left'] = np.where(elec_df[~right_elec_mask].region == roi[0])[0]
-#         seed_target_df['target']['left'] = np.where(elec_df[~right_elec_mask].region == self.roi[1])[0]
-#         seed_target_df['seed']['right'] = np.where(elec_df[right_elec_mask].region == self.roi[0])[0]
-#         seed_target_df['target']['right'] = np.where(elec_df[right_elec_mask].region == self.roi[1])[0]
-
-
-#         seed_target_df = seed_target_df[
-#             (seed_target_df['seed'].map(lambda d: len(d) > 0)) & (seed_target_df['target'].map(lambda d: len(d) > 0))]
-
-#             # Dealing with multiple channels: stack them, don't average them
-#         psi = {}
-#         for hemi in ['left', 'right']:
-#             # first determine if ipsi connectivity is even possible; if not, move on
-#             if hemi not in seed_target_df.index.tolist():
-#                 continue
-#             else:
-#                 seed_to_target = seed_target_indices(
-#                     seed_target_df['seed'][hemi],
-#                     seed_target_df['target'][hemi])
-
-#                     self.compute_connectivity(eeg_mne[recalled],
-#                                                           samplerate=self.resample_freq,
-#                                                           band=[self.fb[band][0], self.fb[band][1]],
-#                                                           metric=self.metric,
-#                                                           indices=seed_to_source,
-#                                                           n_cycles=self.n_cycles)
-        
 
 """
 BOSC (Better Oscillation Detection) function library

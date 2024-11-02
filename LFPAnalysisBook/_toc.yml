@@ -5,8 +5,9 @@ format: jb-book
 root: intro
 chapters:
 # - file: markdown
-- file: module-01-00_Introduction
-# - file: module-01-01_Git_Python
+- file: module-01-00_BroadIntroduction
+- file: module-01-01_LFPAnalysisIntroduction
+- file: module-01-02_ElectrodeLocalization
 - file: module-02-00_Preprocessing
 # - file: module-03-00_PowerSpectralDensity
 # - file: module-04-00_TimeFrequencyAnalysis
