@@ -88,7 +88,7 @@ def get_project_root() -> Path:
     
 #     return np.concatenate(surr, axis=-1)
 
-def make_surrogate_data(data, method=='swap_epochs', n_shuffles=1000, rng_seed=None, return_generator=True):
+def make_surrogate_data(data, method='swap_epochs', n_shuffles=1000, rng_seed=None, return_generator=True):
     """Create surrogate data for a null hypothesis of connectivity.
     
     Parameters
@@ -393,26 +393,30 @@ def compute_gc_tr(mne_data=None,
     else:
         return np.squeeze(gc_tr)
 
-def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, gc_n_lags=15, buf_ms=1000):
+def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_cycles, surr_method = 'swap_epochs', gc_n_lags=15, buf_ms=1000):
 
     n_pairs = len(indices[0])
-    data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
+    # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
-    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+    # surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
 
-    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-        surr_dat[ix, :, :] = surr_ch
+    # for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+    #     surr_ch = swap_time_blocks(ch_dat, random_state=None)
+    #     surr_dat[ix, :, :] = surr_ch
 
-    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+    # surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
 
-    # make a new EpochArray from it
-    surr_mne = mne.EpochsArray(surr_dat, 
-                mne_data.info, 
-                tmin=mne_data.tmin, 
-                events = mne_data.events, 
-                event_id = mne_data.event_id,
-                verbose='ERROR')
+
+    # # make a new EpochArray from it
+    # surr_mne = mne.EpochsArray(surr_dat, 
+    #             mne_data.info, 
+    #             tmin=mne_data.tmin, 
+    #             events = mne_data.events, 
+    #             event_id = mne_data.event_id,
+    #             verbose='ERROR')
+
+    surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+    method=surr_method, n_shuffles=1, return_generator=False)
 
     if metric == 'psi':
         surr_conn = np.squeeze(phase_slope_index(surr_mne,
@@ -466,26 +470,29 @@ def compute_surr_connectivity_epochs(mne_data, indices, metric, band, freqs, n_c
     return surr_conn
 
 
-def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags=15):
+def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, surr_method = 'swap_epochs', buf_ms, gc_n_lags=15):
 
     n_pairs = len(indices[0])
-    data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
+    # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
-    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+    # surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
 
-    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-        surr_dat[ix, :, :] = surr_ch
+    # for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+    #     surr_ch = swap_time_blocks(ch_dat, random_state=None)
+    #     surr_dat[ix, :, :] = surr_ch
 
-    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+    # surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
 
-    # make a new EpochArray from it
-    surr_mne = mne.EpochsArray(surr_dat, 
-                mne_data.info, 
-                tmin=mne_data.tmin, 
-                events = mne_data.events, 
-                event_id = mne_data.event_id,
-                verbose='ERROR')
+    # # make a new EpochArray from it
+    # surr_mne = mne.EpochsArray(surr_dat, 
+    #             mne_data.info, 
+    #             tmin=mne_data.tmin, 
+    #             events = mne_data.events, 
+    #             event_id = mne_data.event_id,
+    #             verbose='ERROR')
+
+    surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+    method=surr_method, n_shuffles=1, return_generator=False)
 
     if metric == 'granger':
         # I don't want to compute multivariate GC, so refactor the indices: 
@@ -537,6 +544,7 @@ def compute_connectivity(mne_data=None,
                         n_cycles=None, 
                         buf_ms=1000, 
                         avg_over_dim='time',
+                        surr_method = 'swap_epochs',
                         n_surr=500,
                         parallelize=False,
                         band1=None,
@@ -632,22 +640,29 @@ def compute_connectivity(mne_data=None,
 
                 # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
+                surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+                method=surr_method, n_shuffles=n_surr, return_generator=False)
+
                 for ns in range(n_surr): 
                     # print(f'Computing surrogate # {ns}')
-                    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
-                    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-                        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-                        surr_dat[ix, :, :] = surr_ch
-                    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
-                    # make a new EpochArray from it
-                    surr_mne = mne.EpochsArray(surr_dat, 
-                                mne_data.info, 
-                                tmin=mne_data.tmin, 
-                                events = mne_data.events, 
-                                event_id = mne_data.event_id)
+                    # surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                    # for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                    #     surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                    #     surr_dat[ix, :, :] = surr_ch
+                    # surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                    # # make a new EpochArray from it
+                    # surr_mne = mne.EpochsArray(surr_dat, 
+                    #             mne_data.info, 
+                    #             tmin=mne_data.tmin, 
+                    #             events = mne_data.events, 
+                    #             event_id = mne_data.event_id)
+
+                    # surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+                    # method=surr_method, n_shuffles=1, return_generator=False)
+
 
                     if metric == 'psi':
-                        surr_conn = np.squeeze(phase_slope_index(surr_mne,
+                        surr_conn = np.squeeze(phase_slope_index(surr_mne[ns],
                                                                     indices=indices,
                                                                     sfreq=surr_mne.info['sfreq'],
                                                                     mode='cwt_morlet',
@@ -662,7 +677,7 @@ def compute_connectivity(mne_data=None,
                         for ix, _ in enumerate(indices[0]):
                             gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
                         
-                            surr_gc = compute_gc_tr(mne_data=surr_mne, 
+                            surr_gc = compute_gc_tr(mne_data=surr_mne[ns], 
                                     band=band,
                                     indices=gc_indices, 
                                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
@@ -677,7 +692,7 @@ def compute_connectivity(mne_data=None,
                         surr_conn = np.vstack(surr_conn)
 
                     else:
-                        surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
+                        surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne[ns],
                                                                         indices=indices,
                                                                         method=metric,
                                                                         sfreq=surr_mne.info['sfreq'],
@@ -734,21 +749,27 @@ def compute_connectivity(mne_data=None,
 
                 # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
+                surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+                method=surr_method, n_shuffles=n_surr, return_generator=False)
+
                 for ns in range(n_surr): 
                     # print(f'Computing surrogate # {ns}')
-                    surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
-                    for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-                        surr_ch = swap_time_blocks(ch_dat, random_state=None)
-                        surr_dat[ix, :, :] = surr_ch
-                    surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
-                    # make a new EpochArray from it
-                    surr_mne = mne.EpochsArray(surr_dat, 
-                                mne_data.info, 
-                                tmin=mne_data.tmin, 
-                                events = mne_data.events, 
-                                event_id = mne_data.event_id)
+                    # surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                    # for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                    #     surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                    #     surr_dat[ix, :, :] = surr_ch
+                    # surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                    # # make a new EpochArray from it
+                    # surr_mne = mne.EpochsArray(surr_dat, 
+                    #             mne_data.info, 
+                    #             tmin=mne_data.tmin, 
+                    #             events = mne_data.events, 
+                    #             event_id = mne_data.event_id)
 
-                    surr_conn = amp_amp_coupling(surr_mne, 
+                    # surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+                    # method=surr_method, n_shuffles=1, return_generator=False)
+
+                    surr_conn = amp_amp_coupling(surr_mne[ns], 
                                                  indices, 
                                                  freqs0=band,
                                                  freqs1=band1)
@@ -831,21 +852,24 @@ def compute_connectivity(mne_data=None,
 
                     # progress_bar = tqdm(np.arange(n_surr), ascii=True, desc='Computing connectivity surrogates')
 
+                    surr_mne = make_surrogate_data(mne_data.get_data(copy=False),
+                    method=surr_method, n_shuffles=n_surr, return_generator=False)
+
                     for ns in range(n_surr): 
                         # print(f'Computing surrogate # {ns}')
-                        surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
-                        for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
-                            surr_ch = swap_time_blocks(ch_dat, random_state=None)
-                            surr_dat[ix, :, :] = surr_ch
-                        surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
-                        # make a new EpochArray from it
-                        surr_mne = mne.EpochsArray(surr_dat, 
-                                    mne_data.info, 
-                                    tmin=mne_data.tmin, 
-                                    events = mne_data.events, 
-                                    event_id = mne_data.event_id)
+                        # surr_dat = np.zeros_like(data) # allocate space for the surrogate channels 
+                        # for ix, ch_dat in enumerate(data): # apply the same swap to every event in a channel, but differ between channels 
+                        #     surr_ch = swap_time_blocks(ch_dat, random_state=None)
+                        #     surr_dat[ix, :, :] = surr_ch
+                        # surr_dat = np.swapaxes(surr_dat, 0, 1) # swap back so it's events, chan, times 
+                        # # make a new EpochArray from it
+                        # surr_mne = mne.EpochsArray(surr_dat, 
+                        #             mne_data.info, 
+                        #             tmin=mne_data.tmin, 
+                        #             events = mne_data.events, 
+                        #             event_id = mne_data.event_id)
                         
-                        surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne, 
+                        surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne[ns], 
                                                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                                                     average=False, 
                                                     indices=indices, 
