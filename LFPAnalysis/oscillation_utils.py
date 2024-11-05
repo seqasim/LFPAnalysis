@@ -50,42 +50,99 @@ def getTimeFromFTmat(fname, var_name='data'):
 def get_project_root() -> Path:
     return Path(__file__)
     
-def swap_time_blocks(data, random_state=None):
+# def swap_time_blocks(data, random_state=None):
 
-    """Compute surrogates by swapping time blocks.
-    This function cuts the timeseries at a random time point. Then, both time
-    blocks are swapped.
+#     """Compute surrogates by swapping time blocks.
+#     This function cuts the timeseries at a random time point. Then, both time
+#     blocks are swapped.
+#     Parameters
+#     ----------
+#     data : array_like
+#         Array of shape (n_chan, ..., n_times).
+#     random_state : int | None
+#         Fix the random state of the machine for reproducible results.
+#     Returns
+#     -------
+#     surr : array_like
+#         Swapped timeseries to use to compute the distribution of
+#         permutations
+#     References
+#     ----------
+#     Source: https://www.sciencedirect.com/science/article/pii/S0959438814001640
+#     """
+    
+#     if random_state is None:
+#         random_state = int(np.random.randint(0, 10000, size=1))
+#     rnd = np.random.RandomState(random_state)
+    
+#     # get the minimum / maximum shift
+#     min_shift, max_shift = 1, None
+#     if not isinstance(max_shift, (int, float)):
+#         max_shift = data.shape[-1]
+#     # random cutting point along time axis
+#     cut_at = rnd.randint(min_shift, max_shift, (1,))
+#     # split amplitude across time into two parts
+#     surr = np.array_split(data, cut_at, axis=-1)
+#     # revered elements
+#     surr.reverse()
+    
+#     return np.concatenate(surr, axis=-1)
+
+def make_surrogate_data(data, method=='swap_epochs', n_shuffles=1000, rng_seed=None, return_generator=True):
+    """Create surrogate data for a null hypothesis of connectivity.
+    
     Parameters
     ----------
-    data : array_like
-        Array of shape (n_chan, ..., n_times).
-    random_state : int | None
-        Fix the random state of the machine for reproducible results.
-    Returns
-    -------
-    surr : array_like
-        Swapped timeseries to use to compute the distribution of
-        permutations
-    References
-    ----------
-    Source: https://www.sciencedirect.com/science/article/pii/S0959438814001640
+    data : mne.Epochs
+        The data to be shuffled.
+    method : str
+        The method to use for shuffling. Options are 'swap_time_blocks' and
+        'swap_epochs'.
+    n_shuffles : int
+        The number of shuffles to perform.
+    rng_seed : int
+        The random seed to use for the shuffling.
+    return_generator : bool 
+        If True, returns a generator object. If False, returns a list of surrogates.
     """
-    
-    if random_state is None:
-        random_state = int(np.random.randint(0, 10000, size=1))
-    rnd = np.random.RandomState(random_state)
-    
-    # get the minimum / maximum shift
-    min_shift, max_shift = 1, None
-    if not isinstance(max_shift, (int, float)):
-        max_shift = data.shape[-1]
-    # random cutting point along time axis
-    cut_at = rnd.randint(min_shift, max_shift, (1,))
-    # split amplitude across time into two parts
-    surr = np.array_split(data, cut_at, axis=-1)
-    # revered elements
+    if method =='swap_time_blocks':
+        surrogate = _shuffle_within_epochs(data, n_shuffles, rng_seed)
+    elif method == 'swap_epochs':
+        surrogate = _shuffle_epochs(data, n_shuffles, rng_seed)
+    if not return_generator:
+        surrogate = [shuffle for shuffle in surrogate]
+    return surrogate
+
+def _shuffle_epochs(data, n_shuffles, rng_seed):
+    """Shuffle epochs in data. 
+    This function shuffles the order of the epochs."""
+    data_arr = data.get_data(copy=True)
+    rng = np.random.default_rng(rng_seed)
+    for _ in range(n_shuffles):
+        surr_arr = np.zeros_like(data_arr)
+        shuffle_idx = rng.permutation(data_arr.shape[0])
+        surr_arr = data_arr[shuffle_idx]
+        yield mne.EpochsArray(surr_arr, info=data.info)
+
+def _shuffle_within_epochs(data, n_shuffles, rng_seed):
+    """Shuffle within epochs in data. 
+    This function cuts the timeseries at a random time point. Then, both time
+    blocks are swapped.
+    """
+    data_arr = data.get_data(copy=True)
+    rng = np.random.default_rng(rng_seed)
+    for _ in range(n_shuffles):
+        surr_arr = np.zeros_like(data_arr)
+        cutpoints = rng.integers(1, data_arr.shape[-1], (data_arr.shape[0], data_arr.shape[1]))
+        for ev_idx in range(data_arr.shape[0]):
+            for ch_idx in range(data_arr.shape[1]):
+                surr_arr[ev_idx, ch_idx] = _swap_time_blocks(data_arr[ev_idx, ch_idx], cutpoints[ev_idx, ch_idx])
+        yield mne.EpochsArray(surr_arr, info=data.info)
+
+def _swap_time_blocks(data, cut_at):
+    """Swap time blocks in data at a given cutpoint."""
+    surr = np.array_split(data, [cut_at], axis=-1)
     surr.reverse()
-    
     return np.concatenate(surr, axis=-1)
 
 def make_seed_target_df(elec_df, epochs, source_roi, target_roi): 
