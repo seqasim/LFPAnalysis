@@ -88,7 +88,7 @@ def get_project_root() -> Path:
     
 #     return np.concatenate(surr, axis=-1)
 
-def make_surrogate_data(data, method='swap_epochs', n_shuffles=1000, rng_seed=42, return_generator=True):
+def make_surrogate_data(data, method='swap_epochs', n_shuffles=1000, rng_seed=42, return_generator=False):
     """Create surrogate data for a null hypothesis of connectivity.
     
     Parameters
