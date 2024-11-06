@@ -488,7 +488,7 @@ def compute_surr_connectivity_epochs(surr_mne, indices, metric, band, freqs, n_c
     return surr_conn
 
 
-def compute_surr_connectivity_time(mne_data, indices, metric, band, freqs, n_cycles, buf_ms, surr_method = 'swap_epochs', rng_seed=42, gc_n_lags=15):
+def compute_surr_connectivity_time(surr_mne, indices, metric, band, freqs, n_cycles, buf_ms, surr_method = 'swap_epochs', rng_seed=42, gc_n_lags=15):
 
     n_pairs = len(indices[0])
     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
