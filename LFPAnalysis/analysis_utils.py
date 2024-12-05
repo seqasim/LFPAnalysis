@@ -199,240 +199,330 @@ def plot_TFR(data, freqs, pre_win, post_win, sr, title):
 
     return f
 
-
-def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, 
-                      smoothing_window_length=0.02, sd_upper_cutoff=9, sd_lower_cutoff=2.5):
+def detect_fast_burst_evs(mne_data, 
+                    baseline_data,
+                    burst_frequency = (70, 200),
+                    smooth_win_s=0.02, 
+                    sd_upper_cutoff=6, 
+                    sd_lower_cutoff=1): 
+    """
     
+    HFA band: 70-200 Hz
+    Ripple range: 80-120
     """
 
-    Parameters
-    ----------   
-    mne_data : re-referenced MNE object with neural data
-    min_ripple_length : float
-        Minimum length of ripple event in seconds
-    max_ripple_length : float
-        Maximum length of ripple event in seconds
-    smoothing_window_length : float
-        Length of window to smooth the RMS signal
-    sd_upper_cutoff : float
-        Upper cutoff for ripple detection
-    sd_lower_cutoff : float
-        Lower cutoff for ripple detection
-    
-    Returns
-    -------
-    RPL_samps_dict : dict
-        Dictionary containing the start and end samples for each ripple event
-    RPL_sec_dict : dict
-        Dictionary containing the start and end times for each ripple event
-  
-    
-    Foster et al., 
-    1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
-    2. the root mean square (RMS) of the band-passed signal was calculated and smoothed using a 20-ms window
-    3. ripple events were identified as having an RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean
-    4. detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
-  
-    """
 
-    if type(mne_data) == mne.epochs.Epochs:
-        data_type = 'epoch'
-        raise ValueError('Continuous data required')
-    elif type(mne_data) in [mne.io.fiff.raw.Raw, mne.io.edf.edf.RawEDF]: 
-        data_type = 'continuous'
-    else: 
-        data_type = 'continuous'
+    # set minimum burst duration to 3 cycles of the lower bound frequency
+    min_burst_s = 3 / burst_frequency[0]
 
-    # Step 1: band-pass filter from 80 - 120 Hz (ripple band) 
-    ripple_band_data = mne_data.copy().filter(80, 120, n_jobs=-1)
-
-    # Step 2: Calculate the root mean square of the band-passed signal and smooth using a 20 ms window
+    # Step 1: band-pass filter the data
+    filtered_data = mne_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
 
     # Create an empty array to store the rolling RMS for each trial and time series
-    rolling_rms_array = np.zeros_like(ripple_band_data._data)
+    rolling_rms_array = np.zeros_like(filtered_data._data)
 
     # Loop over each trial and each time series and calculate the rolling RMS
-    for i in range(ripple_band_data._data.shape[0]):
-        column_values = ['signal'] 
-        df = pd.DataFrame(data = ripple_band_data._data[i, :], columns = column_values)
-        smoothed_data = df['signal'].pow(2).rolling(round(smoothing_window_length * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt, raw=True)
-        rolling_rms_array[i, :] = smoothed_data.values
-    
-    # Step 3: mark ripple events [ripple start, ripple end] as periods of RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean 
+    for i in range(filtered_data._data.shape[0]):
+        for j in range(filtered_data._data.shape[1]):
+            column_values = ['signal'] 
+            df = pd.DataFrame(data = filtered_data._data[i, j, :], columns = column_values)
+            smoothed_data = df['signal'].pow(2).rolling(round(smooth_win_s * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt)
+            rolling_rms_array[i, j, :] = smoothed_data.values
+
+    # Step 2: band-pass filter the baseline data
+    filtered_baseline = baseline_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
+
+    # Create an empty array to store the rolling RMS for each trial and time series
+    rolling_rms_baseline = np.zeros_like(filtered_baseline._data)
+
+    # Loop over each trial and each time series and calculate the rolling RMS
+    for i in range(filtered_baseline._data.shape[0]):
+        for j in range(filtered_baseline._data.shape[1]):
+            column_values = ['signal'] 
+            df = pd.DataFrame(data = filtered_baseline._data[i, j, :], columns = column_values)
+            smoothed_data = df['signal'].pow(2).rolling(round(smooth_win_s * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt)
+            rolling_rms_baseline[i, j, :] = smoothed_data.values
 
     # calculate mean and standard deviation of smoothed rms data, across all epochs and timepoints
-    smoothed_mean = rolling_rms_array.mean(axis=(-1))
-    smoothed_sd = rolling_rms_array.std(axis=(-1))
+    smoothed_mean = rolling_rms_baseline.mean()
+    smoothed_sd = rolling_rms_baseline.std()
 
-    # calculate lower (above 2.5 SD from mean) and upper (lower than 9 SD from mean) cutoffs for marking ripple events 
+    # calculate lower and upper cutoffs for marking burst events 
     lower_cutoff = smoothed_mean + sd_lower_cutoff * smoothed_sd
     upper_cutoff = smoothed_mean + sd_upper_cutoff * smoothed_sd
 
-    # change the dims to match the data array
-    lower_cutoff_expanded = np.expand_dims(lower_cutoff, axis=(1))
-    upper_cutoff_expanded = np.expand_dims(upper_cutoff, axis=(1))
+    burst_events_index = np.asarray(np.where((rolling_rms_array > lower_cutoff) & (rolling_rms_array < upper_cutoff)))
 
-    ripple_events_index = np.asarray(np.where((rolling_rms_array > lower_cutoff_expanded) & (rolling_rms_array < upper_cutoff_expanded)))
+    # Step 4: detected burst events with a duration shorter than 3 cycles of the lower bound frequency or longer than 500 ms, were rejected.
+    min_length_burst_event = min_burst_s * mne_data.info['sfreq'] # add an input parameter for duration of burst event
 
-    # Step 4: detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
-    min_length_ripple_event = min_ripple_length * mne_data.info['sfreq'] # add an input parameter for duration of ripple event
-    max_length_ripple_event = max_ripple_length * mne_data.info['sfreq']
+    burst_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+
+    for ch_ in np.unique(burst_events_index[1]):
+        burst_dict = {x:np.nan for x in np.unique(burst_events_index[0])}
+        for ev in np.unique(burst_events_index[0]):
+            # let's index the bursts for this ch_ and this ev 
+            ev_index = np.where(burst_events_index[0] == ev)
+            ch_index = np.where(burst_events_index[1] == ch_)
+            overlapping_index = np.intersect1d(ev_index, ch_index)
+            burst_ch_ev = burst_events_index[-1][overlapping_index]
+
+            burst_events_differences = np.array([0] + np.diff(burst_ch_ev))
+
+            # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
+            _, idx, counts = np.unique(np.cumsum(1-burst_events_differences)*burst_events_differences, return_index=True, return_counts=True)    
+
+            burst_events_index_correct_time = idx[np.where((counts > min_length_burst_event))] # index of burst events that reach criterion
+            burst_events_length_samples = counts[np.where((counts > min_length_burst_event))]  # length in samples of burst events that reach criterion
+            burst_end_index = burst_events_index_correct_time + burst_events_length_samples
+            burst_events_length_seconds = burst_events_length_samples/mne_data.info['sfreq'] # length in seconds of burst events that reach criterion
+
+            # # zip the three lists using zip() function --> burst_results is a list of tuples containing the starting index of each burst, the ending index of each burst, and the length of each burst in seconds
+            burst_results = list(zip(burst_ch_ev[burst_events_index_correct_time],
+                                    burst_ch_ev[burst_end_index],
+                                    burst_events_length_seconds))
+            num_burst = len(burst_results) # this is the number of bursts
+            burst_dict[ev] = burst_results
+        burst_samps_dict[mne_data.ch_names[ch_]]= burst_dict
+
+    return burst_samps_dict
+
+# def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, 
+#                       smoothing_window_length=0.02, sd_upper_cutoff=9, sd_lower_cutoff=2.5):
     
-    RPL_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
-    RPL_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+#     """
+
+#     Parameters
+#     ----------   
+#     mne_data : re-referenced MNE object with neural data
+#     min_ripple_length : float
+#         Minimum length of ripple event in seconds
+#     max_ripple_length : float
+#         Maximum length of ripple event in seconds
+#     smoothing_window_length : float
+#         Length of window to smooth the RMS signal
+#     sd_upper_cutoff : float
+#         Upper cutoff for ripple detection
+#     sd_lower_cutoff : float
+#         Lower cutoff for ripple detection
+    
+#     Returns
+#     -------
+#     RPL_samps_dict : dict
+#         Dictionary containing the start and end samples for each ripple event
+#     RPL_sec_dict : dict
+#         Dictionary containing the start and end times for each ripple event
+  
+    
+#     Foster et al., 
+#     1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
+#     2. the root mean square (RMS) of the band-passed signal was calculated and smoothed using a 20-ms window
+#     3. ripple events were identified as having an RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean
+#     4. detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
+  
+#     """
+
+#     # # What type of data is this? Continuous or epoched? 
+#     # if type(mne_data) == mne.epochs.Epochs:
+#     #     data_type = 'epoch'
+#     # elif type(mne_data) == mne.io.fiff.raw.Raw: 
+#     #     # , mne.io.edf.edf.RawEDF - probably should never include EDF data directly here. 
+#     #     data_type = 'continuous'
+#     # else: 
+#     #     data_type = 'continuous'
+
+#     # Step 1: band-pass filter from 80 - 120 Hz (ripple band) 
+#     min_width = width_thresh * sr
+
+#     # filter data in HFA band
+#     filtered_data = mne_data.copy().filter(70, 200, n_jobs=-1)
+
+#     # Create an empty array to store the rolling RMS for each trial and time series
+#     rolling_rms_array = np.zeros_like(filtered_data._data)
+
+#     # Loop over each trial and each time series and calculate the rolling RMS
+#     for i in range(filtered_data._data.shape[0]):
+#         column_values = ['signal'] 
+#         df = pd.DataFrame(data = filtered_data._data[i, 0, :], columns = column_values)
+#         smoothed_data = df['signal'].pow(2).rolling(round(smoothing_window_length * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt)
+#         rolling_rms_array[i, :] = smoothed_data.values
+
+#     # Step 3: mark ripple events [ripple start, ripple end] as periods of RMS amplitude above 2.5, but no greater than 9, standard deviations from the mean 
+
+#     # calculate mean and standard deviation of smoothed rms data, across all epochs and timepoints
+#     smoothed_mean = rolling_rms_array.mean()
+#     smoothed_sd = rolling_rms_array.std()
+
+#     # calculate lower (above 2.5 SD from mean) and upper (lower than 9 SD from mean) cutoffs for marking ripple events 
+#     lower_cutoff = smoothed_mean + sd_lower_cutoff * smoothed_sd
+#     upper_cutoff = smoothed_mean + sd_upper_cutoff * smoothed_sd
+
+#     ripple_events_index = np.asarray(np.where((rolling_rms_array > lower_cutoff) & (rolling_rms_array < upper_cutoff)))
+
+#     # Step 4: detected ripple events with a duration shorter than 38 ms (corresponding to 3 cycles at 80 Hz) or longer than 500 ms, were rejected.
+#     min_length_ripple_event = min_ripple_length * mne_data.info['sfreq'] # add an input parameter for duration of ripple event
+#     max_length_ripple_event = max_ripple_length * mne_data.info['sfreq']
+
+#     RPL_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+#     RPL_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+
+#     for ch_ in np.unique(ripple_events_index[1]):
+#         RPL_dict = {x:np.nan for x in np.unique(ripple_events_index[0])}
+#         for ev in np.unique(ripple_events_index[0]):
+#             # let's index the ripples for this ch_ and this ev 
+#             ev_index = np.where(ripple_events_index[0] == ev)
+#             ch_index = np.where(ripple_events_index[1] == ch_)
+#             overlapping_index = np.intersect1d(ev_index, ch_index)
+#             ripple_ch_ev = ripple_events_index[-1][overlapping_index]
+
+#             ripple_events_differences = np.array([0] + np.diff(ripple_ch_ev))
+
+#             # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
+#             _, idx, counts = np.unique(np.cumsum(1-ripple_events_differences)*ripple_events_differences, return_index=True, return_counts=True)    
+
+#             ripple_events_index_correct_time = idx[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))] # index of ripple events that reach criterion
+#             ripple_events_length_samples = counts[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))]  # length in samples of ripple events that reach criterion
+#             ripple_end_index = ripple_events_index_correct_time + ripple_events_length_samples
+#             ripple_events_length_seconds = ripple_events_length_samples/mne_data.info['sfreq'] # length in seconds of ripple events that reach criterion
+
+#             # # zip the three lists using zip() function --> ripple_results is a list of tuples containing the starting index of each ripple, the ending index of each ripple, and the length of each ripple in seconds
+#             ripple_results = list(zip(ripple_ch_ev[ripple_events_index_correct_time],
+#                                     ripple_ch_ev[ripple_end_index],
+#                                     ripple_events_length_seconds))
+#             num_ripples = len(ripple_results) # this is the number of ripples
+#             RPL_dict[ev] = ripple_results
+#         RPL_samps_dict[mne_data.ch_names[ch_]]= RPL_dict
+
+
+#         # NOTE: you could TECHNICALLY stop here. However, a lot of these ripples are going to be 
+#         # artifactual sharp transients that cover a lot of frequency range. So the next function is useful
+#         # to look at the TFRs for each ripple. 
+
+#     return RPL_samps_dict, RPL_sec_dict
+
+# def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, freqs):
+#     """
+
+#     Parameters
+#     ----------   
+#     RPL_sec_dict : dict
+#         Dictionary containing the start and end times for each ripple event
+#     evs : dict
+#         Dictionary containing the start and end times for each event of interest
+#     event : str
+#         Specific event of interest to look for ripples in
+#     beh_ts : list
+#         List of timestamps for each event of interest
+#     tfr_path : str
+#         Path to the TFR data computed for each event of interest
+#     freqs : np.array
+#         Array of frequencies for the TFR data
+    
+#     Returns
+#     -------
+#     allts : dict
+#         Dictionary containing the start and end times for each ripple event, binned into the epoched bins
+#     ripple_categories : dict
+#         Dictionary containing the ripple categories for each ripple event
+#     ripple_psds : dict
+#         Dictionary containing the PSDs for each ripple event
+    
+#     Just like with IEDs, assign the ripples in each dict to a behavioral event so that the TFRs computed for those events can be 
+#     used for the next step - ripple rejection based on spectral features 
+
+#     In addition to the amplitude and duration criteria the spectral features of each detected ripple event were examined
+    
+
+#     Here we follow up our ripple detection with steps to filter for ripple events with specific spectrotemporal characteristics: 
+
+
+#     5. calculate the frequency spectrum for each detected ripple event by averaging the normalized instantaneous amplitude between the onset and offset of the ripple event for the frequency range of 2–200 Hz.
+#     6. reject events with more than one peak in the ripple band
+#     8. reject events where the most prominent and highest peak was outside the ripple band and sharp wave band for a frequencies > 30 Hz
+#     9. reject events where ripple-peak width was greater than 3 standard deviations from the mean ripple-peak width calculated for a given electrode and recording session
+#     10. reject events where high frequency activity peaks exceed 80% of the ripple peak height
+
+#     """
+
+#     # Load the ripple events 
+
+#     # Load the TFRs corresponding to the ripple events 
+
+#     # Load TFR data, 
+#     # filepath = f'{base_dir}/projects/guLab/Salman/EphysAnalyses/{subj_id}/scratch/TFR'
+#     epoched_data = mne.time_frequency.read_tfrs(f'{tfr_path}/{event}-tfr.h5')[0]
+
+#     # Bin the ripple times into the epoched bins
+#     ev_starts = [x + epoched_data.times[0] for x in beh_ts]
+#     ev_ends = [x + epoched_data.times[-1] for x in beh_ts]
+#     dfs = []
+#     allts = {f'{x}': np.nan for x in RPL_sec_dict.keys()}
+#     for key in RPL_sec_dict.keys():
         
-    for ch_ in range(ripple_band_data._data.shape[0]):
-        ripple_ch = ripple_events_index[:, np.where(ripple_events_index[0]==ch_)[0]][1]
-        ripple_events_differences = np.array([0] + np.diff(ripple_ch))
-
-        # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
-        _, idx, counts = np.unique(np.cumsum(1-ripple_events_differences)*ripple_events_differences, return_index=True, return_counts=True)    
-
-        ripple_events_index_correct_time = idx[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))] # index of ripple events that reach criterion
-        ripple_events_length_samples = counts[np.where((counts > min_length_ripple_event) & (counts < max_length_ripple_event))]  # length in samples of ripple events that reach criterion
-        ripple_end_index = ripple_events_index_correct_time + ripple_events_length_samples
-        ripple_events_length_seconds = ripple_events_length_samples/mne_data.info['sfreq'] # length in seconds of ripple events that reach criterion
-
-        # # zip the three lists using zip() function --> ripple_results is a list of tuples containing the starting index of each ripple, the ending index of each ripple, and the length of each ripple in seconds
-        ripple_results = list(zip(ripple_ch[ripple_events_index_correct_time],
-                                ripple_ch[ripple_end_index],
-                                ripple_events_length_seconds))
-        num_ripples = len(ripple_results) # this is the number of ripples
-        RPL_samps_dict[mne_data.ch_names[ch_]] = ripple_results
-        RPL_sec_dict[mne_data.ch_names[ch_]] = list(zip(ripple_ch[ripple_events_index_correct_time]/mne_data.info['sfreq'],
-                                                        ripple_ch[ripple_end_index]/mne_data.info['sfreq'],
-                                                        ripple_events_length_seconds))
-
-
-        # NOTE: you could TECHNICALLY stop here. However, a lot of these ripples are going to be 
-        # artifactual sharp transients that cover a lot of frequency range. So the next function is useful
-        # to look at the TFRs for each ripple. 
-
-    return RPL_samps_dict, RPL_sec_dict
-
-def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, freqs):
-    """
-
-    Parameters
-    ----------   
-    RPL_sec_dict : dict
-        Dictionary containing the start and end times for each ripple event
-    evs : dict
-        Dictionary containing the start and end times for each event of interest
-    event : str
-        Specific event of interest to look for ripples in
-    beh_ts : list
-        List of timestamps for each event of interest
-    tfr_path : str
-        Path to the TFR data computed for each event of interest
-    freqs : np.array
-        Array of frequencies for the TFR data
-    
-    Returns
-    -------
-    allts : dict
-        Dictionary containing the start and end times for each ripple event, binned into the epoched bins
-    ripple_categories : dict
-        Dictionary containing the ripple categories for each ripple event
-    ripple_psds : dict
-        Dictionary containing the PSDs for each ripple event
-    
-    Just like with IEDs, assign the ripples in each dict to a behavioral event so that the TFRs computed for those events can be 
-    used for the next step - ripple rejection based on spectral features 
-
-    In addition to the amplitude and duration criteria the spectral features of each detected ripple event were examined
-    
-
-    Here we follow up our ripple detection with steps to filter for ripple events with specific spectrotemporal characteristics: 
-
-
-    5. calculate the frequency spectrum for each detected ripple event by averaging the normalized instantaneous amplitude between the onset and offset of the ripple event for the frequency range of 2–200 Hz.
-    6. reject events with more than one peak in the ripple band
-    8. reject events where the most prominent and highest peak was outside the ripple band and sharp wave band for a frequencies > 30 Hz
-    9. reject events where ripple-peak width was greater than 3 standard deviations from the mean ripple-peak width calculated for a given electrode and recording session
-    10. reject events where high frequency activity peaks exceed 80% of the ripple peak height
-
-    """
-
-    # Load the ripple events 
-
-    # Load the TFRs corresponding to the ripple events 
-
-    # Load TFR data, 
-    # filepath = f'{base_dir}/projects/guLab/Salman/EphysAnalyses/{subj_id}/scratch/TFR'
-    epoched_data = mne.time_frequency.read_tfrs(f'{tfr_path}/{event}-tfr.h5')[0]
-
-    # Bin the ripple times into the epoched bins
-    ev_starts = [x + epoched_data.times[0] for x in beh_ts]
-    ev_ends = [x + epoched_data.times[-1] for x in beh_ts]
-    dfs = []
-    allts = {f'{x}': np.nan for x in RPL_sec_dict.keys()}
-    for key in RPL_sec_dict.keys():
+#         ripple_starts_sec = np.sort([x[0] for x in RPL_sec_dict[key]])
+#         ripple_ends_sec = np.sort([x[1] for x in RPL_sec_dict[key]])
         
-        ripple_starts_sec = np.sort([x[0] for x in RPL_sec_dict[key]])
-        ripple_ends_sec = np.sort([x[1] for x in RPL_sec_dict[key]])
-        
-        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
+#         time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
 
-        # Initialize a dictionary to store the assigned timestamps for each time bin
-        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
+#         # Initialize a dictionary to store the assigned timestamps for each time bin
+#         assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
 
-        # Iterate through each timestamp and assign it to the appropriate time bin
-        for ix, timestamp in enumerate(ripple_starts_sec):
-            for bin_index, (start, end) in enumerate(time_bins):
-                if start <= timestamp <= end:
-                    start_in_epoch = int((timestamp - start) * mne_data_reref.info['sfreq'])
-                    end_in_epoch = int((ripple_ends_sec[ix] - start) * mne_data_reref.info['sfreq'])
-                    assigned_timestamps[bin_index].append((start_in_epoch, end_in_epoch))
-        allts[key] = assigned_timestamps
+#         # Iterate through each timestamp and assign it to the appropriate time bin
+#         for ix, timestamp in enumerate(ripple_starts_sec):
+#             for bin_index, (start, end) in enumerate(time_bins):
+#                 if start <= timestamp <= end:
+#                     start_in_epoch = int((timestamp - start) * mne_data_reref.info['sfreq'])
+#                     end_in_epoch = int((ripple_ends_sec[ix] - start) * mne_data_reref.info['sfreq'])
+#                     assigned_timestamps[bin_index].append((start_in_epoch, end_in_epoch))
+#         allts[key] = assigned_timestamps
 
-    # average amplitude between onset and offset of ripple timestamps
+#     # average amplitude between onset and offset of ripple timestamps
    
-    ripple_categories = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
-    ripple_psds = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
-    ripple_peak_widths = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
+#     ripple_categories = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
+#     ripple_psds = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
+#     ripple_peak_widths = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
 
-    for chan_name in allts.keys():
-        for epoch in allts[chan_name].keys(): 
-            if allts[chan_name][epoch]: # if not empty
-                tfr = np.squeeze(epoched_data.copy().pick([chan_name])[0]._data)
-                for ix, ripple in enumerate(allts[chan_name][epoch]):
-                    spectral_data = np.nanmean(tfr[:, ripple[0]:ripple[1]], axis=1)
-                    peaks = scipy.signal.find_peaks(spectral_data)[0]
-                    peak_frequencies = freqs[peaks]
-                    peak_prominences = scipy.signal.peak_prominences(spectral_data, peaks)[0]
-                    peak_widths = scipy.signal.peak_widths(spectral_data, peaks)[0]
-                    highest_peak_frequency = peak_frequencies[np.argmax(peak_prominences)]
-                    # reject events with more than one peak in peak_frequencies between 80-120 Hz 
-                    if len(peak_frequencies[(peak_frequencies > 80) & (peak_frequencies < 120)]) > 1:
-                        ripple_categories[chan_name][epoch].append('bad')
-                    # reject events where most prominent peak was outside 80-120 Hz (but > 30 Hz)
-                    elif ((highest_peak_frequency < 80) | (highest_peak_frequency > 120)) & (highest_peak_frequency > 30):
-                        ripple_categories[chan_name][epoch].append('bad')
-                    # reject events where HFA peaks exceed 80% of the ripple peak height 
-                    elif np.max(spectral_data[(freqs > 120) & (freqs < 200)]) > 0.8 * np.max(spectral_data[(freqs > 80) & (freqs < 120)]):
-                        ripple_categories[chan_name][epoch].append('bad')
-                    else:
-                        ripple_categories[chan_name][epoch].append('good')
-                        ripple_psds[chan_name][epoch].append(spectral_data)
-                    ripple_peak_widths[chan_name][epoch].append(peak_widths[(peak_frequencies>80) & (peak_frequencies<120)])
+#     for chan_name in allts.keys():
+#         for epoch in allts[chan_name].keys(): 
+#             if allts[chan_name][epoch]: # if not empty
+#                 tfr = np.squeeze(epoched_data.copy().pick([chan_name])[0]._data)
+#                 for ix, ripple in enumerate(allts[chan_name][epoch]):
+#                     spectral_data = np.nanmean(tfr[:, ripple[0]:ripple[1]], axis=1)
+#                     peaks = scipy.signal.find_peaks(spectral_data)[0]
+#                     peak_frequencies = freqs[peaks]
+#                     peak_prominences = scipy.signal.peak_prominences(spectral_data, peaks)[0]
+#                     peak_widths = scipy.signal.peak_widths(spectral_data, peaks)[0]
+#                     highest_peak_frequency = peak_frequencies[np.argmax(peak_prominences)]
+#                     # reject events with more than one peak in peak_frequencies between 80-120 Hz 
+#                     if len(peak_frequencies[(peak_frequencies > 80) & (peak_frequencies < 120)]) > 1:
+#                         ripple_categories[chan_name][epoch].append('bad')
+#                     # reject events where most prominent peak was outside 80-120 Hz (but > 30 Hz)
+#                     elif ((highest_peak_frequency < 80) | (highest_peak_frequency > 120)) & (highest_peak_frequency > 30):
+#                         ripple_categories[chan_name][epoch].append('bad')
+#                     # reject events where HFA peaks exceed 80% of the ripple peak height 
+#                     elif np.max(spectral_data[(freqs > 120) & (freqs < 200)]) > 0.8 * np.max(spectral_data[(freqs > 80) & (freqs < 120)]):
+#                         ripple_categories[chan_name][epoch].append('bad')
+#                     else:
+#                         ripple_categories[chan_name][epoch].append('good')
+#                         ripple_psds[chan_name][epoch].append(spectral_data)
+#                     ripple_peak_widths[chan_name][epoch].append(peak_widths[(peak_frequencies>80) & (peak_frequencies<120)])
         
-        # average the spectral peaks for 'good' ripples to determine ehe mean ripple-peak width in 'spectral_data' for each electrode
-        electrode_mean_peak_width = np.nanmean(sum(ripple_peak_widths[chan_name].values(), []))
-        electrode_std_peak_width = np.nanstd(sum(ripple_peak_widths[chan_name].values(), []))
-        # iterate through each ripple to reject events where ripple-peak width was > 3*std of the mean ripple-peak width for the electrode
-        for epoch in allts[chan_name].keys():  
-            if 'good' in ripple_categories[chan_name][epoch]:
-                good_ripple_ix = [i for i, e in enumerate(ripple_categories[chan_name][epoch]) if e == 'good']
-                for ix in good_ripple_ix:
-                    ripple_width = ripple_peak_widths[chan_name][epoch][ix]
-                    if ripple_width > electrode_mean_peak_width + 3*electrode_std_peak_width:
-                        ripple_categories[chan_name][epoch][ix] = 'bad'
+#         # average the spectral peaks for 'good' ripples to determine ehe mean ripple-peak width in 'spectral_data' for each electrode
+#         electrode_mean_peak_width = np.nanmean(sum(ripple_peak_widths[chan_name].values(), []))
+#         electrode_std_peak_width = np.nanstd(sum(ripple_peak_widths[chan_name].values(), []))
+#         # iterate through each ripple to reject events where ripple-peak width was > 3*std of the mean ripple-peak width for the electrode
+#         for epoch in allts[chan_name].keys():  
+#             if 'good' in ripple_categories[chan_name][epoch]:
+#                 good_ripple_ix = [i for i, e in enumerate(ripple_categories[chan_name][epoch]) if e == 'good']
+#                 for ix in good_ripple_ix:
+#                     ripple_width = ripple_peak_widths[chan_name][epoch][ix]
+#                     if ripple_width > electrode_mean_peak_width + 3*electrode_std_peak_width:
+#                         ripple_categories[chan_name][epoch][ix] = 'bad'
 
-        # Optional TODO: 
-            # calculate the number of ripples detected and ripple rejection rate for each electrode
-            # then reject any electrode with a low ripple count (< 20 ripples detected per electrode per task) or high rejection rate (greater than 30% rejection rate)
-        return allts, ripple_categories, ripple_psds
+#         # Optional TODO: 
+#             # calculate the number of ripples detected and ripple rejection rate for each electrode
+#             # then reject any electrode with a low ripple count (< 20 ripples detected per electrode per task) or high rejection rate (greater than 30% rejection rate)
+#         return allts, ripple_categories, ripple_psds
 
 def FOOOF_continuous(signal):
     """
