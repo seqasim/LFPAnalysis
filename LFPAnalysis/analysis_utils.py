@@ -285,6 +285,16 @@ def detect_fast_burst_evs(mne_data,
             burst_dict[ev] = burst_results
         burst_samps_dict[mne_data.ch_names[ch_]]= burst_dict
 
+        # if plot:
+        # # plot the burst using span for each trial and channel
+        #     for ch in mne_data.ch_names:
+        #         ch_index = mne_data.ch_names.index(ch)
+        #         for trial in range(mne_data._data.shape[0]):
+        #             plt.plot(rolling_rms_array[trial, ch_index, :], color='black')
+        #             plt.plot(filtered_data._data[trial, ch_index, :], color='black', alpha=0.1)
+        #             for start, stop, _ in hfa_bursts[ch][trial]:
+        #                 plt.axvspan(start, stop, color='red', alpha=0.5)
+
     return burst_samps_dict
 
 # def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, 
