@@ -181,7 +181,11 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_
 
     # Compute mean and std across all time points for each frequency and electrode
     m_ = np.nanmean(baseline_data_concat, axis=-1)
-    std_ = np.nanstd(baseline_data_concat, axis=-1)
+    # std_ = np.nanstd(baseline_data_concat, axis=-1)
+    # 12/30/2024: I think that computing std across events like this leads to very large denominators and thus very small z-scores
+    # conceptually, this is fine, but it's harder to interpret and reviewers will kind of ignorantly complain about small z-scores. 
+    # So, I will first compute the mean across timepoints and then compute the std across events
+    std_ = np.squeeze(np.nanstd(np.nanmean(baseline_data, axis=time_axis, keepdims=True), axis=ev_axis))
 
     # 2. Expand the array to time and events 
     m = np.expand_dims(np.expand_dims(m_, axis=m_.ndim), axis=0)
@@ -1751,7 +1755,7 @@ seeg_only=True, check_bad=False):
             drop_names = None
 
             if '_KN' in elec_path: 
-                seeg_names = iowa_utils.extract_names_elec_table(elec_table_path[0])
+                seeg_names = iowa_utils.extract_names_elec_table(elec_path)
                 # elec_table_path = glob(f'{elec_path}/*_KN.xlsx')
             elif '_fsparc' in elec_path:
                 seeg_table = pd.read_csv(elec_path)
@@ -1783,7 +1787,7 @@ seeg_only=True, check_bad=False):
             ## are recorded at a much higher sampling rate, or with micro channels. Find the lowest sample rate, and downsample everything to that.
             ## I generally don't like this but it should be OK. Make sure that you identify synchronization times AFTER downsampling the analogue channel, and not before:
             ## https://gist.github.com/larsoner/01642cb3789992fbca59
-
+            
             target_sr = np.min(srs)
             mne_data_resampled = []
 
