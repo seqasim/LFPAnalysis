@@ -36,76 +36,156 @@ def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=F
     original_model = OLS(y, X).fit()
     
     # Extract original coefficients
-    original_params = original_model.params
+    # original_params = original_model.params
+    results = pd.DataFrame(original_model.params).rename(columns={0:'raw_beta'})
+    results['raw_p'] = original_model.pvalues   
+    results = results.reset_index()
+    results.rename(columns={'index':'predictor'}, inplace=True)
     
     # Prepare data for permutations
     y_values = y.values.ravel()
-    X_values = X.values
     
     # Perform permutations
-    permuted_params = []
-    permuted_y_values = []
+    # permuted_params = []
+    # permuted_y_values = []
+    surr_results = []
     for _ in tqdm(range(n_permutations), desc="Permutations"):
         y_permuted = np.random.permutation(y_values)
-        permuted_params.append(fit_permuted_model(y_permuted, X_values))
-        permuted_y_values.append(y_permuted)
+        surr_result = pd.DataFrame(OLS(y_permuted, X).fit().params).rename(columns={0:'surr_beta'})
+        surr_results.append(surr_result.reset_index())
+        # permuted_params.append(fit_permuted_model(y_permuted, X_values))
+        # permuted_y_values.append(y_permuted)
     
-    # Convert to numpy array for faster computations
-    permuted_params = np.array(permuted_params)
+    # # Convert to numpy array for faster computations
+    # permuted_params = np.array(permuted_params)
     
-    # Compute z-scores
-    permuted_means = np.mean(permuted_params, axis=0)
-    permuted_stds = np.std(permuted_params, axis=0)
-    z_scores = (original_params - permuted_means) / permuted_stds
+    # # Compute z-scores
+    # permuted_means = np.mean(permuted_params, axis=0)
+    # permuted_stds = np.std(permuted_params, axis=0)
+    # z_scores = (original_params - permuted_means) / permuted_stds
+
+    surr_means = pd.concat(surr_results).groupby('index').mean(numeric_only=True)['raw_beta']
+    surr_stds = pd.concat(surr_results).groupby('index').std(numeric_only=True)['raw_beta']
     
     # Compute p-values from z-scores
-    p_values = 2 * (1 - stats.norm.cdf(np.abs(z_scores)))
-    
-    # Prepare results
-    results = pd.DataFrame({
-        'Original_Estimate': original_params,
-        'Permuted_Mean': permuted_means,
-        'Permuted_Std': permuted_stds,
-        'Z_Score': z_scores,
-        'P_Value': p_values
-    })
+    # p_values = 2 * (1 - stats.norm.cdf(np.abs(z_scores)))
+
+    for predictor in results.predictor.unique():
+        results.loc[results.predictor==predictor, 'z_beta'] = (results.loc[results.predictor==predictor, 'raw_beta']  - surr_means[surr_means.index==predictor].values[0]) / (surr_stds[surr_stds.index==predictor].values[0])
+
+    # twoway z-test 
+
+    results['z_p'] = 2 * (1 - stats.norm.cdf(np.abs(results['z_beta'])))
+    # # Prepare results
+    # results = pd.DataFrame({
+    #     'Original_Estimate': original_params,
+    #     'Permuted_Mean': permuted_means,
+    #     'Permuted_Std': permuted_stds,
+    #     'Z_Score': z_scores,
+    #     'P_Value': p_values
+    # })
     
     # Plotting
-    if plot_res:
-        features = [col for col in X.columns if col != 'Intercept']
-        n_features = len(features)
-        fig, axes = plt.subplots(n_features, 1, figsize=(3*n_features, 3*n_features), squeeze=False, dpi=300)
+    # if plot_res:
+    #     features = [col for col in X.columns if col != 'Intercept']
+    #     n_features = len(features)
+    #     fig, axes = plt.subplots(n_features, 1, figsize=(3*n_features, 3*n_features), squeeze=False, dpi=300)
         
-        for i, feature in enumerate(features):
-            ax = axes[i, 0]
+    #     for i, feature in enumerate(features):
+    #         ax = axes[i, 0]
             
-            # Plot permuted data first (in black)
-            for j in range(min(100, n_permutations)):  # Limit to 100 permutations for clarity
-                sns.regplot(x=X[feature], y=permuted_y_values[j], ax=ax, scatter=False,
-                            line_kws={'color': 'black', 'alpha': 0.05}, ci=None)
+    #         # Plot permuted data first (in black)
+    #         for j in range(min(100, n_permutations)):  # Limit to 100 permutations for clarity
+    #             sns.regplot(x=X[feature], y=permuted_y_values[j], ax=ax, scatter=False,
+    #                         line_kws={'color': 'black', 'alpha': 0.05}, ci=None)
             
-            # Plot original data (in red)
-            sns.regplot(x=X[feature], y=y_values, ax=ax, scatter_kws={'alpha': 0.5}, 
-                        line_kws={'color': 'red', 'label': 'Original'}, ci=None)
+    #         # Plot original data (in red)
+    #         sns.regplot(x=X[feature], y=y_values, ax=ax, scatter_kws={'alpha': 0.5}, 
+    #                     line_kws={'color': 'red', 'label': 'Original'}, ci=None)
             
-            # Add z-score and p-value to the plot
-            orig_param = original_params[i+1]
-            z_score = z_scores[i+1]
-            p_value = p_values[i+1]
-            ax.text(0.05, 0.95, f'Beta: {orig_param:.2f}\nZ-score: {z_score:.2f}\np-value: {p_value:.3f}', 
-                    transform=ax.transAxes, verticalalignment='top', 
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    #         # Add z-score and p-value to the plot
+    #         orig_param = original_params[i+1]
+    #         z_score = z_scores[i+1]
+    #         p_value = p_values[i+1]
+    #         ax.text(0.05, 0.95, f'Beta: {orig_param:.2f}\nZ-score: {z_score:.2f}\np-value: {p_value:.3f}', 
+    #                 transform=ax.transAxes, verticalalignment='top', 
+    #                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             
-            ax.set_title(f'{feature} vs y')
-            ax.legend()
+    #         ax.set_title(f'{feature} vs y')
+    #         ax.legend()
             
-            # Despine the plot
-            sns.despine(ax=ax)
+    #         # Despine the plot
+    #         sns.despine(ax=ax)
         
-        plt.tight_layout()
-        plt.show()
+    #     plt.tight_layout()
+    #     plt.show()
     
     return results
+
+def shuffle_data_for_mlm(df, 
+                         y='tfr', 
+                         lower_group='unique_label', 
+                         higher_group='participant',
+                         trial_key='trial'):
+    """
+    For mixed-effects models where we have two hierarchies: trials within electrodes, and electrodes within participants.
+
+    A good shuffle will permute the trial-level data within electrode, but do it the same way for each electrode within a participant to preserve 
+    any structure that might exist across electrodes.
+    
+    Parameters:
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the data to shuffle.
+    y : str
+        Name of the dependent variable to shuffle.
+    lower_group : str
+        Name of the lower-level grouping variable.
+    higher_group : str
+        Name of the higher-level grouping variable.
+    trial_key : str
+        Name of the trial identifier variable.
+
+    Returns:
+    --------
+    surr_df : pd.DataFrame
+        DataFrame with shuffled dependent variable.
+
+
+    Example:
+    --------
+    surr_df = shuffle_data_for_mlm(df, 
+                                    y, 
+                                    lower_group,
+                                    higher_group, 
+                                    trial_key)
+    
+    surr_model = smf.mixedlm(formula, 
+                                data=surr_df, 
+                                groups=surr_df[lower_group]).fit()
+    """
+    surr_df = df.copy()
+
+    for individ in surr_df[higher_group].unique():
+        # Get the relevant data subset for the participant
+        group_mask = surr_df[higher_group] == individ
+        
+        # Extract unique trials for this subject and shuffle them
+        original_trial = df[df[higher_group] == individ][trial_key].unique()
+        shuffled_trial = np.random.permutation(original_trial)
+        
+        # Create a mapping of original to shuffled trials
+        trial_map = dict(zip(original_trial, shuffled_trial))
+        
+        for unique_label in surr_df.loc[group_mask, lower_group].unique():
+            label_mask = surr_df[lower_group] == unique_label
+            # Apply the shuffle map to the dependent variable
+            surr_df.loc[(group_mask) & (label_mask), y] = surr_df.loc[(group_mask) & (label_mask)].apply(
+                lambda row: surr_df.loc[(group_mask) & (label_mask) & (surr_df[trial_key] == trial_map[row[trial_key]]), y].values[0],
+                axis=1
+            )
+            
+    return surr_df
 
 def time_resolved_regression_single_channel(timeseries=None, regressors=None, 
                              win_len=100, slide_len=25,
@@ -169,9 +249,9 @@ def time_resolved_regression_single_channel(timeseries=None, regressors=None,
             original_model = OLS(y, X).fit()
             # Prepare results
             results = pd.DataFrame({
-                'Original_Estimate': original_model.params,
-                'Original_BSE': original_model.bse,
-                'P_Value': original_model.pvalues,
+                'raw_beta': original_model.params,
+                'raw_bse': original_model.bse,
+                'raw_p': original_model.pvalues,
                 'ts': ts 
             })
         all_res.append(results)
