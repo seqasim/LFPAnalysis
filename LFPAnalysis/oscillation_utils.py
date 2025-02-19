@@ -17,6 +17,8 @@ import warnings
 import scipy as sp
 
 
+from matplotlib import pyplot as plt
+
 # Helper functions 
 
 def find_nearest_value(array, value):
@@ -893,17 +895,32 @@ def phase_gcmi(mne_data, seed_to_target, freqs0, freqs1=None):
     gcmi = []
     for ei in range(nevents):
         signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-        signal0_phase = np.angle(signal0_hilbert)
+        # normalize the complex number by the amplitude
+
+        # signal0_phase = np.angle(signal0_hilbert)
         signal1_hilbert = hilbert(signal1_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-        signal1_phase = np.angle(signal1_hilbert)
+
+        
 
         # compute gcmi for each source to all targets
         gcmi_mat = []
         for source_ix in range(nsource):
             for target_ix in range(ntarget): 
-                signal0_phase_elec = np.squeeze(signal0_phase[source_ix, :])
-                signal1_phase_elec = np.squeeze(signal1_phase[target_ix, :])
-                I = gcmi_cc(signal0_phase_elec, signal1_phase_elec)
+                signal0_hilbert_elec = np.squeeze(signal0_hilbert[source_ix, :])
+                signal1_hilbert_elec = np.squeeze(signal1_hilbert[target_ix, :])
+
+                # convert hilbert to 2d normalize phase representations
+                signal0_phase_norm = signal0_hilbert_elec/np.abs(signal0_hilbert_elec)
+                
+                signal0_2dphase = np.vstack([np.real(signal0_phase_norm), 
+                                     np.imag(signal0_phase_norm)])
+                
+                signal1_phase_norm = signal1_hilbert_elec/np.abs(signal1_hilbert_elec)
+                signal1_2dphase = np.vstack([np.real(signal1_phase_norm), 
+                                     np.imag(signal1_phase_norm)])
+                plt.plot(np.imag(signal1_phase_norm))
+                
+                I = gcmi_cc(signal0_2dphase, signal1_2dphase)
                 gcmi_mat.append(I)
         
         gcmi.append(gcmi_mat)
