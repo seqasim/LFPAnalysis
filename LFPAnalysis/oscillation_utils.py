@@ -1221,9 +1221,15 @@ def compute_surr_connectivity_epochs(surr_mne, indices, metric, band, freqs, n_c
             surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
         # crop the buffer now:
-        buf_rs = int((buf_ms/1000) * surr_mne[0].info['sfreq'])
-        surr_conn = surr_conn[:, buf_rs:-buf_rs]
-
+        if type(buf_ms) == int:
+            buf_rs = int((buf_ms/1000) * surr_mne.info['sfreq'])
+            surr_conn = surr_conn[:, buf_rs:-buf_rs]
+        # account for asymmetry in the buffer: 
+        elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+            buf_rs = int((buf_ms[0]/1000) * surr_mne.info['sfreq'])
+            buf_re = int((buf_ms[1]/1000) * surr_mne.info['sfreq'])
+            surr_conn = surr_conn[:, buf_rs:-buf_re]
+        
     return surr_conn
 
 
@@ -1379,8 +1385,14 @@ def compute_connectivity(mne_data=None,
                 # reshape data
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
             # # crop the buffer now:
-            buf_rs = int((buf_ms/1000) * mne_data.info['sfreq'])
-            pairwise_connectivity = pairwise_connectivity[:, buf_rs:-buf_rs]
+            if type(buf_ms) == int:
+                buf_rs = int((buf_ms/1000) * mne_data.info['sfreq'])
+                pairwise_connectivity = pairwise_connectivity[:, buf_rs:-buf_rs]
+            # account for asymmetry in the buffer: 
+            elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+                buf_rs = int((buf_ms[0]/1000) * mne_data.info['sfreq'])
+                buf_re = int((buf_ms[1]/1000) * mne_data.info['sfreq'])
+                pairwise_connectivity = pairwise_connectivity[:, buf_rs:-buf_re]
 
         if n_surr > 0:
             surr_mne = make_surrogate_data(mne_data,
@@ -1465,7 +1477,14 @@ def compute_connectivity(mne_data=None,
                             # reshape data
                             surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
                         # crop the surrogate: 
-                        surr_conn = surr_conn[:, buf_rs:-buf_rs]
+                        if type(buf_ms) == int:
+                            buf_rs = int((buf_ms/1000) * mne_data.info['sfreq'])
+                            surr_conn = surr_conn[:, buf_rs:-buf_rs]
+                        # account for asymmetry in the buffer: 
+                        elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+                            buf_rs = int((buf_ms[0]/1000) * mne_data.info['sfreq'])
+                            buf_re = int((buf_ms[1]/1000) * mne_data.info['sfreq'])
+                            surr_conn = surr_conn[:, buf_rs:-buf_re]
 
                     surr_struct[:, :, ns] = surr_conn
                     clear_output(wait=True)
@@ -1484,9 +1503,17 @@ def compute_connectivity(mne_data=None,
         elif metric == 'gcmi':
             
             # crop the buffer first:
-            buf_s = buf_ms / 1000
-            mne_data.crop(tmin=mne_data.tmin + buf_s,
-                          tmax=mne_data.tmax - buf_s)
+            if type(buf_ms) == int:
+                buf_rs = int(buf_ms/1000) 
+                mne_data.crop(tmin=mne_data.tmin + buf_rs,
+                            tmax=mne_data.tmax - buf_rs)
+            # account for asymmetry in the buffer: 
+            elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+                buf_rs = int(buf_ms[0]/1000)
+                buf_re = int(buf_ms[1]/1000)
+
+                mne_data.crop(tmin=mne_data.tmin + buf_rs,
+                            tmax=mne_data.tmax - buf_re)
             
             pairwise_connectivity = phase_gcmi(mne_data,
                                                 indices,
@@ -1525,9 +1552,17 @@ def compute_connectivity(mne_data=None,
         elif metric == 'amp': 
             
             # crop the buffer first:
-            buf_s = buf_ms / 1000
-            mne_data.crop(tmin=mne_data.tmin + buf_s,
-                          tmax=mne_data.tmax - buf_s)
+            if type(buf_ms) == int:
+                buf_rs = int(buf_ms/1000) 
+                mne_data.crop(tmin=mne_data.tmin + buf_rs,
+                          tmax=mne_data.tmax - buf_rs)
+            # account for asymmetry in the buffer: 
+            elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+                buf_rs = int(buf_ms[0]/1000)
+                buf_re = int(buf_ms[1]/1000)
+            
+                mne_data.crop(tmin=mne_data.tmin + buf_rs,
+                            tmax=mne_data.tmax - buf_re)
 
             pairwise_connectivity = amp_amp_coupling(mne_data, 
                                                      indices, 
