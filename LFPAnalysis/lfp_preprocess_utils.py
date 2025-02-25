@@ -2268,7 +2268,7 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
     # reduce to cathods for elecs with anodes in white matter 
     cathodes_no_wm = cathode_df[cathode_df.label.str.lower().isin(wm_anodes)]
 
-    elec_df = anode_no_wm.append(cathodes_no_wm, ignore_index=True)
+    elec_df = pd.concat([anode_no_wm, cathodes_no_wm], ignore_index=True)
 
     return elec_df
 #
