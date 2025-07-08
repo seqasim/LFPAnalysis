@@ -982,9 +982,9 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
 
         # Square and log the analytical amplitude: https://www.nature.com/articles/nn.3101#Sec15
         signal0_amp *= signal0_amp
-        np.log(signal0, out=signal0)
+        np.log(signal0_amp, out=signal0_amp)
         signal1_amp *= signal1_amp
-        np.log(signal1, out=signal1)
+        np.log(signal1_amp, out=signal1_amp)
 
         # subtract mean 
         signal0_amp_nomean = signal0_amp - np.mean(signal0_amp, axis=-1, keepdims=True)

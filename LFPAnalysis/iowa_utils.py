@@ -103,7 +103,7 @@ def extract_names_elec_table(elec_table_path):
 
     elec_data = lfp_preprocess_utils.load_elec(elec_table_path, site='UI')
 
-    seeg_chs = elec_data[elec_data.ElectrodeType=='Depth'].Channel.values
+    seeg_chs = elec_data[elec_data.ElectrodeType.isin(['Depth', 'Subdural'])].Channel.values
 
     seeg_names = [f'LFPx{ch}'.lower() for ch in seeg_chs]
 

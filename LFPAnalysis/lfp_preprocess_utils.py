@@ -1985,16 +1985,14 @@ def _bin_channelwise_times_into_behav_evs(channel_dict_seconds, ev_starts, ev_en
             if len(val) > 1:    
                 event_metadata[ch].loc[ev] = val
             else:
-                if ~np.isnan(val): 
-                    event_metadata[ch].loc[ev] = val
+                # if ~np.isnan(val): 
+                event_metadata[ch].loc[ev] = val
     # Replace all nan with Nones 
     event_metadata.where(pd.notna(event_metadata), None)
     return event_metadata
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, 
-nan_artifacts_pre_epoch=True,
-detrend=None):
+ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, detrend=None):
 
     # elec_path=None,
     """
@@ -2274,7 +2272,7 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
 #
 
 def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_path, save_path,
-                            IED_artifact_thresh=True, uncaptured_z_thresh=True, output='save'):
+                            IED_artifact_thresh=True, uncaptured_z_thresh=True, output='save', tfr_method='morlet'):
     
     """
     This function computes the TFRs for the baseline and task events of interest, and baselines the task events of interest
@@ -2285,6 +2283,8 @@ def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_
         Dictionary with the key being the name of the baseline event, and the value being a list of the start and end time of the baseline event
     task_events : dict
         Dictionary with the key being the name of the task event, and the value being a list of the start and end time of the task event    
+    tfr_method : str
+        The method to compute the TFR. Options: ['morlet', 'multitaper']
     freqs : array
         The frequencies of interest for the TFR
     n_cycles : float
@@ -2311,15 +2311,22 @@ def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_
     baseline_epochs_reref = mne.read_epochs(f'{load_path}/{baseline_name}-epo.fif', preload=True)
     
     # compute TFR
-    baseline_power  = mne.time_frequency.tfr_morlet(baseline_epochs_reref, 
-                                          freqs=freqs, 
-                                          n_cycles=n_cycles, 
-                                          picks=baseline_epochs_reref.ch_names,
-                                          use_fft=True, 
-                                          n_jobs=-1, 
-                                          output='power', 
-                                          return_itc=False, 
-                                          average=False)
+    baseline_power = baseline_epochs_reref.compute_tfr(method=tfr_method,
+                                             freqs=freqs,
+                                             n_cycles=n_cycles,
+                                             picks=baseline_epochs_reref.ch_names,
+                                             n_jobs=-1,
+                                             output='power')
+                                                       
+    # baseline_power  = mne.time_frequency.tfr_morlet(baseline_epochs_reref, 
+    #                                       freqs=freqs, 
+    #                                       n_cycles=n_cycles, 
+    #                                       picks=baseline_epochs_reref.ch_names,
+    #                                       use_fft=True, 
+    #                                       n_jobs=-1, 
+    #                                       output='power', 
+    #                                       return_itc=False, 
+    #                                       average=False)
     
 
     # Crop the data to the appropriate 
@@ -2365,16 +2372,23 @@ def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_
     for event in task_events.keys():
         
         event_epochs_reref = mne.read_epochs(f'{load_path}/{event}-epo.fif', preload=True)
+
+        temp_pow = event_epochs_reref.compute_tfr(method=tfr_method,
+                                             freqs=freqs,
+                                             n_cycles=n_cycles,
+                                             picks=event_epochs_reref.ch_names,
+                                             n_jobs=-1,
+                                             output='power')
                     
-        temp_pow = mne.time_frequency.tfr_morlet(event_epochs_reref, 
-                                                 freqs=freqs, 
-                                                 n_cycles=n_cycles,
-                                                 picks=event_epochs_reref.ch_names, 
-                                                 use_fft=True, 
-                                                 n_jobs=-1, 
-                                                 output='power', 
-                                                 return_itc=False, 
-                                                 average=False)
+        # temp_pow = mne.time_frequency.tfr_morlet(event_epochs_reref, 
+        #                                          freqs=freqs, 
+        #                                          n_cycles=n_cycles,
+        #                                          picks=event_epochs_reref.ch_names, 
+        #                                          use_fft=True, 
+        #                                          n_jobs=-1, 
+        #                                          output='power', 
+        #                                          return_itc=False, 
+        #                                          average=False)
     
         temp_pow.crop(tmin=task_events[event][0], tmax=task_events[event][1])
         
@@ -2439,6 +2453,10 @@ def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_
 
         zpow.metadata = event_epochs_reref.metadata
         
+        # check if save_path exists, if not, make the directory
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
         if output == 'save':
             zpow.save(f'{save_path}/{event}-tfr.h5', overwrite=True)
         elif output == 'return': 
