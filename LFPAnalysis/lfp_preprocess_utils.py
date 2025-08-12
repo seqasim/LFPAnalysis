@@ -1584,6 +1584,73 @@ def load_elec(elec_path=None, site='MSSM'):
 
     return elec_data
 
+def make_mne_scalp(load_path=None, overwrite=True, return_data=False):
+    """
+    Make a mne object from the scalp data file, and save out the sync. 
+    Following this step, you can indicate bad electrodes manually.
+
+    This function requires users to input the file format of the raw data.
+
+    Optionally, users can input the names of special channel types as these might be communicated manually rather than hardcoded into the raw data.
+
+    (On that note, a better idea would be for someone to go back and edit the original data to include informative names...)
+    
+    Parameters
+    ----------
+    load_path : str
+        path to the neural data
+    format : str 
+        how was this data collected? options: ['edf', 'nlx]
+    overwrite: bool 
+        whether to overwrite existing data for this person if it exists 
+    return_data: bool 
+        whether to actually return the data or just save it in the directory 
+    eeg_names : list
+        list of channel names that pertain to scalp EEG in case the hardcoded options don't work
+    resp_names : list 
+        list of channel names that pertain to respiration in case the hardcoded options don't work
+    ekg_names : list
+        list of channel names that pertain to the EKG in case the hardcoded options don't work
+    sync_name : str
+        provide the sync name in case the hardcoded options don't work
+    sync_type : str
+        what type of sync signal was used? options: ['photodiode', 'audio', 'ttl']
+
+    Returns
+    -------
+    mne_data : mne object 
+        mne object
+    """
+
+    edf_file = glob(f'{load_path}/*.edf')[0]
+    mne_data = mne.io.read_raw_edf(edf_file, preload=True)
+
+    # Regex for detecting 10–20/10–10 electrode names
+    pattern = re.compile(
+        r'^(?:[FTCPOM][pz\d]?|AF\d?|FC\d?|CP\d?|PO\d?|TP\d?|FT\d?|OZ|Fp\d?)$',
+        re.IGNORECASE
+    )
+
+    def is_scalp_eeg_channel(name):
+        # Remove hyphenated bipolar labels and trim
+        base = re.split('[- ]', name)[0]
+        return bool(pattern.match(base))
+
+    scalp_channels = [ch for ch in mne_data.ch_names if is_scalp_eeg_channel(ch)]
+
+    # restrict to scalp EEG channels
+    if not scalp_channels:
+        raise ValueError("No scalp EEG channels found in the data. Please check the channel names or the data format.")
+    else:
+        mne_data.pick_channels(scalp_channels)
+
+    mne_data.info['line_freq'] = 60
+    # Notch out 60 Hz noise and harmonics
+    mne_data.notch_filter(freqs=(60, 120, 180, 240))
+
+    return mne_data if return_data else mne_data.save(f'{load_path}/scalp_raw.fif', overwrite=overwrite)
+
+
 def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
 include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
 seeg_only=True, check_bad=False):
