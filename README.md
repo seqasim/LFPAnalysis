@@ -15,32 +15,66 @@ If missing anything, consult the environment.yml file, which has the fully detai
 
 ## Installation
 
-Installation requires git + conda. 
-In your terminal, type:
+### Option 1: Using pip (Recommended)
 
+The easiest way to install LFPAnalysis is using pip:
+
+```bash
+pip install git+https://github.com/seqasim/LFPAnalysis.git
 ```
+
+Or if you want to install in development mode (editable):
+
+```bash
+git clone https://github.com/seqasim/LFPAnalysis.git
+cd LFPAnalysis
+pip install -e .
+```
+
+### Option 2: Using conda
+
+If you prefer using conda:
+
+```bash
 cd path_to_install
 git clone https://github.com/seqasim/LFPAnalysis.git
 conda env create -f environment_manual.yml
+conda activate LFPAnalysis
+pip install -e .
 ```
 
-<!-- ```
-conda create --name lfp_env pip requests git python=3.10.8
-conda activate lfp_env
-pip install git+https://github.com/seqasim/LFPAnalysis.git
-``` -->
+**Note:** You'll need to install the package itself after creating the conda environment using `pip install -e .` from the repository directory.
 
 ## Updating
 
-To update the code to reflect changes in the repository:
-```
-cd path_to_install
-git pull
+### If installed via pip:
+
+```bash
+pip install --upgrade --force-reinstall git+https://github.com/seqasim/LFPAnalysis.git
 ```
 
-<!-- ```
-pip install --upgrade --force-reinstall git+https://github.com/seqasim/LFPAnalysis.git 
-``` -->
+### If installed from source (git clone):
+
+```bash
+cd path_to_install/LFPAnalysis
+git pull
+pip install -e .  # Reinstall to pick up changes
+```
+
+## Testing
+
+To run the test suite, first make sure you have the package installed and pytest available:
+
+```bash
+pip install pytest
+pytest tests/
+```
+
+Or run with more verbose output:
+
+```bash
+pytest tests/ -v
+```
 
 ## Where to start? 
 

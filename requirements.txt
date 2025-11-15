@@ -1,23 +1,24 @@
-    mne
-    seaborn
-    neurodsp==2.2.0
-    ipykernel
-    openpyxl
-    ipython
-    ipywidgets
-    ipyevents
-    fooof==1.0.0
-    dcor
-    llvmlite
-    pyyaml
-    sparse
-    tabulate
-    statsmodels
-    levenshtein
-    pycatch22
-    wheel
-    notebook
-    h5io
-    numba
-    tensorpac
-    nibabel
+mne
+seaborn
+neurodsp==2.2.0
+ipykernel
+openpyxl
+ipython
+ipywidgets
+ipyevents
+fooof==1.0.0
+dcor
+llvmlite
+pyyaml
+sparse
+tabulate
+statsmodels
+levenshtein
+pycatch22
+wheel
+notebook
+h5io
+numba
+tensorpac
+nibabel
+pytest

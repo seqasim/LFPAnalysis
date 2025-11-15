@@ -1573,15 +1573,6 @@ def load_elec(elec_path=None, site='MSSM'):
             elec_data['manual'][elec_data['Notes'].str.lower().str.contains('cyst', na=False)] = 'oob'
             elec_data['manual'][elec_data['Notes'].str.lower().str.contains('bad', na=False)] = 'oob'
 
-
-
-
-
-
-
-
-
-
     return elec_data
 
 def make_mne_scalp(load_path=None, overwrite=True, return_data=False):
@@ -1605,17 +1596,6 @@ def make_mne_scalp(load_path=None, overwrite=True, return_data=False):
         whether to overwrite existing data for this person if it exists 
     return_data: bool 
         whether to actually return the data or just save it in the directory 
-    eeg_names : list
-        list of channel names that pertain to scalp EEG in case the hardcoded options don't work
-    resp_names : list 
-        list of channel names that pertain to respiration in case the hardcoded options don't work
-    ekg_names : list
-        list of channel names that pertain to the EKG in case the hardcoded options don't work
-    sync_name : str
-        provide the sync name in case the hardcoded options don't work
-    sync_type : str
-        what type of sync signal was used? options: ['photodiode', 'audio', 'ttl']
-
     Returns
     -------
     mne_data : mne object 
@@ -2515,7 +2495,7 @@ def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_
 
                 iteration +=1
         
-        zpow = mne.time_frequency.EpochsTFR(event_epochs_reref.info, baseline_corrected_power, 
+        zpow = mne.time_frequency.EpochsTFRArray(event_epochs_reref.info, baseline_corrected_power, 
                                     temp_pow.times, freqs)
 
         zpow.metadata = event_epochs_reref.metadata

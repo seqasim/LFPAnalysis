@@ -12,14 +12,37 @@ messing around with the code contained herein.
 
 [The origin of extracellular fields and currents — EEG, ECoG, LFP and spikes](https://www.nature.com/articles/nrn3241)
 
-
 [Advances in human intracranial electroencephalography research, guidelines and good practices](https://pubmed.ncbi.nlm.nih.gov/35792291/)
 
 [A tutorial review of functional connectivity analysis methods and their interpretational pitfalls](https://www.frontiersin.org/journals/systems-neuroscience/articles/10.3389/fnsys.2015.00175/full)
 
 ## Video resources: 
 
-[Mike X. Cohen describes time-frequency analyses in detail](https://www.youtube.com/watch?v=7ahrcB5HL0k&list=PLn0OLiymPak2BYu--bR0ADNBJsC4kuRWs)
+
+## Introductory Videos
+
+[Origin of EEG](https://youtu.be/Bmt89hHyxuM?si=fwcztI_cjwQ4fbyD)
+
+[Preprocessing basics](https://youtu.be/JMB9nZNGVyk?si=mg-VddKF-ZqNq6WH)
+
+[Time-domain (ERP)](https://youtu.be/iFWrVzLYop0?si=jgSZk5UQguJGt9PR)
+
+[Rhythm-based analyses](https://youtu.be/3hk4z3yrMzk?si=stSIsMaZH9vW3Ipg)
+
+[Interpreting time-frequency plots](https://youtu.be/s2MfmIx8wv4?si=7th8mEBbga4a0bE5)
+
+## Basic coding practice:
+
+[Python Novice Inflammation (Software Carpentry)](https://swcarpentry.github.io/python-novice-inflammation/)
+
+[Python Novice Gapminder (Software Carpentry)](https://swcarpentry.github.io/python-novice-gapminder/)
+
+[Case Studies in Python (Mark Kramer)](https://mark-kramer.github.io/Case-Studies-Python/01.html)
+
+## Statistics resources (not Python):
+
+[Introduction to Statistics (Statsthinking21)](https://statsthinking21.github.io/statsthinking21-core-site/)
+
 
 ## Code resources: 
 
@@ -28,6 +51,8 @@ The material in this JupyterBook will be most easily consumed if you have alread
 [Case Studies in Neural Data Analysis](https://mark-kramer.github.io/Case-Studies-Python/03.html)
 
 [Writing good research code](https://goodresearch.dev/)
+
+[More advanced practice for data analysis](https://neuraldatascience.io/intro.html)
 
 
 <!-- Whether you write your book's content in Jupyter Notebooks (`.ipynb`) or
