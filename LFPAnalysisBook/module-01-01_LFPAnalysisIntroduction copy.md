@@ -4,5 +4,3 @@ The LFPAnalysis codebase is meant to help you get data from its raw, recorded fo
 
 You can find installation instructions here: [Repository](https://github.com/seqasim/LFPAnalysis).  
 
-
-
