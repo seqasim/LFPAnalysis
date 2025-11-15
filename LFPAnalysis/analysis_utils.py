@@ -152,16 +152,16 @@ def select_picks_rois(elec_data: pd.DataFrame, roi=None):
         if 'anterior_cingulate' in roi: 
             roi.remove('anterior_cingulate')
             roi += ['cingulate gyrus a', 'cingulate gyrus b', 'cingulate gyrus c']
-        elif entorhinal in roi: 
+        elif 'entorhinal' in roi: 
             roi.remove('entorhinal')
             picks_ec =  elec_data[elec_data.NMM.str.lower().str.contains('entorhinal')].label.tolist()
-        picks = elec_df[elec_df.YBA_1.str.lower().str.contains('|'.join(roi))].label.tolist()
+        picks = elec_data[elec_data.YBA_1.str.lower().str.contains('|'.join(roi))].label.tolist()
         if picks_ec is not None: 
             picks += picks_ec
 
     else:
         # Just grab everything 
-        picks = elec_df.label.tolist()
+        picks = elec_data.label.tolist()
     
     return picks 
 
