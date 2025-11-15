@@ -51,6 +51,18 @@ MICROVOLT_SCALING = (1000000, u'µV')
 
 
 def read_header(fid):
+    """Read raw header data from file object.
+    
+    Parameters
+    ----------
+    fid
+        File object.
+    
+    Returns
+    -------
+    bytes
+        Raw header data.
+    """
     # Read the raw header data (16 kb) from the file object fid. Restores the position in the file object after reading.
     pos = fid.tell()
     fid.seek(0)
@@ -61,6 +73,18 @@ def read_header(fid):
 
 
 def parse_header(raw_hdr):
+    """Parse header string into dictionary.
+    
+    Parameters
+    ----------
+    raw_hdr : bytes
+        Raw header bytes.
+    
+    Returns
+    -------
+    dict
+        Parsed header dictionary.
+    """
     # Parse the header string into a dictionary of name value pairs
     hdr = dict()
 
@@ -101,7 +125,25 @@ def parse_header(raw_hdr):
     return hdr
 
 
-def read_records(fid, record_dtype, record_skip=0, count=None):
+def read_records(fid, record_dtype, record_skip: int = 0, count=None):
+    """Read records from file object.
+    
+    Parameters
+    ----------
+    fid
+        File object.
+    record_dtype
+        NumPy dtype for records.
+    record_skip : int, optional
+        Number of records to skip. Default is 0.
+    count : int, optional
+        Number of records to read. Default is None (all).
+    
+    Returns
+    -------
+    np.ndarray
+        Array of records.
+    """
     # Read count records (default all) from the file object fid skipping the first record_skip records. Restores the
     # position of the file object after reading.
     if count is None:
@@ -116,7 +158,21 @@ def read_records(fid, record_dtype, record_skip=0, count=None):
     return rec
 
 
-def estimate_record_count(file_path, record_dtype):
+def estimate_record_count(file_path: str, record_dtype):
+    """Estimate number of records from file size.
+    
+    Parameters
+    ----------
+    file_path : str
+        Path to file.
+    record_dtype
+        NumPy dtype for records.
+    
+    Returns
+    -------
+    float
+        Estimated number of records.
+    """
     # Estimate the number of records from the file size
     file_size = os.path.getsize(file_path)
     file_size -= HEADER_LENGTH
@@ -127,7 +183,19 @@ def estimate_record_count(file_path, record_dtype):
     return file_size / record_dtype.itemsize
 
 
-def parse_neuralynx_time_string(time_string):
+def parse_neuralynx_time_string(time_string: str):
+    """Parse datetime from Neuralynx time string.
+    
+    Parameters
+    ----------
+    time_string : str
+        Time string from Neuralynx header.
+    
+    Returns
+    -------
+    datetime.datetime or None
+        Parsed datetime object or None if parsing fails.
+    """
     # Parse a datetime object from the idiosyncratic time string in Neuralynx file headers
     try:
         tmp_date = [int(x) for x in time_string.split()[4].split('/')]
@@ -143,6 +211,18 @@ def parse_neuralynx_time_string(time_string):
 
 
 def check_ncs_records(records):
+    """Check that all records are similar.
+    
+    Parameters
+    ----------
+    records : np.ndarray
+        Array of NCS records.
+    
+    Returns
+    -------
+    bool
+        True if all records are similar, False otherwise.
+    """
     # Check that all the records in the array are "similar" (have the same sampling frequency etc.
     dt = np.diff(records['TimeStamp'])
     dt = np.abs(dt - dt[0])
@@ -162,7 +242,25 @@ def check_ncs_records(records):
         return True
 
 
-def load_ncs(file_path, load_time=True, rescale_data=True, signal_scaling=VOLT_SCALING):
+def load_ncs(file_path: str, load_time: bool = True, rescale_data: bool = True, signal_scaling=VOLT_SCALING):
+    """Load Neuralynx .ncs continuous acquisition file.
+    
+    Parameters
+    ----------
+    file_path : str
+        Path to .ncs file.
+    load_time : bool, optional
+        Whether to load time points. Default is True.
+    rescale_data : bool, optional
+        Whether to rescale data. Default is True.
+    signal_scaling
+        Signal scaling tuple. Default is VOLT_SCALING.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing file data and metadata.
+    """
     # Load the given file as a Neuralynx .ncs continuous acquisition file and extract the contents
     file_path = os.path.abspath(file_path)
     with open(file_path, 'rb') as fid:
@@ -204,7 +302,19 @@ def load_ncs(file_path, load_time=True, rescale_data=True, signal_scaling=VOLT_S
     return ncs
 
 
-def load_nev(file_path):
+def load_nev(file_path: str):
+    """Load Neuralynx .nev event file.
+    
+    Parameters
+    ----------
+    file_path : str
+        Path to .nev file.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing event data and metadata.
+    """
     # Load the given file as a Neuralynx .nev event file and extract the contents
     file_path = os.path.abspath(file_path)
     with open(file_path, 'rb') as fid:
@@ -228,9 +338,30 @@ def load_nev(file_path):
     return nev
 
 
-def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names=None, seeg_names=None, drop_names=None, include_micros=False):
-    """
-    Iterate through a list of ncs files and extract the relevant data: signal, sr, channel type and channel name
+def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names=None, seeg_names=None, drop_names=None, include_micros: bool = False):
+    """Parse subject NLX data from NCS files.
+    
+    Parameters
+    ----------
+    ncs_files : list
+        List of NCS file paths.
+    eeg_names : list, optional
+        List of EEG channel names.
+    resp_names : list, optional
+        List of respiratory channel names.
+    ekg_names : list, optional
+        List of EKG channel names.
+    seeg_names : list, optional
+        List of sEEG channel names.
+    drop_names : list, optional
+        List of channel names to drop.
+    include_micros : bool, optional
+        Whether to include microwire data. Default is False.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (signals, srs, ch_name, ch_type).
     """
 
     signals = [] 
@@ -292,11 +423,13 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
     return signals, srs, ch_name, ch_type
 
 
-def merge_multiple_ncs_files(ncs_files): 
-    """
-    TODO
-
-    Merge multiple ncs files. Usually done if recording was paused for whatever reason. 
+def merge_multiple_ncs_files(ncs_files):
+    """Merge multiple NCS files.
+    
+    Parameters
+    ----------
+    ncs_files : list
+        List of NCS file paths to merge.
     """
 
     merged_ncs_dict = {}

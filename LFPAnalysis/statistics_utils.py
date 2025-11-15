@@ -16,21 +16,40 @@ import warnings
 warnings.filterwarnings('ignore')
 
 def fit_permuted_model(y_permuted, X):
-    """
-    Convenience function for running backend OLS with surrogates
+    """Fit OLS model with permuted data.
+    
+    Parameters
+    ----------
+    y_permuted
+        Permuted dependent variable.
+    X
+        Design matrix.
+    
+    Returns
+    -------
+    np.ndarray
+        Model parameters.
     """
     return OLS(y_permuted, X).fit().params
 
-def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=False):
-    """
-
-    A quick way to perform single-electrode regression with many permutations: 
-    # Example usage:
-    # data = pd.DataFrame({'y': y, 'x1': x1, 'x2': x2, 'category': ['A', 'B', 'A', 'B', ...]})
-    # formula = 'y ~ x1 + x2 + C(category)'
-    # results = permutation_regression_zscore(data, formula, plot_res=True)
-    # print(results)
-
+def permutation_regression_zscore(data: pd.DataFrame, formula: str, n_permutations: int = 1000, plot_res: bool = False):
+    """Perform regression with permutation-based z-scores.
+    
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing dependent and independent variables.
+    formula : str
+        Regression formula.
+    n_permutations : int, optional
+        Number of permutations. Default is 1000.
+    plot_res : bool, optional
+        Whether to plot results. Default is False.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Results DataFrame with raw and z-scored statistics.
     """
     # Perform original regression
     y, X = patsy.dmatrices(formula, data, return_type='dataframe')
@@ -123,47 +142,26 @@ def permutation_regression_zscore(data, formula, n_permutations=1000, plot_res=F
     
     return results
 
-def shuffle_data_for_mlm(df, 
-                         y='tfr', 
-                         lower_group='unique_label', 
-                         higher_group='participant',
-                         trial_key='trial'):
-    """
-    For mixed-effects models where we have two hierarchies: trials within electrodes, and electrodes within participants.
-
-    A good shuffle will permute the trial-level data within electrode, but do it the same way for each electrode within a participant to preserve 
-    any structure that might exist across electrodes.
+def shuffle_data_for_mlm(df: pd.DataFrame, y: str = 'tfr', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial'):
+    """Shuffle data for mixed-effects models preserving hierarchical structure.
     
-    Parameters:
+    Parameters
     ----------
     df : pd.DataFrame
-        DataFrame containing the data to shuffle.
-    y : str
-        Name of the dependent variable to shuffle.
-    lower_group : str
-        Name of the lower-level grouping variable.
-    higher_group : str
-        Name of the higher-level grouping variable.
-    trial_key : str
-        Name of the trial identifier variable.
-
-    Returns:
-    --------
-    surr_df : pd.DataFrame
-        DataFrame with shuffled dependent variable.
-
-
-    Example:
-    --------
-    surr_df = shuffle_data_for_mlm(df, 
-                                    y='tfr', 
-                                    lower_group='unique_label',
-                                    higher_group='participant', 
-                                    trial_key='trial')
+        DataFrame containing data to shuffle.
+    y : str, optional
+        Name of dependent variable. Default is 'tfr'.
+    lower_group : str, optional
+        Name of lower-level grouping variable. Default is 'unique_label'.
+    higher_group : str, optional
+        Name of higher-level grouping variable. Default is 'participant'.
+    trial_key : str, optional
+        Name of trial identifier variable. Default is 'trial'.
     
-    surr_model = smf.mixedlm(formula, 
-                                data=surr_df, 
-                                groups=surr_df[lower_group]).fit()
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with shuffled dependent variable.
     """
     surr_df = df.copy()
 
@@ -197,39 +195,30 @@ def shuffle_data_for_mlm(df,
                 
     return surr_df
 
-def generate_surrogate_results(df,
-                               formula = 'tfr ~ 1 + zrpe*phit',
-                               y='tfr', 
-                               lower_group='unique_label', 
-                               higher_group='participant',
-                               trial_key='trial',
-                               n_permutations=100):
+def generate_surrogate_results(df: pd.DataFrame, formula: str = 'tfr ~ 1 + zrpe*phit', y: str = 'tfr', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial', n_permutations: int = 100):
+    """Generate surrogate estimates for mixed-effects model.
     
-    """
-    Generate surrogate estimates for a mixed-effects model by shuffling the dependent variable within electrodes.
-
-    Parameters:
+    Parameters
     ----------
     df : pd.DataFrame
-        DataFrame containing the data to shuffle.
-    formula : str   
-        Formula to use for the mixed-effects model.
-    y : str
-        Name of the dependent variable to shuffle.
-    lower_group : str
-        Name of the lower-level grouping variable.
-    higher_group : str
-        Name of the higher-level grouping variable.
-    trial_key : str
-        Name of the trial identifier variable.
-    n_iterations : int
-        Number of surrogate estimates to generate.
-
-    Returns:
-    --------
-    surr_results : list
-        List of DataFrames containing surrogate estimates for each iteration.
+        DataFrame containing data to shuffle.
+    formula : str, optional
+        Formula for mixed-effects model. Default is 'tfr ~ 1 + zrpe*phit'.
+    y : str, optional
+        Name of dependent variable. Default is 'tfr'.
+    lower_group : str, optional
+        Name of lower-level grouping variable. Default is 'unique_label'.
+    higher_group : str, optional
+        Name of higher-level grouping variable. Default is 'participant'.
+    trial_key : str, optional
+        Name of trial identifier variable. Default is 'trial'.
+    n_permutations : int, optional
+        Number of surrogate estimates. Default is 100.
     
+    Returns
+    -------
+    list
+        List of DataFrames with surrogate estimates.
     """
 
     surr_results = []
@@ -250,36 +239,26 @@ def generate_surrogate_results(df,
     
     return surr_results
 
-def time_resolved_regression_single_channel(smoothed_df=None,
-                                            y='tfr',
-                                            formula='1 + zrpe*phit', 
-                                            permute=False,
-                                            n_permutations=100):
-    """
-    In this function, if you provide a 2D array of z-scored time-varying neural data and a sert of regressors, 
-    this function will run a time-resolved generalized linear model with the provided regressor dataframe. 
-
-    Typically, this timeseries will be HFA, and the default win_len and slide_len reflect this 
-
-    timeseries: ndarray, trials x times 
-    regressors: pandas df, index = trials, columns = regressors
-
+def time_resolved_regression_single_channel(smoothed_df: pd.DataFrame = None, y: str = 'tfr', formula: str = '1 + zrpe*phit', permute: bool = False, n_permutations: int = 100):
+    """Run time-resolved regression for single channel.
+    
     Parameters
     ----------
-    timeseries : 2D ndarray, dimensions = trials x times
-        Time-varying neural data.
-    regressors : pandas.DataFrame, dimensions = trials x regressors
-        Dataframe containing the regressors.
-    win_len : int
-        Length of the window for the time-resolved regression.
-    slide_len : int
-        Step size for the time-resolved regression.
-    standardize : bool
-        Whether to standardize the regressors. The default is True.
-    smooth : bool
-        Whether to bin the timeseries according to win_len and slide_len. The default is Fault.
-    sr: int
-        sampling rate to determine the proper timing of the resulting timeseries of coefficients
+    smoothed_df : pd.DataFrame, optional
+        DataFrame with time-varying neural data.
+    y : str, optional
+        Name of dependent variable. Default is 'tfr'.
+    formula : str, optional
+        Regression formula. Default is '1 + zrpe*phit'.
+    permute : bool, optional
+        Whether to use permutation testing. Default is False.
+    n_permutations : int, optional
+        Number of permutations. Default is 100.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Results DataFrame with regression statistics.
     """
 
     # # Optional: bin the data
@@ -334,9 +313,32 @@ from scipy import stats
 import statsmodels.formula.api as smf
 from tqdm import tqdm
 
-def process_single_timepoint(ts, smoothed_df, formula, lower_group, y, higher_group, trial_key, n_permutations):
-    """
-    Processes a single timepoint.
+def process_single_timepoint(ts, smoothed_df: pd.DataFrame, formula: str, lower_group: str, y: str, higher_group: str, trial_key: str, n_permutations: int):
+    """Process single timepoint for mixed-effects model.
+    
+    Parameters
+    ----------
+    ts
+        Timepoint value.
+    smoothed_df : pd.DataFrame
+        DataFrame with time-varying data.
+    formula : str
+        Mixed-effects model formula.
+    lower_group : str
+        Lower-level grouping variable.
+    y : str
+        Dependent variable name.
+    higher_group : str
+        Higher-level grouping variable.
+    trial_key : str
+        Trial identifier variable.
+    n_permutations : int
+        Number of permutations.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Results DataFrame for this timepoint.
     """
     model_df = smoothed_df[smoothed_df.ts == ts]
     test_model = smf.mixedlm(formula, 
@@ -378,16 +380,32 @@ def process_single_timepoint(ts, smoothed_df, formula, lower_group, y, higher_gr
         
     return results
 
-def time_resolved_mlm(smoothed_df,
-                      y='tfr',
-                      formula='tfr ~ 1 + zrpe*phit',
-                      lower_group='unique_label',
-                      higher_group='participant',
-                      trial_key='trial',
-                      n_permutations=100,
-                      n_jobs=-1):
-    """
-    Parallelized version of the function with progress bar.
+def time_resolved_mlm(smoothed_df: pd.DataFrame, y: str = 'tfr', formula: str = 'tfr ~ 1 + zrpe*phit', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial', n_permutations: int = 100, n_jobs: int = -1):
+    """Run time-resolved mixed-effects model with parallelization.
+    
+    Parameters
+    ----------
+    smoothed_df : pd.DataFrame
+        DataFrame with time-varying data.
+    y : str, optional
+        Dependent variable name. Default is 'tfr'.
+    formula : str, optional
+        Mixed-effects model formula. Default is 'tfr ~ 1 + zrpe*phit'.
+    lower_group : str, optional
+        Lower-level grouping variable. Default is 'unique_label'.
+    higher_group : str, optional
+        Higher-level grouping variable. Default is 'participant'.
+    trial_key : str, optional
+        Trial identifier variable. Default is 'trial'.
+    n_permutations : int, optional
+        Number of permutations. Default is 100.
+    n_jobs : int, optional
+        Number of parallel jobs. Default is -1.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Results DataFrame with all timepoints.
     """
     unique_ts = smoothed_df.ts.unique()
     
