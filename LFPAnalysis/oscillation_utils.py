@@ -11,6 +11,8 @@ from scipy.signal import hilbert
 from mne.filter import next_fast_len
 from IPython.display import clear_output
 from joblib import delayed, Parallel
+import os
+from typing import Union, Tuple, List, Optional, Dict, Any, Generator
 
 import scipy.special
 import warnings
@@ -21,23 +23,39 @@ from matplotlib import pyplot as plt
 
 # Helper functions 
 
-def find_nearest_value(array, value):
-    """Find nearest value and index of float in array
-    Parameters:
-    array : Array of values [1d array]
-    value : Value of interest [float]
-    Returns:
-    array[idx] : Nearest value [1d float]
-    idx : Nearest index [1d float]
+def find_nearest_value(array: np.ndarray, value: float) -> Tuple[float, int]:
+    """Find nearest value and index in array.
+    
+    Parameters
+    ----------
+    array : np.ndarray
+        Array of values.
+    value : float
+        Value of interest.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (nearest_value, index).
     """
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return array[idx], idx
 
-def getTimeFromFTmat(fname, var_name='data'):
-    """
-    Get original timing from FieldTrip structure
-    Solution based on https://github.com/mne-tools/mne-python/issues/2476
+def getTimeFromFTmat(fname: str, var_name: str = 'data') -> np.ndarray:
+    """Get original timing from FieldTrip structure.
+    
+    Parameters
+    ----------
+    fname : str
+        Path to MATLAB file.
+    var_name : str, optional
+        Variable name. Default is 'data'.
+    
+    Returns
+    -------
+    np.ndarray
+        Time array.
     """
     # load Matlab/Fieldtrip data
     mat = sio.loadmat(fname, squeeze_me=True, struct_as_record=False)
@@ -54,6 +72,13 @@ def getTimeFromFTmat(fname, var_name='data'):
     return time
 
 def get_project_root() -> Path:
+    """Get project root path.
+    
+    Returns
+    -------
+    Path
+        Project root path.
+    """
     return Path(__file__)
     
 # def swap_time_blocks(data, random_state=None):
@@ -94,22 +119,26 @@ def get_project_root() -> Path:
     
 #     return np.concatenate(surr, axis=-1)
 
-def make_surrogate_data(data, method='swap_epochs', n_shuffles=1000, rng_seed=42, return_generator=False):
-    """Create surrogate data for a null hypothesis of connectivity.
+def make_surrogate_data(data: mne.Epochs, method: str = 'swap_epochs', n_shuffles: int = 1000, rng_seed: int = 42, return_generator: bool = False) -> Union[List[mne.Epochs], Generator[mne.Epochs, None, None]]:
+    """Create surrogate data for connectivity null hypothesis.
     
     Parameters
     ----------
     data : mne.Epochs
-        The data to be shuffled.
-    method : str
-        The method to use for shuffling. Options are 'swap_time_blocks' and
-        'swap_epochs'.
-    n_shuffles : int
-        The number of shuffles to perform.
-    rng_seed : int
-        The random seed to use for the shuffling.
-    return_generator : bool 
-        If True, returns a generator object. If False, returns a list of surrogates.
+        MNE Epochs object.
+    method : str, optional
+        Shuffling method. Default is 'swap_epochs'.
+    n_shuffles : int, optional
+        Number of shuffles. Default is 1000.
+    rng_seed : int, optional
+        Random seed. Default is 42.
+    return_generator : bool, optional
+        Whether to return generator. Default is False.
+    
+    Returns
+    -------
+    list or generator
+        Surrogate data.
     """
     if method =='swap_time_blocks':
         surrogate = _shuffle_within_epochs(data, n_shuffles, rng_seed)
@@ -119,9 +148,23 @@ def make_surrogate_data(data, method='swap_epochs', n_shuffles=1000, rng_seed=42
         surrogate = [shuffle for shuffle in surrogate]
     return surrogate
 
-def _shuffle_epochs(data, n_shuffles, rng_seed):
-    """Shuffle epochs in data. 
-    This function shuffles the order of the epochs (dim 0) separately for each channel (dim 1)"""
+def _shuffle_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> Generator[mne.Epochs, None, None]:
+    """Shuffle epochs in data.
+    
+    Parameters
+    ----------
+    data : mne.Epochs
+        MNE Epochs object.
+    n_shuffles : int
+        Number of shuffles.
+    rng_seed : int
+        Random seed.
+    
+    Yields
+    ------
+    mne.Epochs
+        Shuffled epochs.
+    """
     data_arr = data.get_data(copy=True)
     rng = np.random.default_rng(rng_seed)
     for _ in range(n_shuffles):
@@ -134,10 +177,22 @@ def _shuffle_epochs(data, n_shuffles, rng_seed):
         new_epochs.set_annotations(data.annotations)
         yield new_epochs
 
-def _shuffle_within_epochs(data, n_shuffles, rng_seed):
-    """Shuffle within epochs in data. 
-    This function cuts the timeseries at a random time point. Then, both time
-    blocks are swapped.
+def _shuffle_within_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> Generator[mne.Epochs, None, None]:
+    """Shuffle within epochs by swapping time blocks.
+    
+    Parameters
+    ----------
+    data : mne.Epochs
+        MNE Epochs object.
+    n_shuffles : int
+        Number of shuffles.
+    rng_seed : int
+        Random seed.
+    
+    Yields
+    ------
+    mne.Epochs
+        Shuffled epochs.
     """
     data_arr = data.get_data(copy=True)
     rng = np.random.default_rng(rng_seed)
@@ -153,18 +208,43 @@ def _shuffle_within_epochs(data, n_shuffles, rng_seed):
         new_epochs.set_annotations(data.annotations)
         yield new_epochs
 
-def _swap_time_blocks(data, cut_at):
-    """Swap time blocks in data at a given cutpoint."""
+def _swap_time_blocks(data: np.ndarray, cut_at: int) -> np.ndarray:
+    """Swap time blocks at cutpoint.
+    
+    Parameters
+    ----------
+    data : np.ndarray
+        Data array.
+    cut_at : int
+        Cut point index.
+    
+    Returns
+    -------
+    np.ndarray
+        Swapped data.
+    """
     surr = np.array_split(data, [cut_at], axis=-1)
     surr.reverse()
     return np.concatenate(surr, axis=-1)
 
-def make_seed_target_df(elec_df, epochs, source_roi, target_roi): 
+def make_seed_target_df(elec_df: pd.DataFrame, epochs: mne.Epochs, source_roi: str, target_roi: str) -> pd.DataFrame:
+    """Create seed-target DataFrame for connectivity.
     
-    """
-    Create arrays of indices for mapping electrodes for connectivity analyses. Use the Epoch
-    ch_names list itself to find the index of the electrode within the mne object 
+    Parameters
+    ----------
+    elec_df : pd.DataFrame
+        Electrode DataFrame.
+    epochs : mne.Epochs
+        MNE Epochs object.
+    source_roi : str
+        Source ROI name.
+    target_roi : str
+        Target ROI name.
     
+    Returns
+    -------
+    pd.DataFrame
+        Seed-target DataFrame.
     """
     
     seed_target_df = pd.DataFrame(columns=['seed', 'target'], index=['l', 'r'])
@@ -202,12 +282,18 @@ def make_seed_target_df(elec_df, epochs, source_roi, target_roi):
 Gaussian copula mutual information estimation
 """
 
-def ctransform(x):
-    """Copula transformation (empirical CDF)
-
-    cx = ctransform(x) returns the empirical CDF value along the first
-    axis of x. Data is ranked and scaled within [0 1] (open interval).
-
+def ctransform(x: np.ndarray) -> np.ndarray:
+    """Copula transformation (empirical CDF).
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Input data.
+    
+    Returns
+    -------
+    np.ndarray
+        Empirical CDF values.
     """
 
     xi = np.argsort(np.atleast_2d(x))
@@ -216,26 +302,38 @@ def ctransform(x):
     return cx
  
 
-def copnorm(x):
-    """Copula normalization
+def copnorm(x: np.ndarray) -> np.ndarray:
+    """Copula normalization.
     
-    cx = copnorm(x) returns standard normal samples with the same empirical
-    CDF value as the input. Operates along the last axis.
-
+    Parameters
+    ----------
+    x : np.ndarray
+        Input data.
+    
+    Returns
+    -------
+    np.ndarray
+        Standard normal samples.
     """
     #cx = sp.stats.norm.ppf(ctransform(x))
     cx = sp.special.ndtri(ctransform(x))
     return cx
 
 
-def ent_g(x, biascorrect=True):
-    """Entropy of a Gaussian variable in bits
-
-    H = ent_g(x) returns the entropy of a (possibly 
-    multidimensional) Gaussian variable x with bias correction.
-    Columns of x correspond to samples, rows to dimensions/variables. 
-    (Samples last axis)
-
+def ent_g(x: np.ndarray, biascorrect: bool = True) -> float:
+    """Compute entropy of Gaussian variable.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Input data.
+    biascorrect : bool, optional
+        Whether to apply bias correction. Default is True.
+    
+    Returns
+    -------
+    float
+        Entropy in bits.
     """
     x = np.atleast_2d(x)
     if x.ndim > 2:
@@ -262,19 +360,24 @@ def ent_g(x, biascorrect=True):
     return HX / ln2
 
 
-def mi_gg(x, y, biascorrect=True, demeaned=False):
-    """Mutual information (MI) between two Gaussian variables in bits
-   
-    I = mi_gg(x,y) returns the MI between two (possibly multidimensional)
-    Gassian variables, x and y, with bias correction.
-    If x and/or y are multivariate columns must correspond to samples, rows
-    to dimensions/variables. (Samples last axis) 
-                                                                             
-    biascorrect : true / false option (default true) which specifies whether
-    bias correction should be applied to the esimtated MI.
-    demeaned : false / true option (default false) which specifies whether th
-    input data already has zero mean (true if it has been copula-normalized)
-
+def mi_gg(x: np.ndarray, y: np.ndarray, biascorrect: bool = True, demeaned: bool = False) -> float:
+    """Compute mutual information between Gaussian variables.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First variable.
+    y : np.ndarray
+        Second variable.
+    biascorrect : bool, optional
+        Whether to apply bias correction. Default is True.
+    demeaned : bool, optional
+        Whether data is already demeaned. Default is False.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
     
     x = np.atleast_2d(x)
@@ -321,15 +424,20 @@ def mi_gg(x, y, biascorrect=True, demeaned=False):
     return I
 
 
-def gcmi_cc(x,y):
-    """Gaussian-Copula Mutual Information between two continuous variables.
-
-    I = gcmi_cc(x,y) returns the MI between two (possibly multidimensional)
-    continuous variables, x and y, estimated via a Gaussian copula.
-    If x and/or y are multivariate columns must correspond to samples, rows
-    to dimensions/variables. (Samples first axis) 
-    This provides a lower bound to the true MI value.
-
+def gcmi_cc(x: np.ndarray, y: np.ndarray) -> float:
+    """Compute Gaussian-copula mutual information.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First variable.
+    y : np.ndarray
+        Second variable.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -361,24 +469,26 @@ def gcmi_cc(x,y):
     return I
 
 
-def mi_model_gd(x, y, Ym, biascorrect=True, demeaned=False):
-    """Mutual information (MI) between a Gaussian and a discrete variable in bits
-    based on ANOVA style model comparison.
-
-    I = mi_model_gd(x,y,Ym) returns the MI between the (possibly multidimensional)
-    Gaussian variable x and the discrete variable y.
-    For 1D x this is a lower bound to the mutual information.
-    Columns of x correspond to samples, rows to dimensions/variables. 
-    (Samples last axis)
-    y should contain integer values in the range [0 Ym-1] (inclusive).
-
-    biascorrect : true / false option (default true) which specifies whether
-    bias correction should be applied to the esimtated MI.
-    demeaned : false / true option (default false) which specifies whether the
-    input data already has zero mean (true if it has been copula-normalized)
-
-    See also: mi_mixture_gd
-
+def mi_model_gd(x: np.ndarray, y: np.ndarray, Ym: int, biascorrect: bool = True, demeaned: bool = False) -> float:
+    """Compute MI between Gaussian and discrete variable.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Gaussian variable.
+    y : np.ndarray
+        Discrete variable.
+    Ym : int
+        Number of discrete values.
+    biascorrect : bool, optional
+        Whether to apply bias correction. Default is True.
+    demeaned : bool, optional
+        Whether data is demeaned. Default is False.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -442,19 +552,22 @@ def mi_model_gd(x, y, Ym, biascorrect=True, demeaned=False):
     return I
 
 
-def gcmi_model_cd(x,y,Ym):
-    """Gaussian-Copula Mutual Information between a continuous and a discrete variable
-     based on ANOVA style model comparison.
-
-    I = gcmi_model_cd(x,y,Ym) returns the MI between the (possibly multidimensional)
-    continuous variable x and the discrete variable y.
-    For 1D x this is a lower bound to the mutual information.
-    Columns of x correspond to samples, rows to dimensions/variables.
-    (Samples last axis)
-    y should contain integer values in the range [0 Ym-1] (inclusive).
-
-    See also: gcmi_mixture_cd
-
+def gcmi_model_cd(x: np.ndarray, y: np.ndarray, Ym: int) -> float:
+    """Compute Gaussian-copula MI between continuous and discrete variable.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Continuous variable.
+    y : np.ndarray
+        Discrete variable.
+    Ym : int
+        Number of discrete values.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -491,18 +604,22 @@ def gcmi_model_cd(x,y,Ym):
     return I
 
 
-def mi_mixture_gd(x, y, Ym):
-    """Mutual information (MI) between a Gaussian and a discrete variable in bits
-    calculated from a Gaussian mixture.
-
-    I = mi_mixture_gd(x,y,Ym) returns the MI between the (possibly multidimensional)
-    Gaussian variable x and the discrete variable y.
-    Columns of x correspond to samples, rows to dimensions/variables.
-    (Samples last axis)
-    y should contain integer values in the range [0 Ym-1] (inclusive).
-
-    See also: mi_model_gd
-
+def mi_mixture_gd(x: np.ndarray, y: np.ndarray, Ym: int) -> float:
+    """Compute MI using Gaussian mixture model.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Gaussian variable.
+    y : np.ndarray
+        Discrete variable.
+    Ym : int
+        Number of discrete values.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -586,28 +703,42 @@ def mi_mixture_gd(x, y, Ym):
     I = (Hmix - np.sum(w*Hcond)) / np.log(2.0)
     return I
 
-def _norm_innerv(x, chC):
-    """ normalised innervations """
+def _norm_innerv(x: np.ndarray, chC: np.ndarray) -> np.ndarray:
+    """Compute normalized inner products.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Input data.
+    chC : np.ndarray
+        Cholesky decomposition.
+    
+    Returns
+    -------
+    np.ndarray
+        Normalized inner products.
+    """
     m = np.linalg.solve(chC,x)
     w = -0.5 * (m * m).sum(axis=0)
     return w
 
 
-def gcmi_mixture_cd(x,y,Ym):
-    """Gaussian-Copula Mutual Information between a continuous and a discrete variable
-    calculated from a Gaussian mixture.
-
-    The Gaussian mixture is fit using robust measures of location (median) and scale
-    (median absolute deviation) for each class.
-    I = gcmi_mixture_cd(x,y,Ym) returns the MI between the (possibly multidimensional)
-    continuous variable x and the discrete variable y.
-    For 1D x this is a lower bound to the mutual information.
-    Columns of x correspond to samples, rows to dimensions/variables.
-    (Samples last axis)
-    y should contain integer values in the range [0 Ym-1] (inclusive).
-
-    See also: gcmi_model_cd
-
+def gcmi_mixture_cd(x: np.ndarray, y: np.ndarray, Ym: int) -> float:
+    """Compute Gaussian-copula MI using Gaussian mixture.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Continuous variable.
+    y : np.ndarray
+        Discrete variable.
+    Ym : int
+        Number of discrete values.
+    
+    Returns
+    -------
+    float
+        Mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -663,20 +794,26 @@ def gcmi_mixture_cd(x,y,Ym):
     return I
 
 
-def cmi_ggg(x, y, z, biascorrect=True, demeaned=False):
-    """Conditional Mutual information (CMI) between two Gaussian variables
-    conditioned on a third
-
-    I = cmi_ggg(x,y,z) returns the CMI between two (possibly multidimensional)
-    Gassian variables, x and y, conditioned on a third, z, with bias correction.
-    If x / y / z are multivariate columns must correspond to samples, rows
-    to dimensions/variables. (Samples last axis)
-
-    biascorrect : true / false option (default true) which specifies whether
-    bias correction should be applied to the esimtated MI.
-    demeaned : false / true option (default false) which specifies whether the
-    input data already has zero mean (true if it has been copula-normalized)
-
+def cmi_ggg(x: np.ndarray, y: np.ndarray, z: np.ndarray, biascorrect: bool = True, demeaned: bool = False) -> float:
+    """Compute conditional mutual information.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First variable.
+    y : np.ndarray
+        Second variable.
+    z : np.ndarray
+        Conditioning variable.
+    biascorrect : bool, optional
+        Whether to apply bias correction. Default is True.
+    demeaned : bool, optional
+        Whether data is demeaned. Default is False.
+    
+    Returns
+    -------
+    float
+        Conditional mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -736,15 +873,22 @@ def cmi_ggg(x, y, z, biascorrect=True, demeaned=False):
     return I
 
 
-def gccmi_ccc(x,y,z):
-    """Gaussian-Copula CMI between three continuous variables.
-
-    I = gccmi_ccc(x,y,z) returns the CMI between two (possibly multidimensional)
-    continuous variables, x and y, conditioned on a third, z, estimated via a
-    Gaussian copula.
-    If x and/or y are multivariate columns must correspond to samples, rows
-    to dimensions/variables. (Samples first axis)
-
+def gccmi_ccc(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
+    """Compute Gaussian-copula conditional mutual information.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First variable.
+    y : np.ndarray
+        Second variable.
+    z : np.ndarray
+        Conditioning variable.
+    
+    Returns
+    -------
+    float
+        Conditional mutual information in bits.
     """
 
     x = np.atleast_2d(x)
@@ -784,16 +928,24 @@ def gccmi_ccc(x,y,z):
     return I
 
 
-def gccmi_ccd(x,y,z,Zm):
-    """Gaussian-Copula CMI between 2 continuous variables conditioned on a discrete variable.
-
-    I = gccmi_ccd(x,y,z,Zm) returns the CMI between two (possibly multidimensional)
-    continuous variables, x and y, conditioned on a third discrete variable z, estimated
-    via a Gaussian copula.
-    If x and/or y are multivariate columns must correspond to samples, rows
-    to dimensions/variables. (Samples first axis)
-    z should contain integer values in the range [0 Zm-1] (inclusive).
-
+def gccmi_ccd(x: np.ndarray, y: np.ndarray, z: np.ndarray, Zm: int) -> Tuple[float, float]:
+    """Compute Gaussian-copula CMI conditioned on discrete variable.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First continuous variable.
+    y : np.ndarray
+        Second continuous variable.
+    z : np.ndarray
+        Discrete conditioning variable.
+    Zm : int
+        Number of discrete values.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (CMI, I).
     """
 
     x = np.atleast_2d(x)
@@ -849,23 +1001,24 @@ def gccmi_ccd(x,y,z,Zm):
     I = mi_gg(np.hstack(cx),np.hstack(cy),True,False)
     return (CMI,I)
 
-def phase_gcmi(mne_data, seed_to_target, freqs0, freqs1=None):
-    """
+def phase_gcmi(mne_data: mne.Epochs, seed_to_target: Tuple[np.ndarray, np.ndarray], freqs0: Tuple[float, float], freqs1: Optional[Tuple[float, float]] = None) -> np.ndarray:
+    """Compute phase-based Gaussian-copula mutual information.
     
-    Compute the gaussian-copula condition mutual information between the phase of two signals.
-    Can be within-frequency or between-frequency coupling.
-
     Parameters
     ----------
-    mne_data : epochs object
-        MNE epochs object containing the data to be analyzed.
-    seed_to_target : list of tuples 
-        List of tuples containing the indices of the seed and target electrodes.
-    freqs0 : list or tuple
-        Frequency range for the first signal.
-    freqs1 : list or tuple
-        Frequency range for the second signal.
-
+    mne_data : mne.Epochs
+        MNE epochs object.
+    seed_to_target : tuple
+        Seed-to-target indices as (seed_indices, target_indices).
+    freqs0 : tuple
+        Frequency range for first signal as (low, high).
+    freqs1 : tuple, optional
+        Frequency range for second signal as (low, high). Default is None.
+    
+    Returns
+    -------
+    np.ndarray
+        Pairwise connectivity matrix.
     """
 
     nevents = mne_data._data.shape[0]
@@ -929,23 +1082,24 @@ def phase_gcmi(mne_data, seed_to_target, freqs0, freqs1=None):
 
     return pairwise_connectivity
 
-def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
-    """
-    Compute the correlation between the amplitude envelope of two signals. 
-    Can be within-frequency or between-frequency coupling.
-
+def amp_amp_coupling(mne_data: mne.Epochs, seed_to_target: Tuple[np.ndarray, np.ndarray], freqs0: Tuple[float, float], freqs1: Optional[Tuple[float, float]] = None) -> np.ndarray:
+    """Compute amplitude-amplitude coupling.
+    
     Parameters
     ----------
-    mne_data : epochs object
-        MNE epochs object containing the data to be analyzed.
-    seed_to_target : list of tuples
-        List of tuples containing the indices of the seed and target electrodes.
-    freqs0 : list or tuple
-        Frequency range for the first signal.
-    freqs1 : list or tuple
-        Frequency range for the second signal. If None, assume within-frequency coupling.
-
-    Note: inspired by MNE's pairwise orthogonal envelope connectivity metric but altered for iEEG data 
+    mne_data : mne.Epochs
+        MNE epochs object.
+    seed_to_target : tuple
+        Seed-to-target indices as (seed_indices, target_indices).
+    freqs0 : tuple
+        Frequency range for first signal as (low, high).
+    freqs1 : tuple, optional
+        Frequency range for second signal as (low, high). Default is None.
+    
+    Returns
+    -------
+    np.ndarray
+        Pairwise connectivity matrix.
     """
 
     nevents = mne_data._data.shape[0]
@@ -1015,17 +1169,34 @@ def amp_amp_coupling(mne_data, seed_to_target, freqs0, freqs1=None):
 
     return pairwise_connectivity
 
-def compute_gc_tr(mne_data=None, 
-                band=None,
-                indices=None, 
-                freqs=None, 
-                n_cycles=None,
-                rank=None, 
-                gc_n_lags=15, 
-                buf_ms=1000, 
-                avg_over_dim='time'): 
-    """
-    Following https://mne.tools/mne-connectivity/stable/auto_examples/granger_causality.html#sphx-glr-auto-examples-granger-causality-py
+def compute_gc_tr(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, rank: Optional[int] = None, gc_n_lags: int = 15, buf_ms: int = 1000, avg_over_dim: str = 'time') -> np.ndarray:
+    """Compute Granger causality time-resolved.
+    
+    Parameters
+    ----------
+    mne_data : mne.Epochs, optional
+        MNE epochs object.
+    band : tuple, optional
+        Frequency band as (low, high).
+    indices : tuple, optional
+        Connectivity indices as (seed_indices, target_indices).
+    freqs : np.ndarray, optional
+        Frequency array.
+    n_cycles : float or np.ndarray, optional
+        Number of cycles.
+    rank : int, optional
+        Rank parameter.
+    gc_n_lags : int, optional
+        Number of lags. Default is 15.
+    buf_ms : int, optional
+        Buffer in milliseconds. Default is 1000.
+    avg_over_dim : str, optional
+        Dimension to average over. Default is 'time'.
+    
+    Returns
+    -------
+    np.ndarray
+        Granger causality results.
     """
 
     indices_ab = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))  # A => B
@@ -1148,7 +1319,37 @@ def compute_gc_tr(mne_data=None,
     else:
         return np.squeeze(gc_tr)
 
-def compute_surr_connectivity_epochs(surr_mne, indices, metric, band, freqs, n_cycles, surr_method = 'swap_epochs', rng_seed=None, gc_n_lags=15, buf_ms=1000):
+def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], surr_method: str = 'swap_epochs', rng_seed: Optional[int] = None, gc_n_lags: int = 15, buf_ms: int = 1000) -> np.ndarray:
+    """Compute surrogate connectivity over epochs.
+    
+    Parameters
+    ----------
+    surr_mne : mne.Epochs
+        Surrogate MNE epochs.
+    indices : tuple
+        Connectivity indices as (seed_indices, target_indices).
+    metric : str
+        Connectivity metric.
+    band : tuple
+        Frequency band as (low, high).
+    freqs : np.ndarray
+        Frequency array.
+    n_cycles : float or np.ndarray
+        Number of cycles.
+    surr_method : str, optional
+        Surrogate method. Default is 'swap_epochs'.
+    rng_seed : int, optional
+        Random seed.
+    gc_n_lags : int, optional
+        Number of lags. Default is 15.
+    buf_ms : int, optional
+        Buffer in milliseconds. Default is 1000.
+    
+    Returns
+    -------
+    np.ndarray
+        Surrogate connectivity results.
+    """
 
     n_pairs = len(indices[0])
     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
@@ -1233,7 +1434,37 @@ def compute_surr_connectivity_epochs(surr_mne, indices, metric, band, freqs, n_c
     return surr_conn
 
 
-def compute_surr_connectivity_time(surr_mne, indices, metric, band, freqs, n_cycles, buf_ms, surr_method = 'swap_epochs', rng_seed=42, gc_n_lags=15):
+def compute_surr_connectivity_time(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], buf_ms: Union[int, Tuple[int, int]], surr_method: str = 'swap_epochs', rng_seed: int = 42, gc_n_lags: int = 15) -> np.ndarray:
+    """Compute surrogate connectivity over time.
+    
+    Parameters
+    ----------
+    surr_mne : mne.Epochs
+        Surrogate MNE epochs.
+    indices : tuple
+        Connectivity indices as (seed_indices, target_indices).
+    metric : str
+        Connectivity metric.
+    band : tuple
+        Frequency band as (low, high).
+    freqs : np.ndarray
+        Frequency array.
+    n_cycles : float or np.ndarray
+        Number of cycles.
+    buf_ms : int or tuple
+        Buffer in milliseconds.
+    surr_method : str, optional
+        Surrogate method. Default is 'swap_epochs'.
+    rng_seed : int, optional
+        Random seed. Default is 42.
+    gc_n_lags : int, optional
+        Number of lags. Default is 15.
+    
+    Returns
+    -------
+    np.ndarray
+        Surrogate connectivity results.
+    """
 
     n_pairs = len(indices[0])
     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
@@ -1300,29 +1531,42 @@ def compute_surr_connectivity_time(surr_mne, indices, metric, band, freqs, n_cyc
     return surr_conn
 
 
-def compute_connectivity(mne_data=None, 
-                        band=None,
-                        metric=None, 
-                        indices=None, 
-                        freqs=None, 
-                        n_cycles=None, 
-                        buf_ms=1000, 
-                        avg_over_dim='time',
-                        surr_method = 'swap_epochs',
-                        n_surr=500,
-                        parallelize=False,
-                        band1=None,
-                        gc_n_lags=7):
-    """
-    Compute different connectivity metrics using mne.
-    :param eeg_mne: MNE formatted EEG
-    :param samplerate: sample rate of the data
-    :param band: tuple of band of interest
-    :param metric: 'psi' for directional, or for non_directional: ['coh', 'cohy', 'imcoh', 'plv', 'ciplv', 'ppc', 'pli', pli2_unbiased', 'dpli', 'wpli', 'wpli2_debiased']
-    see: https://mne.tools/mne-connectivity/stable/generated/mne_connectivity.spectral_connectivity_epochs.html
-    :param indices: determine the source and target for connectivity. Matters most for directional metrics i.e. 'psi'
-    :return:
-    pairwise connectivity: array of pairwise weights for the connectivity metric with some number of timepoints
+def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, metric: Optional[str] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, buf_ms: int = 1000, avg_over_dim: str = 'time', surr_method: str = 'swap_epochs', n_surr: int = 500, parallelize: bool = False, band1: Optional[Tuple[float, float]] = None, gc_n_lags: int = 7) -> np.ndarray:
+    """Compute connectivity metrics.
+    
+    Parameters
+    ----------
+    mne_data : mne.Epochs, optional
+        MNE epochs object.
+    band : tuple, optional
+        Frequency band as (low, high).
+    metric : str, optional
+        Connectivity metric.
+    indices : tuple, optional
+        Connectivity indices as (seed_indices, target_indices).
+    freqs : np.ndarray, optional
+        Frequency array.
+    n_cycles : float or np.ndarray, optional
+        Number of cycles.
+    buf_ms : int, optional
+        Buffer in milliseconds. Default is 1000.
+    avg_over_dim : str, optional
+        Dimension to average over. Default is 'time'.
+    surr_method : str, optional
+        Surrogate method. Default is 'swap_epochs'.
+    n_surr : int, optional
+        Number of surrogates. Default is 500.
+    parallelize : bool, optional
+        Whether to parallelize. Default is False.
+    band1 : tuple, optional
+        Second frequency band as (low, high).
+    gc_n_lags : int, optional
+        Number of lags. Default is 7.
+    
+    Returns
+    -------
+    np.ndarray
+        Connectivity results.
     """
     if metric == 'gr_tc':
         return (ValueError('Use the function compute_gc_tr'))
@@ -1766,20 +2010,24 @@ and Clayton T. Dickson.
 ---
 """
 
-def BOSC_tf(eegsignal,F,Fsample,wavenumber):
-    """
-    Computes the Better Oscillation Detection (BOSC) time-frequency matrix for a given LFP signal.
-
-    Args:
-    - eegsignal (numpy.ndarray): The LFP signal to compute the BOSC time-frequency matrix for.
-    - F (numpy.ndarray): The frequency range to compute the BOSC time-frequency matrix over.
-    - Fsample (float): The sampling frequency of the LFP signal.
-    - wavenumber (float): The wavenumber to use for the Morlet wavelet.
-
-    Returns:
-    - B (numpy.ndarray): The BOSC time-frequency matrix.
-    - T (numpy.ndarray): The time vector corresponding to the BOSC time-frequency matrix.
-    - F (numpy.ndarray): The frequency vector corresponding to the BOSC time-frequency matrix.
+def BOSC_tf(eegsignal: np.ndarray, F: np.ndarray, Fsample: float, wavenumber: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute BOSC time-frequency matrix.
+    
+    Parameters
+    ----------
+    eegsignal : np.ndarray
+        LFP signal.
+    F : np.ndarray
+        Frequency range.
+    Fsample : float
+        Sampling frequency.
+    wavenumber : float
+        Morlet wavelet wavenumber.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (B, T, F).
     """
 
     st=1./(2*np.pi*(F/wavenumber))
@@ -1800,30 +2048,24 @@ def BOSC_tf(eegsignal,F,Fsample,wavenumber):
     return B, T, F
 
 
-def BOSC_detect(b,powthresh,durthresh,Fsample):
-    """
-    detected=BOSC_detect(b,powthresh,durthresh,Fsample)
-    This function detects oscillations based on a wavelet power
-    timecourse, b, a power threshold (powthresh) and duration
-    threshold (durthresh) returned from BOSC_thresholds.m.
+def BOSC_detect(b: np.ndarray, powthresh: float, durthresh: float, Fsample: float) -> np.ndarray:
+    """Detect oscillations using BOSC.
     
-    It now returns the detected vector which is already episode-detected.
+    Parameters
+    ----------
+    b : np.ndarray
+        Power timecourse.
+    powthresh : float
+        Power threshold.
+    durthresh : float
+        Duration threshold.
+    Fsample : float
+        Sampling frequency.
     
-    b - the power timecourse (at one frequency of interest)
-    
-    durthresh - duration threshold in  required to be deemed oscillatory
-    powthresh - power threshold
-    
-    returns:
-    detected - a binary vector containing the value 1 for times at
-               which oscillations (at the frequency of interest) were
-               detected and 0 where no oscillations were detected.
-    
-    note: Remember to account for edge effects by including
-    "shoulder" data and accounting for it afterwards!
-    
-    To calculate Pepisode:
-    Pepisode=length(find(detected))/(length(detected));
+    Returns
+    -------
+    np.ndarray
+        Binary detection vector.
     """                           
 
     # number of time points
@@ -1889,23 +2131,22 @@ def BOSC_detect(b,powthresh,durthresh,Fsample):
     detected = np.array(list(map(np.int, detected)))
     return detected
 
-def eBOSC_getThresholds(cfg_eBOSC, TFR, eBOSC):
-    """This function estimates the static duration and power thresholds and
-    saves information regarding the overall spectrum and background.
-    Inputs: 
-               cfg | config structure with cfg.eBOSC field
-               TFR | time-frequency matrix
-               eBOSC | main eBOSC output structure; will be updated
+def eBOSC_getThresholds(cfg_eBOSC: dict, TFR: np.ndarray, eBOSC: dict) -> Tuple[dict, np.ndarray, np.ndarray]:
+    """Estimate static duration and power thresholds.
     
-    Outputs: 
-               eBOSC   | updated w.r.t. background info (see below)
-                       | bg_pow: overall power spectrum
-                       | bg_log10_pow: overall power spectrum (log10)
-                       | pv: intercept and slope of fit
-                       | mp: linear background power
-                       | pt: power threshold
-               pt | empirical power threshold
-               dt | duration threshold
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary.
+    TFR : np.ndarray
+        Time-frequency matrix.
+    eBOSC : dict
+        eBOSC output structure.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (eBOSC, pt, dt).
     """
 
     # concatenate power estimates in time across trials of interest
@@ -1989,8 +2230,22 @@ def eBOSC_getThresholds(cfg_eBOSC, TFR, eBOSC):
 
     return eBOSC, pt, dt
 
-def eBOSC_episode_sparsefreq(cfg_eBOSC, detected, TFR):
-    """Sparsen the detected matrix along the frequency dimension
+def eBOSC_episode_sparsefreq(cfg_eBOSC: dict, detected: np.ndarray, TFR: np.ndarray) -> np.ndarray:
+    """Sparsen detected matrix along frequency dimension.
+    
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary.
+    detected : np.ndarray
+        Detected matrix.
+    TFR : np.ndarray
+        Time-frequency matrix.
+    
+    Returns
+    -------
+    np.ndarray
+        Sparsed detected matrix.
     """    
     # print('Creating sparse detected matrix ...')
     
@@ -2037,20 +2292,26 @@ def eBOSC_episode_sparsefreq(cfg_eBOSC, detected, TFR):
     detected = detected[freqs_to_search,:]
     return detected
 
-def eBOSC_episode_postproc_fwhm(cfg_eBOSC, episodes, TFR):
-    """
-    % This function performs post-processing of input episodes by checking
-    % whether 'detected' time points can trivially be explained by the FWHM of
-    % the wavelet used in the time-frequency transform.
-    %
-    % Inputs: 
-    %           cfg | config structure with cfg.eBOSC field
-    %           episodes | table of episodes
-    %           TFR | time-frequency matrix
-    %
-    % Outputs: 
-    %           episodes_new | updated table of episodes
-    %           detected_new | updated binary detected matrix
+def eBOSC_episode_postproc_fwhm(cfg_eBOSC: dict, episodes: dict, TFR: np.ndarray) -> Tuple[dict, np.ndarray]:
+    """Perform post-processing of episodes using FWHM correction.
+    
+    This function performs post-processing of input episodes by checking
+    whether 'detected' time points can trivially be explained by the FWHM of
+    the wavelet used in the time-frequency transform.
+    
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary with eBOSC field.
+    episodes : dict
+        Table of episodes.
+    TFR : np.ndarray
+        Time-frequency matrix.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (episodes_new, detected_new).
     """
     
     print("Applying FWHM post-processing ...")
@@ -2178,31 +2439,37 @@ def eBOSC_episode_postproc_fwhm(cfg_eBOSC, episodes, TFR):
     # return post-processed episode dictionary and updated binary detected matrix
     return episodesTable, detected_new
 
-def eBOSC_episode_postproc_maxbias(cfg_eBOSC, episodes, TFR):
-    """
-    % This function performs post-processing of input episodes by checking
-    % whether 'detected' time points can be explained by the simulated extension of
-    % the wavelet used in the time-frequency transform.
-    %
-    % Inputs: 
-    %           cfg | config structure with cfg.eBOSC field
-    %           episodes | table of episodes
-    %           TFR | time-frequency matrix
-    %
-    % Outputs: 
-    %           episodes_new | updated table of episodes
-    %           detected_new | updated binary detected matrix
+def eBOSC_episode_postproc_maxbias(cfg_eBOSC: dict, episodes: dict, TFR: np.ndarray) -> Tuple[dict, np.ndarray]:
+    """Perform post-processing of episodes using maxbias correction.
     
-    % This method works as follows: we estimate the bias introduced by
-    % wavelet convolution. The bias is represented by the amplitudes
-    % estimated for the zero-shouldered signal (i.e. for which no real 
-    % data was initially available). The influence of episodic
-    % amplitudes on neighboring time points is assessed by scaling each
-    % time point's amplitude with the last 'rhythmic simulated time
-    % point', i.e. the first time wavelet amplitude in the simulated
-    % rhythmic time points. At this time point the 'bias' is maximal,
-    % although more precisely, this amplitude does not represent a
-    % bias per se.
+    This function performs post-processing of input episodes by checking
+    whether 'detected' time points can be explained by the simulated extension of
+    the wavelet used in the time-frequency transform.
+    
+    This method works as follows: we estimate the bias introduced by
+    wavelet convolution. The bias is represented by the amplitudes
+    estimated for the zero-shouldered signal (i.e. for which no real 
+    data was initially available). The influence of episodic
+    amplitudes on neighboring time points is assessed by scaling each
+    time point's amplitude with the last 'rhythmic simulated time
+    point', i.e. the first time wavelet amplitude in the simulated
+    rhythmic time points. At this time point the 'bias' is maximal,
+    although more precisely, this amplitude does not represent a
+    bias per se.
+    
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary with eBOSC field.
+    episodes : dict
+        Table of episodes.
+    TFR : np.ndarray
+        Time-frequency matrix.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (episodes_new, detected_new).
     """
     
     print("Applying maxbias post-processing ...")
@@ -2326,11 +2593,22 @@ def eBOSC_episode_postproc_maxbias(cfg_eBOSC, episodes, TFR):
     # return post-processed episode dictionary and updated binary detected matrix
     return episodesTable, detected_new
 
-def eBOSC_episode_rm_shoulder(cfg_eBOSC,detected1,episodes):
-    """ Remove parts of the episode that fall into the 'shoulder' of individual
-    trials. There is no check for adherence to a given duration criterion necessary,
-    as the point of the padding of the detected matrix is exactly to account
-    for allowing the presence of a few cycles.
+def eBOSC_episode_rm_shoulder(cfg_eBOSC: dict, detected1: np.ndarray, episodes: dict):
+    """Remove episode parts in trial shoulders.
+    
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary.
+    detected1 : np.ndarray
+        Detected matrix.
+    episodes : dict
+        Episodes dictionary.
+    
+    Returns
+    -------
+    dict
+        Updated episodes dictionary.
     """
 
     print("Removing padding from detected episodes")
@@ -2376,46 +2654,55 @@ def eBOSC_episode_rm_shoulder(cfg_eBOSC,detected1,episodes):
         episodes[entry] = [v for i, v in enumerate(episodes[entry]) if i not in rmv]
     return episodes
 
-def eBOSC_episode_create(cfg_eBOSC,TFR,detected,eBOSC):
-    """This function creates continuous rhythmic "episodes" and attempts to control for the impact of wavelet parameters.
-      Time-frequency points that best represent neural rhythms are identified by
-      heuristically removing temporal and frequency leakage. 
+def eBOSC_episode_create(cfg_eBOSC: dict, TFR: np.ndarray, detected: np.ndarray, eBOSC: dict) -> Tuple[dict, np.ndarray]:
+    """Create continuous rhythmic episodes and control for wavelet parameter impact.
     
-     Frequency leakage: at each frequency x time point, power has to exceed neighboring frequencies.
-      Then it is checked whether the detected time-frequency points belong to
-      a continuous episode for which (1) the frequency maximally changes by 
-      +/- n steps (cfg.eBOSC.fstp) from on time point to the next and (2) that is at 
-      least as long as n number of cycles (cfg.eBOSC.threshold.duration) of the average freqency
-      of that episode (a priori duration threshold).
+    This function creates continuous rhythmic "episodes" and attempts to control for the impact of wavelet parameters.
+    Time-frequency points that best represent neural rhythms are identified by
+    heuristically removing temporal and frequency leakage.
     
-     Temporal leakage: The impact of the amplitude at each time point within a rhythmic episode on previous
-      and following time points is tested with the goal to exclude supra-threshold time
-      points that are due to the wavelet extension in time. 
+    Frequency leakage: at each frequency x time point, power has to exceed neighboring frequencies.
+    Then it is checked whether the detected time-frequency points belong to
+    a continuous episode for which (1) the frequency maximally changes by 
+    +/- n steps (cfg.eBOSC.fstp) from on time point to the next and (2) that is at 
+    least as long as n number of cycles (cfg.eBOSC.threshold.duration) of the average freqency
+    of that episode (a priori duration threshold).
     
-    Input:   
-               cfg         | config structure with cfg.eBOSC field
-               TFR         | time-frequency matrix (excl. WLpadding)
-               detected    | detected oscillations in TFR (based on power and duration threshold)
-               eBOSC       | main eBOSC output structure; necessary to read in
-                               prior eBOSC.episodes if they exist in a loop
+    Temporal leakage: The impact of the amplitude at each time point within a rhythmic episode on previous
+    and following time points is tested with the goal to exclude supra-threshold time
+    points that are due to the wavelet extension in time.
     
-    Output:  
-               detected_new    | new detected matrix with frequency leakage removed
-               episodesTable   | table with specific episode information:
-                     Trial: trial index (corresponds to cfg.eBOSC.trial)
-                     Channel: channel index
-                     FrequencyMean: mean frequency of episode (Hz)
-                     DurationS: episode duration (in sec)
-                     DurationC: episode duration (in cycles, based on mean frequency)
-                     PowerMean: mean amplitude of amplitude
-                     Onset: episode onset in s
-                     Offset: episode onset in s
-                     Power: (cell) time-resolved wavelet-based amplitude estimates during episode
-                     Frequency: (cell) time-resolved wavelet-based frequency
-                     RowID: (cell) row index (frequency dimension): following eBOSC_episode_rm_shoulder relative to data excl. detection padding
-                     ColID: (cell) column index (time dimension)
-                     SNR: (cell) time-resolved signal-to-noise ratio: momentary amplitude/static background estimate at channel*frequency
-                     SNRMean: mean signal-to-noise ratio
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration structure with eBOSC field.
+    TFR : np.ndarray
+        Time-frequency matrix (excl. WLpadding).
+    detected : np.ndarray
+        Detected oscillations in TFR (based on power and duration threshold).
+    eBOSC : dict
+        Main eBOSC output structure; necessary to read in
+        prior eBOSC.episodes if they exist in a loop.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (episodesTable, detected_new).
+        episodesTable contains:
+            - Trial: trial index (corresponds to cfg.eBOSC.trial)
+            - Channel: channel index
+            - FrequencyMean: mean frequency of episode (Hz)
+            - DurationS: episode duration (in sec)
+            - DurationC: episode duration (in cycles, based on mean frequency)
+            - PowerMean: mean amplitude of amplitude
+            - Onset: episode onset in s
+            - Offset: episode offset in s
+            - Power: (list) time-resolved wavelet-based amplitude estimates during episode
+            - Frequency: (list) time-resolved wavelet-based frequency
+            - RowID: (list) row index (frequency dimension)
+            - ColID: (list) column index (time dimension)
+            - SNR: (list) time-resolved signal-to-noise ratio
+            - SNRMean: mean signal-to-noise ratio
     """
 
     # initialize dictionary to save results in
@@ -2570,36 +2857,44 @@ def eBOSC_episode_create(cfg_eBOSC,TFR,detected,eBOSC):
         
     return episodesTable, detected_new
 
-def eBOSC_wrapper(cfg_eBOSC, data):
+def eBOSC_wrapper(cfg_eBOSC: dict, data: pd.DataFrame) -> Tuple[dict, dict]:
     """Main eBOSC wrapper function. Executes eBOSC subfunctions.
-    Inputs: 
-        cfg_eBOSC | dictionary containing the following entries:
-            F                     | frequency sampling
-            wavenumber            | wavelet family parameter (time-frequency tradeoff)
-            fsample               | current sampling frequency of EEG data
-            pad.tfr_s             | padding following wavelet transform to avoid edge artifacts in seconds (bi-lateral)
-            pad.detection_s       | padding following rhythm detection in seconds (bi-lateral); 'shoulder' for BOSC eBOSC.detected matrix to account for duration threshold
-            pad.total_s           | complete padding (WL + shoulder)
-            pad.background_s      | padding of segments for BG (only avoiding edge artifacts)
-            threshold.excludePeak | lower and upper bound of frequencies to be excluded during background fit (Hz) (previously: LowFreqExcludeBG HighFreqExcludeBG)
-            threshold.duration    | vector of duration thresholds at each frequency (previously: ncyc)
-            threshold.percentile  | percentile of background fit for power threshold
-            postproc.use          | Post-processing of rhythmic eBOSC.episodes, i.e., wavelet 'deconvolution' (default = 'no')
-            postproc.method       | Deconvolution method (default = 'MaxBias', FWHM: 'FWHM')
-            postproc.edgeOnly     | Deconvolution only at on- and offsets of eBOSC.episodes? (default = 'yes')
-            postproc.effSignal	  | Power deconvolution on whole signal or signal above power threshold? (default = 'PT')
-            channel               | Subset of channels? (default: [] = all)
-            trial                 | Subset of trials? (default: [] = all)
-            trial_background      | Subset of trials for background? (default: [] = all)
-        data | input time series data as a Pandas DataFrame: 
-            - channels as columns
-            - multiindex containing: 'time', 'epoch', 
-    Outputs: 
-        eBOSC | main eBOSC output dictionary containing the following entries:
-            episodes | Dictionary: individual rhythmic episodes (see eBOSC_episode_create)
-            detected | DataFrame: binary detected time-frequency points (prior to episode creation), pepisode = temporal average
-            detected_ep | DataFrame: binary detected time-frequency points (following episode creation), abundance = temporal average
-            cfg | config structure (see input)
+    
+    Parameters
+    ----------
+    cfg_eBOSC : dict
+        Configuration dictionary containing the following entries:
+        - F: frequency sampling
+        - wavenumber: wavelet family parameter (time-frequency tradeoff)
+        - fsample: current sampling frequency of EEG data
+        - pad.tfr_s: padding following wavelet transform to avoid edge artifacts in seconds (bi-lateral)
+        - pad.detection_s: padding following rhythm detection in seconds (bi-lateral); 'shoulder' for BOSC eBOSC.detected matrix to account for duration threshold
+        - pad.total_s: complete padding (WL + shoulder)
+        - pad.background_s: padding of segments for BG (only avoiding edge artifacts)
+        - threshold.excludePeak: lower and upper bound of frequencies to be excluded during background fit (Hz)
+        - threshold.duration: vector of duration thresholds at each frequency
+        - threshold.percentile: percentile of background fit for power threshold
+        - postproc.use: Post-processing of rhythmic eBOSC.episodes, i.e., wavelet 'deconvolution' (default = 'no')
+        - postproc.method: Deconvolution method (default = 'MaxBias', FWHM: 'FWHM')
+        - postproc.edgeOnly: Deconvolution only at on- and offsets of eBOSC.episodes? (default = 'yes')
+        - postproc.effSignal: Power deconvolution on whole signal or signal above power threshold? (default = 'PT')
+        - channel: Subset of channels? (default: [] = all)
+        - trial: Subset of trials? (default: [] = all)
+        - trial_background: Subset of trials for background? (default: [] = all)
+    data : pd.DataFrame
+        Input time series data as a Pandas DataFrame with:
+        - channels as columns
+        - multiindex containing: 'time', 'epoch'
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (eBOSC, cfg).
+        eBOSC is the main eBOSC output dictionary containing:
+        - episodes: Dictionary of individual rhythmic episodes (see eBOSC_episode_create)
+        - detected: DataFrame of binary detected time-frequency points (prior to episode creation)
+        - detected_ep: DataFrame of binary detected time-frequency points (following episode creation)
+        cfg is the config structure (see input)
     """
 
     # %% get list of channel names (very manual solution, replace if possible)
@@ -2757,14 +3052,48 @@ def eBOSC_wrapper(cfg_eBOSC, data):
     return eBOSC, cfg_eBOSC
 
 
-def compute_eBOSC_parallel(chan_name, MNE_object, subj_id, elec_df, event_name, ev_dict, conditions, 
-                           do_plot=False, save_path='/sc/arion/projects/guLab/Salman/EphysAnalyses', 
-                           do_save=False, mean_across_time=False, mean_across_freqs=False, both_dfs=True, **kwargs):
-    """
-
+def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str, elec_df: pd.DataFrame, event_name: str, ev_dict: dict, conditions: List[str], 
+                           do_plot: bool = False, save_path: str = '/sc/arion/projects/guLab/Salman/EphysAnalyses', 
+                           do_save: bool = False, mean_across_time: bool = False, mean_across_freqs: bool = False, both_dfs: bool = True, **kwargs) -> None:
+    """Parallelize eBOSC computation over many channels simultaneously.
+    
     This function is meant to parallelize our BOSC code to be computed over many channels simultaneously and save the results 
-    to individual dataframes. 
-
+    to individual dataframes.
+    
+    Parameters
+    ----------
+    chan_name : str
+        Channel name.
+    MNE_object : mne.Epochs
+        MNE epochs object.
+    subj_id : str
+        Subject ID.
+    elec_df : pd.DataFrame
+        Electrode DataFrame.
+    event_name : str
+        Event name.
+    ev_dict : dict
+        Event dictionary.
+    conditions : list
+        List of conditions.
+    do_plot : bool, optional
+        Whether to plot. Default is False.
+    save_path : str, optional
+        Path to save results. Default is '/sc/arion/projects/guLab/Salman/EphysAnalyses'.
+    do_save : bool, optional
+        Whether to save results. Default is False.
+    mean_across_time : bool, optional
+        Whether to average across time. Default is False.
+    mean_across_freqs : bool, optional
+        Whether to average across frequencies. Default is False.
+    both_dfs : bool, optional
+        Whether to create both dataframes. Default is True.
+    **kwargs
+        Additional keyword arguments for eBOSC configuration.
+    
+    Returns
+    -------
+    None
     """
 
     if not os.path.exists(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs'):

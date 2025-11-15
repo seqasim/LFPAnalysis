@@ -8,9 +8,13 @@ from collections import defaultdict
 
 # Might be nice to synergize with https://github.com/alexrockhill/pd-parser to see if there's some improvements to be made
 
-def get_behav_ts(logfile): 
-    """
-    Insert custom function to extract the behavioral timestamps from the logfile for your task. 
+def get_behav_ts(logfile):
+    """Extract behavioral timestamps from logfile.
+    
+    Parameters
+    ----------
+    logfile
+        Logfile to extract timestamps from.
     """
     pass
     
@@ -43,9 +47,22 @@ def moving_average(a, n=11) :
 #     r = c[0, 0] / (np.std(x) * np.std(y))
 #     return r
 
-def get_neural_ts_photodiode(mne_sync, smoothSize=11, height=0.5):
-    """
-    get neural ts from photodiode
+def get_neural_ts_photodiode(mne_sync, smoothSize: int = 11, height: float = 0.5):
+    """Extract neural timestamps from photodiode signal.
+    
+    Parameters
+    ----------
+    mne_sync
+        MNE sync data object.
+    smoothSize : int, optional
+        Smoothing window size. Default is 11.
+    height : float, optional
+        Threshold for detecting rising edge. Default is 0.5.
+    
+    Returns
+    -------
+    np.ndarray
+        Neural timestamps.
     """
 
     sig = np.squeeze(moving_average(mne_sync._data, n=smoothSize))
@@ -60,30 +77,37 @@ def get_neural_ts_photodiode(mne_sync, smoothSize=11, height=0.5):
     return neural_ts
 
 def get_neural_ts_ttl(nev_data):
-    """
-    get neural ts from ttl recording on nlx
+    """Extract neural timestamps from TTL recording.
+    
+    Parameters
+    ----------
+    nev_data : dict
+        NEV data dictionary containing records.
+    
+    Returns
+    -------
+    np.ndarray
+        Neural timestamps in seconds.
     """
 
     return nev_data['records']['TimeStamp'][nev_data['records']['ttl']==1] * 1e-6
 
-def pulsealign(beh_ms=None,
-               pulses=None, 
-               windSize=15):
-    """
-    Aligns the behavioral timestamps with the EEG pulses by finding the chunks of behavioral pulse times 
-    where the inter-pulse intervals are correlated with the EEG pulses.
-
+def pulsealign(beh_ms=None, pulses=None, windSize: int = 15):
+    """Align behavioral timestamps with EEG pulses.
+    
     Parameters
     ----------
-    beh_ms (np.ndarray): A vector of ms times extracted from the log file.
-    pulses (np.ndarray): Vector of EEG pulses extracted from the EEG.
-    windSize (int): The size of the chunks to step through the recorded sync pulses. Default is 15.
-
+    beh_ms : np.ndarray, optional
+        Vector of ms times extracted from the log file.
+    pulses : np.ndarray, optional
+        Vector of EEG pulses extracted from the EEG.
+    windSize : int, optional
+        Size of chunks to step through recorded sync pulses. Default is 15.
+    
     Returns
     -------
-    A tuple of two np.ndarrays:
-        - beh_ms: The truncated beh_ms values that match the eeg_offset.
-        - eeg_offset: The truncated pulses that match the beh_ms.
+    tuple
+        Tuple of (beh_ms, eeg_offset) np.ndarrays.
     """
 
     # these are parameters that one could potentially tweak....
@@ -139,18 +163,19 @@ def pulsealign(beh_ms=None,
     return good_beh_ms, eeg_offset
 
 def sync_matched_pulses(beh_pulse, neural_pulse):
-    """
-    Compute the slope and offset of the linear regression between two sets of pulse timestamps.
-
-    Parameters:
-    beh_pulse (array-like): The timestamps of the behavioral pulses.
-    neural_pulse (array-like): The timestamps of the neural pulses.
-
-    Returns:
-    tuple: A tuple containing the slope, offset, and correlation coefficient of the linear regression.
-
-    Note:     Idea is similar to this: https://github.com/mne-tools/mne-python/blob/main/mne/preprocessing/realign.py#L13-L111
-
+    """Compute slope and offset of linear regression between pulse timestamps.
+    
+    Parameters
+    ----------
+    beh_pulse : array-like
+        Timestamps of behavioral pulses.
+    neural_pulse : array-like
+        Timestamps of neural pulses.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (slope, offset, rval).
     """
     bfix = beh_pulse[0]
     res = scipy.stats.linregress(beh_pulse-bfix, neural_pulse)
@@ -161,7 +186,27 @@ def sync_matched_pulses(beh_pulse, neural_pulse):
 
     return slope, offset, rval
 
-def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size=15, step_size=1, correlation_threshold=0.99):
+def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size: int = 15, step_size: int = 1, correlation_threshold: float = 0.99):
+    """Robustly synchronize behavioral and neural timestamps.
+    
+    Parameters
+    ----------
+    beh_ts : array-like, optional
+        Behavioral timestamps.
+    neural_ts : array-like, optional
+        Neural timestamps.
+    window_size : int, optional
+        Window size for matching. Default is 15.
+    step_size : int, optional
+        Step size for iteration. Default is 1.
+    correlation_threshold : float, optional
+        Correlation threshold for matching. Default is 0.99.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (slope, offset, rval).
+    """
     # Calculate differences between consecutive timestamps
     neural_diff = np.diff(neural_ts)
     beh_diff = np.diff(beh_ts)
@@ -215,33 +260,33 @@ def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size=15, step_si
 
     return slope, offset, rval
 
-def synchronize_data(beh_ts=None, mne_sync=None, 
-                     smoothSize=11, windSize=15, height=0.5, sync_source='photodiode'):
-    """
-    Synchronize the behavioral timestamps from the logfile and the mne photodiode data and return the slope and offset for the session.
-
-    Parameters:
-    beh_ts (array-like): The timestamps of the behavioral events.
-    mne_sync: The MNE photodiode data OR the nev data for TTL (UIowa)
-    smoothSize (int): The size of the smoothing window for the photodiode data.
-    windSize (int): The size of the window for pulse alignment.
-    height (float): The threshold for detecting the rising edge of the photodiode signal.
-    sync_source (str): the type of signal used to sync the data 
-
-    Returns:
-    tuple: A tuple containing the slope and offset of the linear regression between the behavioral and neural timestamps.
-
-    Raises:
-    ValueError: If the synchronization fails.
-
-    Note: 
-    - The function uses a moving average filter to smooth the photodiode data.
-    - The function uses a z-score normalization for the photodiode data.
-    - The function uses a threshold to detect the rising edge of the photodiode signal.
-    - The function uses pulse alignment to match the behavioral and neural timestamps.
-    - The function uses linear regression to compute the slope and offset of the synchronization.
-    - The function increases the window size for pulse alignment until the correlation coefficient of the linear regression is greater than or equal to 0.99.
-    - The function raises a ValueError if the synchronization fails.
+def synchronize_data(beh_ts=None, mne_sync=None, smoothSize: int = 11, windSize: int = 15, height: float = 0.5, sync_source: str = 'photodiode'):
+    """Synchronize behavioral timestamps with MNE photodiode data.
+    
+    Parameters
+    ----------
+    beh_ts : array-like, optional
+        Timestamps of behavioral events.
+    mne_sync
+        MNE photodiode data or NEV data for TTL.
+    smoothSize : int, optional
+        Smoothing window size. Default is 11.
+    windSize : int, optional
+        Window size for pulse alignment. Default is 15.
+    height : float, optional
+        Threshold for detecting rising edge. Default is 0.5.
+    sync_source : str, optional
+        Type of signal used to sync data. Default is 'photodiode'.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (slope, offset).
+    
+    Raises
+    ------
+    ValueError
+        If synchronization fails.
     """
 
     if isinstance(sync_source, str):

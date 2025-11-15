@@ -3,9 +3,18 @@ import numpy as np
 from itertools import chain
 from LFPAnalysis import lfp_preprocess_utils
 
-def extract_names_connect_table(connect_table_path):
-    """
-    Utility function for extracting channel types from Iowa connection table
+def extract_names_connect_table(connect_table_path: str):
+    """Extract channel types from Iowa connection table.
+    
+    Parameters
+    ----------
+    connect_table_path : str
+        Path to the connection table CSV file.
+    
+    Returns
+    -------
+    tuple
+        Tuple containing (eeg_names, resp_names, ekg_names, seeg_names, drop_names).
     """
 
     connect_table = pd.read_csv(connect_table_path)
@@ -95,10 +104,18 @@ def extract_names_connect_table(connect_table_path):
 
     return eeg_names, resp_names, ekg_names, seeg_names, drop_names
 
-def extract_names_elec_table(elec_table_path):
-    """
-    In some instances we just have Kiril's electrode table. In this case, we need a different extractor for 
-    the data 
+def extract_names_elec_table(elec_table_path: str):
+    """Extract channel names from electrode table.
+    
+    Parameters
+    ----------
+    elec_table_path : str
+        Path to the electrode table file.
+    
+    Returns
+    -------
+    list
+        List of sEEG channel names.
     """
 
     elec_data = lfp_preprocess_utils.load_elec(elec_table_path, site='UI')
@@ -134,9 +151,15 @@ def extract_names_elec_table(elec_table_path):
 
 #     return mapping_name
 
-def rename_mne_channels(mne_data, location_table_path):
+def rename_mne_channels(mne_data, location_table_path: str):
+    """Rename MNE channels based on location table.
+    
+    Parameters
+    ----------
+    mne_data
+        MNE data object.
+    location_table_path : str
+        Path to the location table CSV file.
     """
-    """
-
     location_table = pd.read_csv(location_table_path)
     

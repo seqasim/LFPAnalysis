@@ -105,40 +105,32 @@ def baseline_avg_TFR(data, baseline, mode='zscore'):
     
     return baseline_corrected 
 
-def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_epoch_in_baseline=True,
-                            ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
-    
-    """
-    This function zscores the task data and the baseline data together. Then, it subtracts the mean of the z-scored 
-    baseline from the task data.  
-
-    TODO: Make this flexible in case the number of events (baseline_mne) ! = (data)
+def baseline_trialwise_TFR(data=None, baseline_mne=None, mode: str = 'zscore', include_epoch_in_baseline: bool = True, ev_axis: int = 0, elec_axis: int = 1, freq_axis: int = 2, time_axis: int = 3):
+    """Baseline correct trialwise TFR data.
     
     Parameters
     ----------
-    data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The original time-frequency data.
-    baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
+    data : np.ndarray, optional
+        Time-frequency data array.
+    baseline_mne
+        Baseline MNE epochs or array.
     mode : str, optional
-        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
-    trialwise : bool, optional
-        Whether to baseline each trial separately. Default is True.
-    baseline_only : bool, optional
-        Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
+        Baseline correction mode. Default is 'zscore'.
+    include_epoch_in_baseline : bool, optional
+        Whether to include epoch in baseline. Default is True.
     ev_axis : int, optional
-        The axis corresponding to the event dimension. Default is 0.
+        Event axis. Default is 0.
     elec_axis : int, optional
-        The axis corresponding to the electrode dimension. Default is 1.
+        Electrode axis. Default is 1.
     freq_axis : int, optional
-        The axis corresponding to the frequency dimension. Default is 2.
+        Frequency axis. Default is 2.
     time_axis : int, optional
-        The axis corresponding to the time dimension. Default is 3.
-
+        Time axis. Default is 3.
+    
     Returns
     -------
-    baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The baseline-corrected time-frequency data.
+    np.ndarray
+        Baseline-corrected data.
     """
 
     # The reason I want baseline_mne to be an mne input was to specify these axes in a foolproof way for when
@@ -355,38 +347,32 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode='zscore', include_
 
     
 
-def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_samples=1000,
-                            ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
-    
-    """
-    This function samples from all the baseline periods N times with replacement
-    and computes the mean and std for normalization of task-related activity. 
+def baseline_TFR_permute(data=None, baseline_mne=None, mode: str = 'zscore', num_samples: int = 1000, ev_axis: int = 0, elec_axis: int = 1, freq_axis: int = 2, time_axis: int = 3):
+    """Baseline correct TFR using permutation sampling.
     
     Parameters
     ----------
-    data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The original time-frequency data.
-    baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
+    data : np.ndarray, optional
+        Time-frequency data array.
+    baseline_mne
+        Baseline MNE epochs or array.
     mode : str, optional
-        The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
-    trialwise : bool, optional
-        Whether to baseline each trial separately. Default is True.
-    baseline_only : bool, optional
-        Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
+        Baseline correction mode. Default is 'zscore'.
+    num_samples : int, optional
+        Number of permutation samples. Default is 1000.
     ev_axis : int, optional
-        The axis corresponding to the event dimension. Default is 0.
+        Event axis. Default is 0.
     elec_axis : int, optional
-        The axis corresponding to the electrode dimension. Default is 1.
+        Electrode axis. Default is 1.
     freq_axis : int, optional
-        The axis corresponding to the frequency dimension. Default is 2.
+        Frequency axis. Default is 2.
     time_axis : int, optional
-        The axis corresponding to the time dimension. Default is 3.
-
+        Time axis. Default is 3.
+    
     Returns
     -------
-    baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-        The baseline-corrected time-frequency data.
+    np.ndarray
+        Baseline-corrected data.
     """
 
 
@@ -455,49 +441,28 @@ def baseline_TFR_permute(data=None, baseline_mne=None, mode='zscore', num_sample
 
 
 
-def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site='MSSM', average=False):
-    """
-    Define a custom reference using the white matter electrodes. Originated here: https://doi.org/10.1016/j.neuroimage.2015.02.031
-
-    (as in https://www.science.org/doi/10.1126/sciadv.abf4198)
+def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None, site: str = 'MSSM', average: bool = False):
+    """Create white matter reference.
     
-    Identify all white matter electrodes (based on the electrode names), and make sure they are not bad electrodes (based on the bad channels list).
-
-    1. iterate through each electrode, compute distance to all white matter electrodes 
-    2. find 3 closest wm electrodes, compute amplitude (rms) 
-    3. lowest amplitude electrode = wm reference 
-
-    Make sure it's the same hemisphere. 
-    
-    TODO: implement average reference option, whereby the mean activity across all white matter electrodes is used as a reference [separate per hemi]... 
-    see: https://www.sciencedirect.com/science/article/pii/S1053811922005559#bib0349
-
-    TODO: this is SLOW; any vectorization to speed it up or parallelization?
-
     Parameters
     ----------
-    mne_data : mne object
-        non-referenced data stored in an MNE object 
-    elec_data : pandas df 
-        dataframe containing the electrode localization information
-    bad_channels : list 
-        bad channels 
-    unmatched_seeg : list 
-        list of channels that were not in the edf file 
-    site : str
-        hospital where the recording took place 
-    average : bool 
-        should we construct an average white matter reference instead of a default? 
-
+    mne_data
+        MNE data object.
+    elec_path : str, optional
+        Path to electrode file.
+    bad_channels : list, optional
+        List of bad channels.
+    unmatched_seeg : list, optional
+        List of unmatched sEEG channels.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    average : bool, optional
+        Whether to use average reference. Default is False.
+    
     Returns
     -------
-    anode_list : list 
-        list of channels to subtract from
-    cathode_list : list 
-        list of channels to subtract
-    drop_wm_channels : list 
-        list of white matter channels which were not used for reference and now serve no purpose 
-
+    tuple
+        Tuple containing (anode_list, cathode_list, drop_wm_channels, oob_channels).
     """
 
     elec_data = load_elec(elec_path, site=site)
@@ -686,31 +651,26 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         return anode_list, cathode_list, drop_wm_channels
 
 
-def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=None):
-    """
-    Return the cathode list and anode list for mne to use for laplacian referencing.
-
-    In this case, the cathode is the average of the surrounding electrodes. If an edge electrode, it's just bipolar. 
-
+def laplacian_ref(mne_data, elec_path: str, bad_channels: list, unmatched_seeg=None, site=None):
+    """Create laplacian reference.
+    
     Parameters
     ----------
-    mne_data : MNE Raw object
-        MNE Raw object containing the EEG data
+    mne_data
+        MNE Raw object.
     elec_path : str
-        Path to the electrode localization file
-    bad_channels : list 
-        List of bad channels 
-    unmatched_seeg : list 
-        List of channels that were not in the edf file 
-    site : str
-        Hospital where the recording took place 
-
+        Path to electrode localization file.
+    bad_channels : list
+        List of bad channels.
+    unmatched_seeg : list, optional
+        List of unmatched sEEG channels.
+    site : str, optional
+        Site name.
+    
     Returns
     -------
-    anode_list : list 
-        List of channels to subtract from
-    cathode_list : list 
-        List of channels to subtract
+    tuple
+        Tuple containing (anode_list, cathode_list).
     """
 
     # TODO: for someone clever. Note that you have to bypass the mne reference script because that specific a single reference for each electrode.
@@ -761,27 +721,24 @@ def laplacian_ref(mne_data, elec_path, bad_channels, unmatched_seeg=None, site=N
 
     # return anode_list, cathode_list
 
-def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
-    """
-    Return the cathode list and anode list for mne to use for bipolar referencing.
-
+def bipolar_ref(elec_path: str, bad_channels: list, unmatched_seeg=None, site: str = 'MSSM'):
+    """Create bipolar reference.
+    
     Parameters
     ----------
-    elec_data : pandas df 
-        dataframe containing the electrode localization information
-    bad_channels : list 
-        bad channels 
-    unmatched_seeg : list 
-        list of channels that were not in the edf file 
-    site : str
-        hospital where the recording took place 
-
+    elec_path : str
+        Path to electrode file.
+    bad_channels : list
+        List of bad channels.
+    unmatched_seeg : list, optional
+        List of unmatched sEEG channels.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    
     Returns
     -------
-    anode_list : list 
-        list of channels to subtract from
-    cathode_list : list 
-        list of channels to subtract
+    tuple
+        Tuple containing (anode_list, cathode_list, drop_wm_channels, oob_channels).
     """
 
     elec_data = load_elec(elec_path, site=site)
@@ -922,29 +879,22 @@ def bipolar_ref(elec_path, bad_channels, unmatched_seeg=None, site='MSSM'):
     return anode_list, cathode_list, drop_wm_channels, oob_channels
 
 
-def match_elec_names(mne_names, loc_names, method='levenshtein'):
-    """
-    The electrode names read out of the edf file do not always match those 
-    in the pdf (used for localization). This could be error on the side of the tech who input the labels, 
-    or on the side of MNE reading the labels in. Usually there's a mixup between lowercase 'l' and capital 'I', or between 'R' and 'P'... 
-
-    This function matches the MNE channel names to those used in the localization. 
-
+def match_elec_names(mne_names: list, loc_names, method: str = 'levenshtein'):
+    """Match MNE channel names to localization names.
+    
     Parameters
     ----------
     mne_names : list
-        list of electrode names in the recording data (mne)
-    loc_names : list 
-        list of electrode names in the pdf, used for the localization
-
+        List of MNE channel names.
+    loc_names
+        Localization names.
+    method : str, optional
+        Matching method. Default is 'levenshtein'.
+    
     Returns
     -------
-    new_mne_names : list 
-        revised mne names merged across sources 
-    unmatched_names : list 
-        names that do not match (mostly scalp EEG and misc)
-    unmatched_seeg : list
-        sEEG channels that do not match (should be rare)
+    tuple
+        Tuple containing (new_mne_names, unmatched_names, unmatched_seeg).
     """
     # strip spaces from mne_names and put in lower case
     mne_names = [x.replace(" ", "").lower() for x in mne_names]
@@ -1053,28 +1003,20 @@ def match_elec_names(mne_names, loc_names, method='levenshtein'):
 
     return new_mne_names, unmatched_names, unmatched_seeg
 
-def detect_bad_elecs(mne_data, sEEG_mapping_dict): 
-    """
-    Find outlier channels using a combination of kurtosis, variance, and standard deviation. Also use the elec_data to find channels out of the brain
+def detect_bad_elecs(mne_data, sEEG_mapping_dict: dict):
+    """Detect bad electrodes using statistical measures.
     
-    https://www-sciencedirect-com.eresources.mssm.edu/science/article/pii/S016502701930278X
-    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7472198/
-    https://www.biorxiv.org/content/10.1101/2021.05.14.444176v2.full.pdf
-
-    
-    Plot these channels for manual verification. 
-
     Parameters
     ----------
-    mne_data : mne object 
-        mne data to check for bad channels 
-    sEEG_mapping_dict : dict 
-        dict of sEEG channels 
-
+    mne_data
+        MNE data object.
+    sEEG_mapping_dict : dict
+        Dictionary of sEEG channels.
+    
     Returns
     -------
-    bad_channels : list 
-        list of bad channels 
+    list
+        List of bad channels.
     """
 
     # Get the data
@@ -1092,10 +1034,20 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict):
     # 
     return bad_channels
 
-def detect_misc_artifacts(mne_data, peak_thresh=6):
-    """
-    This function detects artifacts (sharp transients) in the LFP signal automatically. 
+def detect_misc_artifacts(mne_data, peak_thresh: float = 6):
+    """Detect miscellaneous artifacts in LFP signal.
     
+    Parameters
+    ----------
+    mne_data
+        MNE data object.
+    peak_thresh : float, optional
+        Peak threshold. Default is 6.
+    
+    Returns
+    -------
+    dict
+        Dictionary of artifact times per channel.
     """
     # 1. take the gradient of the signal: 
     gradient_signal = np.gradient(mne_data.copy()._data, axis=-1)
@@ -1115,37 +1067,24 @@ def detect_misc_artifacts(mne_data, peak_thresh=6):
 
     return artifact_sec_dict
 
-def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2): 
-    """
-    This function detects IEDs in the LFP signal automatically. Alternative to manual marking of each ied. 
-
-    From: https://academic.oup.com/brain/article/142/11/3502/5566384
-
-    Method 1: 
-    1. Bandpass filter in the [25-80] Hz band. 
-    2. Rectify. 
-    3. Find filtered envelope > 3. 
-    4. Eliminate events with peaks with unfiltered envelope < 3. 
-    5. Eliminate close IEDs (peaks within 250 ms). 
-    6. Eliminate IEDs that are not present on at least 4 electrodes. 
-    (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6821283/)
-
+def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25, width_thresh: float = 0.2):
+    """Detect interictal epileptiform discharges.
+    
     Parameters
     ----------
-    mne_data : mne object 
-        mne data to check for bad channels 
-    peak_thresh : float 
-        the peak threshold in amplitude 
-    closeness_thresh : float 
-        the closeness threshold in time
-    width_thresh : float 
-        the width threshold for IEDs 
-
+    mne_data
+        MNE data object.
+    peak_thresh : float, optional
+        Peak threshold. Default is 5.
+    closeness_thresh : float, optional
+        Closeness threshold in seconds. Default is 0.25.
+    width_thresh : float, optional
+        Width threshold in seconds. Default is 0.2.
+    
     Returns
     -------
-    IED_samps_dict : dict 
-        dict with every IED index  
-
+    dict
+        Dictionary of IED times per channel.
     """
 
     # What type of data is this? Continuous or epoched? 
@@ -1455,17 +1394,20 @@ def detect_IEDs(mne_data, peak_thresh=5, closeness_thresh=0.25, width_thresh=0.2
 
 # Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
-def load_elec(elec_path=None, site='MSSM'):
-    """
-    Load the electrode data from a CSV or Excel file, correct for small idiosyncracies, and return as a pandas dataframe.
-
+def load_elec(elec_path=None, site: str = 'MSSM'):
+    """Load electrode data from file.
+    
     Parameters
     ----------
-    elec_path (str): Path to the electrode data file. The file should be in CSV or Excel format.
-
+    elec_path : str, optional
+        Path to electrode file.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    
     Returns
-    ----------
-    pandas.DataFrame: A dataframe containing the electrode data. The dataframe has columns for the electrode label, the x, y, and z coordinates in MNI space, and any other metadata associated with the electrodes.
+    -------
+    pd.DataFrame
+        Electrode data DataFrame.
     """
 
     # Load electrode data (should already be manually localized!)
@@ -1575,31 +1517,22 @@ def load_elec(elec_path=None, site='MSSM'):
 
     return elec_data
 
-def make_mne_scalp(load_path=None, overwrite=True, return_data=False):
-    """
-    Make a mne object from the scalp data file, and save out the sync. 
-    Following this step, you can indicate bad electrodes manually.
-
-    This function requires users to input the file format of the raw data.
-
-    Optionally, users can input the names of special channel types as these might be communicated manually rather than hardcoded into the raw data.
-
-    (On that note, a better idea would be for someone to go back and edit the original data to include informative names...)
+def make_mne_scalp(load_path=None, overwrite: bool = True, return_data: bool = False):
+    """Create MNE object from scalp data.
     
     Parameters
     ----------
-    load_path : str
-        path to the neural data
-    format : str 
-        how was this data collected? options: ['edf', 'nlx]
-    overwrite: bool 
-        whether to overwrite existing data for this person if it exists 
-    return_data: bool 
-        whether to actually return the data or just save it in the directory 
+    load_path : str, optional
+        Path to neural data.
+    overwrite : bool, optional
+        Whether to overwrite existing data. Default is True.
+    return_data : bool, optional
+        Whether to return data. Default is False.
+    
     Returns
     -------
-    mne_data : mne object 
-        mne object
+    mne object or None
+        MNE object if return_data is True.
     """
 
     edf_file = glob(f'{load_path}/*.edf')[0]
@@ -1631,53 +1564,50 @@ def make_mne_scalp(load_path=None, overwrite=True, return_data=False):
     return mne_data if return_data else mne_data.save(f'{load_path}/scalp_raw.fif', overwrite=overwrite)
 
 
-def make_mne(load_path=None, elec_path=None, format='edf', site='MSSM', resample_sr = 500, overwrite=True, return_data=False, 
-include_micros=False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type='photodiode', seeg_names=None, drop_names=None,
-seeg_only=True, check_bad=False):
-    """
-    Make a mne object from the data and electrode files, and save out the sync. 
-    Following this step, you can indicate bad electrodes manually.
-
-    This function requires users to input the file format of the raw data, and the location the data was recorded for site-specific steps.
-
-    Optionally, users can input the names of special channel types as these might be communicated manually rather than hardcoded into the raw data.
-
-    (On that note, a better idea would be for someone to go back and edit the original data to include informative names...)
+def make_mne(load_path=None, elec_path=None, format: str = 'edf', site: str = 'MSSM', resample_sr: int = 500, overwrite: bool = True, return_data: bool = False, include_micros: bool = False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type: str = 'photodiode', seeg_names=None, drop_names=None, seeg_only: bool = True, check_bad: bool = False):
+    """Create MNE object from data and electrode files.
     
     Parameters
     ----------
-    load_path : str
-        path to the neural data
-    elec_data : pandas df 
-        dataframe with all the electrode localization information
-    format : str 
-        how was this data collected? options: ['edf', 'nlx]
-    site: str
-        where was the data collected? options: ['UI', 'MSSM'].
-        TODO: add site specificity for UC Davis
-    overwrite: bool 
-        whether to overwrite existing data for this person if it exists 
-    return_data: bool 
-        whether to actually return the data or just save it in the directory 
-    include_micros : bool
-        whether to include the microwire LFP in the LFP data object or not 
-    eeg_names : list
-        list of channel names that pertain to scalp EEG in case the hardcoded options don't work
-    resp_names : list 
-        list of channel names that pertain to respiration in case the hardcoded options don't work
-    ekg_names : list
-        list of channel names that pertain to the EKG in case the hardcoded options don't work
-    sync_name : str
-        provide the sync name in case the hardcoded options don't work
-    drop_names: str
-        provide the drop names in case you know certain channels that should be thrown out asap
-    seeg_only: bool  (default=True)
-        indicate whether you want non seeg channels included
-
+    load_path : str, optional
+        Path to neural data.
+    elec_path : str, optional
+        Path to electrode file.
+    format : str, optional
+        Data format. Default is 'edf'.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    resample_sr : int, optional
+        Resampling rate. Default is 500.
+    overwrite : bool, optional
+        Whether to overwrite. Default is True.
+    return_data : bool, optional
+        Whether to return data. Default is False.
+    include_micros : bool, optional
+        Whether to include microwires. Default is False.
+    eeg_names : list, optional
+        List of EEG channel names.
+    resp_names : list, optional
+        List of respiration channel names.
+    ekg_names : list, optional
+        List of EKG channel names.
+    sync_name : str, optional
+        Sync channel name.
+    sync_type : str, optional
+        Sync type. Default is 'photodiode'.
+    seeg_names : list, optional
+        List of sEEG channel names.
+    drop_names : list, optional
+        List of channels to drop.
+    seeg_only : bool, optional
+        Whether to include only sEEG. Default is True.
+    check_bad : bool, optional
+        Whether to check for bad channels. Default is False.
+    
     Returns
     -------
-    mne_data : mne object 
-        mne object
+    mne object or None
+        MNE object if return_data is True.
     """
 
     if not sync_name:
@@ -1938,25 +1868,24 @@ seeg_only=True, check_bad=False):
         return mne_data
 
 
-def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
-    """
-    Following this step, you can indicate IEDs manually.
-
+def ref_mne(mne_data=None, elec_path=None, method: str = 'wm', site: str = 'MSSM'):
+    """Re-reference MNE data.
+    
     Parameters
     ----------
-    mne_data : mne object 
-        mne object
-    elec_data : pandas df 
-        dataframe with all the electrode localization information
-    method : str 
-        how should we reference the data ['wm', 'bipolar']
-    site : str 
-        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
-
+    mne_data
+        MNE data object.
+    elec_path : str, optional
+        Path to electrode file.
+    method : str, optional
+        Reference method. Default is 'wm'.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    
     Returns
     -------
-    mne_data_reref : mne object 
-        mne object with re-referenced data
+    mne object
+        Re-referenced MNE object.
     """
 
     elec_data = load_elec(elec_path, site=site)
@@ -1998,17 +1927,22 @@ def ref_mne(mne_data=None, elec_path=None, method='wm', site='MSSM'):
 
     return mne_data_reref
 
-def _bin_channelwise_times_into_behav_evs(channel_dict_seconds, ev_starts, ev_ends):
-    """
-    feed in a dictionary of format {['channel_name']: [time1,...n]}
-    timepoints should be in seconds
-    every key corresponds to a channel in your mne object
-
-    returns a dataframe of these timepoints binned relative to your behavioral epoch of interest
-    useful for detecting artifacts and IEDs in the signal prior to epoching and carrying over those
-    detections to the epoched data
+def _bin_channelwise_times_into_behav_evs(channel_dict_seconds: dict, ev_starts: list, ev_ends: list):
+    """Bin channelwise times into behavioral events.
     
-    ev_starts and ev_ends should be the start and end of each epoch in seconds 
+    Parameters
+    ----------
+    channel_dict_seconds : dict
+        Dictionary of channel times in seconds.
+    ev_starts : list
+        Event start times.
+    ev_ends : list
+        Event end times.
+    
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with binned timestamps.
     """
     allts = {f'{x}': np.nan for x in channel_dict_seconds.keys()}
     for key in channel_dict_seconds.keys():
@@ -2038,55 +1972,40 @@ def _bin_channelwise_times_into_behav_evs(channel_dict_seconds, ev_starts, ev_en
     event_metadata.where(pd.notna(event_metadata), None)
     return event_metadata
 
-def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None,
-ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseline=None, detrend=None):
-
-    # elec_path=None,
-    """
-
-    TODO: allow for a dict of pre and post times so they can vary across evs 
+def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None, ev_start_s: float = 0, ev_end_s: float = 1.5, buf_s: float = 1, downsamp_factor=None, IED_args=None, baseline=None, detrend=None):
+    """Create epochs from continuous data.
     
-    behav_times: dict with format {'event_name': np.array([times])}
-    baseline_times: dict with format {'event_name': np.array([times])}
-    IED_args: dict with format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
-
-    elec_data : pandas df 
-        dataframe with all the electrode localization information
-
     Parameters
     ----------
-    load_path : str
-        path to the re-referenced neural data
-    slope : float 
-        slope used for syncing behavioral and neural data 
-    offset : float 
-        offset used for syncing behavioral and neural data 
-    behav_name : str
-        what event are we epoching to? 
-    behav_times : dict 
-        format 
-    baseline_times : dict 
-        format 
-    ev_start_s:
-
-    ev_end_s: 
-
-    method : str 
-        how should we reference the data ['wm', 'bipolar']
-    site : str 
-        where was this data collected? Options: ['MSSM', 'UI', 'Davis']
-
-    buf_s : float 
-        time to add as buffer in epochs 
-    downsamp_factor : float 
-        factor by which to downsample the data 
-    IED_args: dict 
-        format {'peak_thresh':5, 'closeness_thresh':0.5, 'width_thresh':0.2}
-
+    load_path : str, optional
+        Path to re-referenced data.
+    slope : float, optional
+        Sync slope.
+    offset : float, optional
+        Sync offset.
+    behav_name : str, optional
+        Behavioral event name.
+    behav_times : dict, optional
+        Behavioral times dictionary.
+    ev_start_s : float, optional
+        Event start time. Default is 0.
+    ev_end_s : float, optional
+        Event end time. Default is 1.5.
+    buf_s : float, optional
+        Buffer time. Default is 1.
+    downsamp_factor : float, optional
+        Downsampling factor.
+    IED_args : dict, optional
+        IED detection arguments.
+    baseline : dict, optional
+        Baseline times dictionary.
+    detrend : int, optional
+        Detrend order.
+    
     Returns
     -------
-    ev_epochs : mne object 
-        mne Epoch object with re-referenced data
+    mne.Epochs
+        Epochs object.
     """
 
     # Load the data 
@@ -2263,10 +2182,22 @@ ev_start_s=0, ev_end_s=1.5, buf_s=1, downsamp_factor=None, IED_args=None, baseli
 
 #     return revised_annot
 
-def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
-
-    """
-    Sometimes we want to filter and relabel our electrode dataframe based on the renamed channels from the re-referenced data 
+def rename_elec_df_reref(reref_labels: list, elec_path: str, site: str = 'MSSM'):
+    """Rename electrode DataFrame after re-referencing.
+    
+    Parameters
+    ----------
+    reref_labels : list
+        List of re-referenced labels.
+    elec_path : str
+        Path to electrode file.
+    site : str, optional
+        Site name. Default is 'MSSM'.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Renamed electrode DataFrame.
     """
     elec_data = load_elec(elec_path, site=site)
     
@@ -2318,37 +2249,36 @@ def rename_elec_df_reref(reref_labels, elec_path, site='MSSM'):
     return elec_df
 #
 
-def compute_and_baseline_tfr(baseline_event, task_events, freqs, n_cycles, load_path, save_path,
-                            IED_artifact_thresh=True, uncaptured_z_thresh=True, output='save', tfr_method='morlet'):
+def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.ndarray, n_cycles: float, load_path: str, save_path: str, IED_artifact_thresh: bool = True, uncaptured_z_thresh: bool = True, output: str = 'save', tfr_method: str = 'morlet'):
+    """Compute and baseline TFR for events.
     
-    """
-    This function computes the TFRs for the baseline and task events of interest, and baselines the task events of interest
-
     Parameters
     ----------
     baseline_event : dict
-        Dictionary with the key being the name of the baseline event, and the value being a list of the start and end time of the baseline event
+        Baseline event dictionary.
     task_events : dict
-        Dictionary with the key being the name of the task event, and the value being a list of the start and end time of the task event    
-    tfr_method : str
-        The method to compute the TFR. Options: ['morlet', 'multitaper']
-    freqs : array
-        The frequencies of interest for the TFR
+        Task events dictionary.
+    freqs : np.ndarray
+        Frequency array.
     n_cycles : float
-        The number of cycles for the Morlet wavelet
+        Number of cycles.
     load_path : str
-        The path to the directory where the epochs are stored
+        Path to epochs.
     save_path : str
-        The path to the directory where the TFRs will be saved
-    IED_artifact_thresh : bool
-        If True, will remove 100 ms before and after IEDs and artifacts from the TFRs
-    uncaptured_z_thresh : bool
-        If True, will iteratively remove absurd z-scores from the TFRs
-    output : str
-        If 'save', will save the TFRs to the save_path
-        If 'return', will return the TFRs
-        If 'both', will save and return the TFRs
+        Path to save TFRs.
+    IED_artifact_thresh : bool, optional
+        Whether to remove IEDs/artifacts. Default is True.
+    uncaptured_z_thresh : bool, optional
+        Whether to remove extreme z-scores. Default is True.
+    output : str, optional
+        Output mode. Default is 'save'.
+    tfr_method : str, optional
+        TFR method. Default is 'morlet'.
     
+    Returns
+    -------
+    mne.time_frequency.EpochsTFR or None
+        TFR object if output is 'return' or 'both'.
     """
     
     
