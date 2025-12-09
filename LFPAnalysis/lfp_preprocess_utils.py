@@ -1628,7 +1628,7 @@ def make_mne(load_path=None, elec_path=None, format: str = 'edf', site: str = 'M
         edf_file = glob(f'{load_path}/*.edf')[0]
         mne_data = mne.io.read_raw_edf(edf_file, preload=True)
 
-        if not sync_name:
+        if not sync_name:           
             if sync_type == 'photodiode':
                 # Search for photodiode names if need be
                 iteration = 0

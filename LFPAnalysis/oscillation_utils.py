@@ -1571,7 +1571,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
     if metric == 'gr_tc':
         return (ValueError('Use the function compute_gc_tr'))
 
-    elif metric in ['gc', 'imcoh']: 
+    elif metric in ['gc', 'imcoh', 'cacoh']: 
         indices = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))
 
     if avg_over_dim == 'epochs':
@@ -1618,7 +1618,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                                                             cwt_freqs=freqs,
                                                             cwt_n_cycles=n_cycles,
                                                             verbose='ERROR').get_data()[:, 0])
-        if metric in ['gc', 'imcoh']:
+        if metric in ['gc', 'imcoh', 'cacoh']:
             # no pairs here: computed over whole multivariate state space 
             n_pairs=1
         else: 
@@ -1905,7 +1905,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                 # and n_events is the number of events in the data
 
             
-            if metric in ['gc', 'imcoh']:
+            if metric in ['gc', 'imcoh', 'cacoh']:
                 # no pairs here: computed over whole multivariate state space 
                 n_pairs=1
             else: 
