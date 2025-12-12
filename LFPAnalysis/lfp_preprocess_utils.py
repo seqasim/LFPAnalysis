@@ -2441,4 +2441,244 @@ def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.
         elif output == 'both':
             zpow.save(f'{save_path}/{event}-tfr.h5', overwrite=True)
             return zpow 
+
+
+def baseline_continuous_TFR(data: np.ndarray, baseline_data: np.ndarray, mode: str = 'zscore', 
+                            elec_axis: int = 0, freq_axis: int = 1, time_axis: int = 2):
+    """Baseline correct continuous TFR data.
+    
+    Parameters
+    ----------
+    data : np.ndarray
+        Time-frequency data array with shape (n_channels, n_freqs, n_times).
+    baseline_data : np.ndarray
+        Baseline TFR data array with shape (n_channels, n_freqs, n_times).
+    mode : str, optional
+        Baseline correction mode. Default is 'zscore'.
+        Options: 'mean', 'ratio', 'logratio', 'percent', 'zscore', 'zlogratio'.
+    elec_axis : int, optional
+        Electrode/channel axis. Default is 0.
+    freq_axis : int, optional
+        Frequency axis. Default is 1.
+    time_axis : int, optional
+        Time axis. Default is 2.
+    
+    Returns
+    -------
+    np.ndarray
+        Baseline-corrected data with same shape as input data.
+    """
+    # Compute mean and std across time for each channel and frequency
+    # Mean across all baseline time points
+    m_ = np.nanmean(baseline_data, axis=time_axis, keepdims=True)
+    # Std across all baseline time points
+    std_ = np.nanstd(baseline_data, axis=time_axis, keepdims=True)
+    
+    # Broadcast to match data shape
+    m = np.broadcast_to(m_, data.shape)
+    std = np.broadcast_to(std_, data.shape)
+    
+    if mode == 'mean':
+        baseline_corrected = data - m
+    elif mode == 'ratio':
+        baseline_corrected = data / m
+    elif mode == 'logratio':
+        baseline_corrected = 10 * np.log10(data / m)
+    elif mode == 'percent':
+        baseline_corrected = (data - m) / m 
+    elif mode == 'zscore':
+        baseline_corrected = (data - m) / std 
+    elif mode == 'zlogratio':
+        baseline_corrected = np.log10(data / m) / std
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Use 'mean', 'ratio', 'logratio', 'percent', 'zscore', or 'zlogratio'.")
+    
+    return baseline_corrected
+
+
+def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float, baseline_tmax: float, 
+                                        freqs: np.ndarray, n_cycles: float, 
+                                        save_path: str = None, 
+                                        # IED_artifact_thresh: bool = True, 
+                                        uncaptured_z_thresh: bool = True, 
+                                        output: str = 'return', 
+                                        tfr_method: str = 'morlet',
+                                        decim: int = 1,
+                                        n_jobs: int = -1):
+    """Compute and baseline TFR for continuous RAW data.
+    
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        Continuous raw MNE object (should be preloaded).
+    baseline_tmin : float
+        Start time (in seconds) of the baseline period within the raw data.
+    baseline_tmax : float
+        End time (in seconds) of the baseline period within the raw data.
+    freqs : np.ndarray
+        Frequency array.
+    n_cycles : float or np.ndarray
+        Number of cycles for Morlet wavelets. Can be a single value or array matching freqs.
+    save_path : str, optional
+        Path to save TFR. If None and output='save', will raise an error. Default is None.
+    uncaptured_z_thresh : bool, optional
+        Whether to remove extreme z-scores. Default is True.
+    output : str, optional
+        Output mode: 'save', 'return', or 'both'. Default is 'return'.
+    tfr_method : str, optional
+        TFR method. Default is 'morlet'. Currently only 'morlet' is supported.
+    decim : int, optional
+        Decimation factor for time dimension. Default is 1 (no decimation).
+    n_jobs : int, optional
+        Number of parallel jobs. Default is -1 (use all cores).
+    
+    Returns
+    -------
+    dict or None
+        Dictionary with 'power' (np.ndarray), 'times' (np.ndarray), 'freqs' (np.ndarray), 
+        'ch_names' (list), and 'sfreq' (float) if output is 'return' or 'both'.
+    """
+    import mne
+    from mne.time_frequency import tfr_array_morlet
+    
+    if output in ['save', 'both'] and save_path is None:
+        raise ValueError("save_path must be provided when output is 'save' or 'both'")
+    
+    # Ensure raw is preloaded
+    if not raw.preload:
+        raw.load_data()
+    
+    sfreq = raw.info['sfreq']
+    ch_names = raw.ch_names
+    
+    # Get the raw data: shape (n_channels, n_times)
+    data = raw.get_data()
+    times = raw.times
+    
+    # ==========================================
+    # Compute TFR on the full continuous data
+    # ==========================================
+    # tfr_array_morlet expects shape (n_epochs, n_channels, n_times)
+    # For continuous data, we treat it as a single "epoch"
+    data_3d = data[np.newaxis, :, :]  # shape: (1, n_channels, n_times)
+    
+    if tfr_method == 'morlet':
+        # Compute TFR using Morlet wavelets
+        # Output shape: (1, n_channels, n_freqs, n_times)
+        power = tfr_array_morlet(data_3d, 
+                                  sfreq=sfreq, 
+                                  freqs=freqs, 
+                                  n_cycles=n_cycles, 
+                                  output='power',
+                                  decim=decim,
+                                  n_jobs=n_jobs)
+        # Remove the epoch dimension: (n_channels, n_freqs, n_times)
+        power = power[0]
+    else:
+        raise NotImplementedError(f"TFR method '{tfr_method}' not implemented for continuous data. Use 'morlet'.")
+    
+    # Update times if decimated
+    if decim > 1:
+        times = times[::decim]
+    
+    # ==========================================
+    # Extract baseline period TFR
+    # ==========================================
+    baseline_mask = (times >= baseline_tmin) & (times <= baseline_tmax)
+    baseline_power = power[:, :, baseline_mask]
+    
+    # # ==========================================
+    # # IED and Artifact removal (COMMENTED OUT)
+    # # ==========================================
+    # if IED_artifact_thresh:
+    #     # NAN out the bad data
+    #     # THE following will now LOAD in dataframes that indicate IED and artifact time points in your data
+    #     # IED_df = pd.read_csv(f'{load_path}/{event}_IED_df.csv') 
+    #     # artifact_df = pd.read_csv(f'{load_path}/{event}_artifact_df.csv') 
+    #
+    #     # Now, let's iterate through each channel, and each ied/artifact, and NaN 100 ms before and after these timepoints
+    #     # for ch_ix, ch_name in enumerate(ch_names): 
+    #     #     ied_ev_list = IED_df[ch_name].dropna().index.tolist()
+    #     #     artifact_ev_list = artifact_df[ch_name].dropna().index.tolist() 
+    #     #     for ev_ in ied_ev_list: 
+    #     #         for ied_ in literal_eval(IED_df[ch_name].iloc[ev_]):
+    #     #             # remove 100 ms before 
+    #     #             ev_ix_start = np.max([0, np.floor((ied_- 0.1) * sfreq)]).astype(int)
+    #     #             # remove 100 ms after
+    #     #             ev_ix_end = np.min([power.shape[-1], np.ceil((ied_ + 0.1) * sfreq)]).astype(int)
+    #     #             power[ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+    #     #     for ev_ in artifact_ev_list: 
+    #     #         for artifact_ in literal_eval(artifact_df[ch_name].iloc[ev_]):
+    #     #             # remove 100 ms before 
+    #     #             ev_ix_start = np.max([0, np.floor((artifact_- 0.1) * sfreq)]).astype(int)
+    #     #             # remove 100 ms after
+    #     #             ev_ix_end = np.min([power.shape[-1], np.ceil((artifact_ + 0.1) * sfreq)]).astype(int)
+    #     #             power[ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+    #     pass
+    
+    # ==========================================
+    # Baseline correction
+    # ==========================================
+    baseline_corrected_power = baseline_continuous_TFR(data=power, 
+                                                        baseline_data=baseline_power, 
+                                                        mode='zscore',
+                                                        elec_axis=0, freq_axis=1, time_axis=2)
+    
+    # ==========================================
+    # Iteratively remove extreme z-scores
+    # ==========================================
+    if uncaptured_z_thresh:
+        absurdity_threshold = 10
+        max_iter = 10
+        large_z_flag = True
+        iteration = 0
+        
+        # Work with a copy of the power for iterative cleaning
+        temp_power = power.copy()
+        
+        while large_z_flag and iteration < max_iter:
+            print(f'baseline z-score iteration # {iteration}')
+            
+            # Recompute baseline from cleaned baseline period
+            baseline_power_clean = temp_power[:, :, baseline_mask]
+            
+            baseline_corrected_power = baseline_continuous_TFR(data=temp_power, 
+                                                                baseline_data=baseline_power_clean, 
+                                                                mode='zscore',
+                                                                elec_axis=0, freq_axis=1, time_axis=2)
+            
+            large_z_mask = np.where(np.abs(baseline_corrected_power) > absurdity_threshold)
+            if large_z_mask[0].shape[0] == 0:
+                # No more large z-scores
+                large_z_flag = False
+            else:
+                # NaN out extreme values in the power data
+                temp_power[large_z_mask] = np.nan
+            
+            iteration += 1
+    
+    # ==========================================
+    # Prepare output
+    # ==========================================
+    result = {
+        'power': baseline_corrected_power,
+        'times': times,
+        'freqs': freqs,
+        'ch_names': ch_names,
+        'sfreq': sfreq / decim,  # Effective sampling rate after decimation
+        'info': raw.info
+    }
+    
+    # Make the output directory if needed
+    if save_path is not None and not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    
+    if output == 'save':
+        np.savez(save_path, **result)
+        return None
+    elif output == 'return':
+        return result
+    elif output == 'both':
+        np.savez(save_path, **result)
+        return result
         

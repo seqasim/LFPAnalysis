@@ -13,6 +13,7 @@ from IPython.display import clear_output
 from joblib import delayed, Parallel
 import os
 from typing import Union, Tuple, List, Optional, Dict, Any, Generator
+from mne.time_frequency import EpochsTFR, EpochsTFRArray
 
 import scipy.special
 import warnings
@@ -119,13 +120,20 @@ def get_project_root() -> Path:
     
 #     return np.concatenate(surr, axis=-1)
 
-def make_surrogate_data(data: mne.Epochs, method: str = 'swap_epochs', n_shuffles: int = 1000, rng_seed: int = 42, return_generator: bool = False) -> Union[List[mne.Epochs], Generator[mne.Epochs, None, None]]:
+def make_surrogate_data(
+    data: Union[mne.Epochs, EpochsTFR], 
+    method: str = 'swap_epochs', 
+    n_shuffles: int = 1000, 
+    rng_seed: int = 42, 
+    return_generator: bool = False
+) -> Union[List[Union[mne.Epochs, EpochsTFR]], Generator[Union[mne.Epochs, EpochsTFR], None, None]]:
     """Create surrogate data for connectivity null hypothesis.
     
     Parameters
     ----------
-    data : mne.Epochs
-        MNE Epochs object.
+    data : mne.Epochs or mne.time_frequency.EpochsTFR
+        MNE Epochs object (3D: n_epochs, n_channels, n_times) or 
+        EpochsTFR object (4D: n_epochs, n_channels, n_freqs, n_times).
     method : str, optional
         Shuffling method. Default is 'swap_epochs'.
     n_shuffles : int, optional
@@ -138,23 +146,33 @@ def make_surrogate_data(data: mne.Epochs, method: str = 'swap_epochs', n_shuffle
     Returns
     -------
     list or generator
-        Surrogate data.
+        Surrogate data (same type as input).
     """
-    if method =='swap_time_blocks':
+    if method == 'swap_time_blocks':
         surrogate = _shuffle_within_epochs(data, n_shuffles, rng_seed)
     elif method == 'swap_epochs':
         surrogate = _shuffle_epochs(data, n_shuffles, rng_seed)
+    else:
+        raise ValueError(f"Unknown method: {method}")
+    
     if not return_generator:
         surrogate = [shuffle for shuffle in surrogate]
     return surrogate
 
-def _shuffle_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> Generator[mne.Epochs, None, None]:
+
+def _shuffle_epochs(
+    data: Union[mne.Epochs, EpochsTFR], 
+    n_shuffles: int, 
+    rng_seed: int
+) -> Generator[Union[mne.Epochs, EpochsTFR], None, None]:
     """Shuffle epochs in data.
     
+    For TFR data, the same epoch permutation is applied across all frequencies.
+    
     Parameters
     ----------
-    data : mne.Epochs
-        MNE Epochs object.
+    data : mne.Epochs or mne.time_frequency.EpochsTFR
+        MNE Epochs object (3D) or EpochsTFR object (4D).
     n_shuffles : int
         Number of shuffles.
     rng_seed : int
@@ -162,28 +180,73 @@ def _shuffle_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> Generat
     
     Yields
     ------
-    mne.Epochs
-        Shuffled epochs.
+    mne.Epochs or mne.time_frequency.EpochsTFR
+        Shuffled data (same type as input).
     """
-    data_arr = data.get_data(copy=True)
+    is_tfr = isinstance(data, EpochsTFR)
+    # TFR.get_data() doesn't have copy argument, Epochs.get_data() does
+    if is_tfr:
+        data_arr = data.get_data().copy()
+    else:
+        data_arr = data.get_data(copy=True)
+    n_epochs = data_arr.shape[0]
+    n_channels = data_arr.shape[1]
+    
+    # Create info that matches data dimensions (handle potential mismatch)
+    if is_tfr and len(data.info['ch_names']) != n_channels:
+        info = mne.pick_info(data.info, sel=range(n_channels), copy=True)
+    else:
+        info = data.info
+    
     rng = np.random.default_rng(rng_seed)
+    
     for _ in range(n_shuffles):
         surr_arr = np.zeros_like(data_arr)
-        for ch_idx in range(data_arr.shape[1]):
-            surr_arr[:, ch_idx] = rng.permutation(data_arr[:, ch_idx])
-        new_epochs = mne.EpochsArray(surr_arr, info=data.info, verbose=False,
-                              events = data.events, 
-                              event_id = data.event_id)
-        new_epochs.set_annotations(data.annotations)
-        yield new_epochs
+        
+        for ch_idx in range(n_channels):
+            # Generate permutation indices for this channel
+            perm_idx = rng.permutation(n_epochs)
+            
+            if is_tfr:
+                # 4D: (n_epochs, n_channels, n_freqs, n_times)
+                # Apply same permutation across all frequencies
+                surr_arr[:, ch_idx, :, :] = data_arr[perm_idx, ch_idx, :, :]
+            else:
+                # 3D: (n_epochs, n_channels, n_times)
+                surr_arr[:, ch_idx, :] = data_arr[perm_idx, ch_idx, :]
+        
+        if is_tfr:
+            # Use explicit keyword arguments for EpochsTFRArray
+            new_tfr = EpochsTFRArray(
+                data=surr_arr, 
+                info=info, 
+                times=data.times, 
+                freqs=data.freqs,
+            )
+            yield new_tfr
+        else:
+            new_epochs = mne.EpochsArray(
+                surr_arr, info=info, verbose=False,
+                events=data.events, 
+                event_id=data.event_id
+            )
+            new_epochs.set_annotations(data.annotations)
+            yield new_epochs
 
-def _shuffle_within_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> Generator[mne.Epochs, None, None]:
+
+def _shuffle_within_epochs(
+    data: Union[mne.Epochs, EpochsTFR], 
+    n_shuffles: int, 
+    rng_seed: int
+) -> Generator[Union[mne.Epochs, EpochsTFR], None, None]:
     """Shuffle within epochs by swapping time blocks.
     
+    For TFR data, the same time-block swap is applied across all frequencies.
+    
     Parameters
     ----------
-    data : mne.Epochs
-        MNE Epochs object.
+    data : mne.Epochs or mne.time_frequency.EpochsTFR
+        MNE Epochs object (3D) or EpochsTFR object (4D).
     n_shuffles : int
         Number of shuffles.
     rng_seed : int
@@ -191,22 +254,67 @@ def _shuffle_within_epochs(data: mne.Epochs, n_shuffles: int, rng_seed: int) -> 
     
     Yields
     ------
-    mne.Epochs
-        Shuffled epochs.
+    mne.Epochs or mne.time_frequency.EpochsTFR
+        Shuffled data (same type as input).
     """
-    data_arr = data.get_data(copy=True)
+    is_tfr = isinstance(data, EpochsTFR)
+    # TFR.get_data() doesn't have copy argument, Epochs.get_data() does
+    if is_tfr:
+        data_arr = data.get_data().copy()
+    else:
+        data_arr = data.get_data(copy=True)
+    n_epochs = data_arr.shape[0]
+    n_channels = data_arr.shape[1]
+    n_times = data_arr.shape[-1]  # Time is always last dimension
+    
+    # Create info that matches data dimensions (handle potential mismatch)
+    if is_tfr and len(data.info['ch_names']) != n_channels:
+        info = mne.pick_info(data.info, sel=range(n_channels), copy=True)
+    else:
+        info = data.info
+    
     rng = np.random.default_rng(rng_seed)
+    
     for _ in range(n_shuffles):
         surr_arr = np.zeros_like(data_arr)
-        cutpoints = rng.integers(1, data_arr.shape[-1], (data_arr.shape[0], data_arr.shape[1]))
-        for ev_idx in range(data_arr.shape[0]):
-            for ch_idx in range(data_arr.shape[1]):
-                surr_arr[ev_idx, ch_idx] = _swap_time_blocks(data_arr[ev_idx, ch_idx], cutpoints[ev_idx, ch_idx])
-        new_epochs = mne.EpochsArray(surr_arr, info=data.info, verbose=False,
-                              events = data.events, 
-                              event_id = data.event_id)
-        new_epochs.set_annotations(data.annotations)
-        yield new_epochs
+        # One cutpoint per epoch/channel (same across frequencies)
+        cutpoints = rng.integers(1, n_times, (n_epochs, n_channels))
+        
+        for ev_idx in range(n_epochs):
+            for ch_idx in range(n_channels):
+                cut = cutpoints[ev_idx, ch_idx]
+                
+                if is_tfr:
+                    # 4D: Apply same cutpoint across all frequencies
+                    n_freqs = data_arr.shape[2]
+                    for freq_idx in range(n_freqs):
+                        surr_arr[ev_idx, ch_idx, freq_idx, :] = _swap_time_blocks(
+                            data_arr[ev_idx, ch_idx, freq_idx, :], cut
+                        )
+                else:
+                    # 3D: Single time series
+                    surr_arr[ev_idx, ch_idx, :] = _swap_time_blocks(
+                        data_arr[ev_idx, ch_idx, :], cut
+                    )
+        
+        if is_tfr:
+            # Use explicit keyword arguments for EpochsTFRArray
+            new_tfr = EpochsTFRArray(
+                data=surr_arr, 
+                info=info, 
+                times=data.times, 
+                freqs=data.freqs,
+            )
+            yield new_tfr
+        else:
+            new_epochs = mne.EpochsArray(
+                surr_arr, info=info, verbose=False,
+                events=data.events, 
+                event_id=data.event_id
+            )
+            new_epochs.set_annotations(data.annotations)
+            yield new_epochs
+
 
 def _swap_time_blocks(data: np.ndarray, cut_at: int) -> np.ndarray:
     """Swap time blocks at cutpoint.
@@ -214,7 +322,7 @@ def _swap_time_blocks(data: np.ndarray, cut_at: int) -> np.ndarray:
     Parameters
     ----------
     data : np.ndarray
-        Data array.
+        1D data array (time series).
     cut_at : int
         Cut point index.
     
@@ -226,6 +334,239 @@ def _swap_time_blocks(data: np.ndarray, cut_at: int) -> np.ndarray:
     surr = np.array_split(data, [cut_at], axis=-1)
     surr.reverse()
     return np.concatenate(surr, axis=-1)
+
+
+def make_surrogate_arrays(
+    data: np.ndarray,
+    method: str = 'swap_epochs',
+    n_shuffles: int = 1000,
+    rng_seed: int = 42,
+    return_generator: bool = True
+) -> Union[Generator[np.ndarray, None, None], List[np.ndarray]]:
+    """Create lightweight surrogate data from 2D numpy arrays.
+    
+    This is a fast alternative to make_surrogate_data for when you only need
+    surrogate arrays (e.g., for a single frequency slice from TFR data).
+    
+    Parameters
+    ----------
+    data : np.ndarray
+        2D array with shape (n_trials, n_times) or (n_channels, n_times).
+        For connectivity analysis, typically pass two arrays separately.
+    method : str, optional
+        Shuffling method: 'swap_epochs' or 'swap_time_blocks'. Default is 'swap_epochs'.
+    n_shuffles : int, optional
+        Number of shuffles. Default is 1000.
+    rng_seed : int, optional
+        Random seed. Default is 42.
+    return_generator : bool, optional
+        Whether to return generator (memory efficient) or list. Default is True.
+    
+    Returns
+    -------
+    generator or list of np.ndarray
+        Surrogate arrays with same shape as input.
+    
+    Examples
+    --------
+    >>> # For TFR connectivity at a specific frequency:
+    >>> x = tfr_data._data[:, ch1_idx, freq_idx, :]  # (n_trials, n_times)
+    >>> y = tfr_data._data[:, ch2_idx, freq_idx, :]
+    >>> 
+    >>> surr_te = []
+    >>> for x_surr in make_surrogate_arrays(x, method='swap_time_blocks', n_shuffles=100):
+    ...     surr_te.append(gcte_cc(x_surr, y))
+    """
+    if data.ndim != 2:
+        raise ValueError(f"Expected 2D array, got {data.ndim}D")
+    
+    rng = np.random.default_rng(rng_seed)
+    
+    def _generate():
+        n_trials, n_times = data.shape
+        
+        for _ in range(n_shuffles):
+            if method == 'swap_epochs':
+                # Shuffle trial order
+                perm_idx = rng.permutation(n_trials)
+                yield data[perm_idx, :]
+                
+            elif method == 'swap_time_blocks':
+                # Swap time blocks at random cutpoint for each trial
+                surr_arr = np.zeros_like(data)
+                cutpoints = rng.integers(1, n_times, n_trials)
+                for trial_idx in range(n_trials):
+                    surr_arr[trial_idx, :] = _swap_time_blocks(
+                        data[trial_idx, :], cutpoints[trial_idx]
+                    )
+                yield surr_arr
+            else:
+                raise ValueError(f"Unknown method: {method}")
+    
+    gen = _generate()
+    if return_generator:
+        return gen
+    else:
+        return list(gen)
+
+
+def compute_te(
+    tfr_data: EpochsTFR,
+    indices: Tuple[np.ndarray, np.ndarray],
+    band: Optional[Tuple[float, float]] = None,
+    buf_ms: Union[int, Tuple[int, int]] = 1000,
+    te_k: int = 1,
+    surr_method: str = 'swap_time_blocks',
+    n_surr: int = 100,
+    parallelize: bool = False,
+    return_freqs: bool = False
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """Compute z-scored transfer entropy from TFR data.
+    
+    Computes Gaussian-copula transfer entropy (TE) from source to target channels
+    at each frequency, z-scored against surrogate distribution.
+    
+    Parameters
+    ----------
+    tfr_data : mne.time_frequency.EpochsTFR
+        Time-frequency representation data with shape (n_epochs, n_channels, n_freqs, n_times).
+    indices : tuple of np.ndarray
+        Connectivity indices as (source_indices, target_indices). Each pair
+        (source_indices[i], target_indices[i]) defines a connection to compute.
+    band : tuple of float, optional
+        Frequency band as (low, high) Hz. If provided, only frequencies within
+        this band are computed and results are averaged across frequencies.
+        If None, all frequencies are computed separately.
+    buf_ms : int or tuple of int, optional
+        Buffer in milliseconds to exclude from edges. Can be symmetric (int) or
+        asymmetric (tuple of start_buf, end_buf). Default is 1000.
+    te_k : int, optional
+        Number of time lags (history length) for TE computation. Default is 1.
+    surr_method : str, optional
+        Surrogate method: 'swap_time_blocks' or 'swap_epochs'. Default is 'swap_time_blocks'.
+    n_surr : int, optional
+        Number of surrogates for z-scoring. Default is 100. Set to 0 for raw TE.
+    parallelize : bool, optional
+        Whether to parallelize across channel pairs. Default is False.
+    return_freqs : bool, optional
+        Whether to return frequency array along with TE values. Default is False.
+    
+    Returns
+    -------
+    te_zscored : np.ndarray
+        Z-scored transfer entropy. Shape depends on inputs:
+        - If band is None: (n_pairs, n_freqs) 
+        - If band is provided: (n_pairs,) averaged across frequencies in band
+    freqs : np.ndarray, optional
+        Frequency array (only if return_freqs=True and band is None).
+    
+    Examples
+    --------
+    >>> # Compute TE for all frequencies
+    >>> te_z = compute_te(tfr_data, indices=(np.array([0]), np.array([1])))
+    >>> 
+    >>> # Compute TE averaged within theta band
+    >>> te_z = compute_te(tfr_data, indices=(np.array([0]), np.array([1])), band=(4, 8))
+    >>> 
+    >>> # Multiple pairs
+    >>> sources = np.array([0, 0, 1])
+    >>> targets = np.array([1, 2, 2])
+    >>> te_z = compute_te(tfr_data, indices=(sources, targets), n_surr=500)
+    """
+    # Get data dimensions
+    data = tfr_data.get_data()  # (n_epochs, n_channels, n_freqs, n_times)
+    sfreq = tfr_data.info['sfreq']
+    freqs = tfr_data.freqs
+    times = tfr_data.times
+    n_epochs, n_channels, n_freqs, n_times = data.shape
+    
+    # Parse indices
+    source_indices = np.atleast_1d(indices[0])
+    target_indices = np.atleast_1d(indices[1])
+    n_pairs = len(source_indices)
+    
+    if len(target_indices) != n_pairs:
+        raise ValueError("source_indices and target_indices must have same length")
+    
+    # Determine frequency mask
+    if band is not None:
+        freq_mask = (freqs >= band[0]) & (freqs <= band[1])
+        freq_indices = np.where(freq_mask)[0]
+    else:
+        freq_indices = np.arange(n_freqs)
+    
+    n_freqs_compute = len(freq_indices)
+    
+    # Compute buffer in samples
+    if isinstance(buf_ms, (int, float)):
+        buf_start = int((buf_ms / 1000) * sfreq)
+        buf_end = int((buf_ms / 1000) * sfreq)
+    else:
+        buf_start = int((buf_ms[0] / 1000) * sfreq)
+        buf_end = int((buf_ms[1] / 1000) * sfreq)
+    
+    # Time indices after buffer cropping
+    t_start = buf_start
+    t_end = n_times - buf_end if buf_end > 0 else n_times
+    
+    def _compute_te_single_pair(pair_idx: int) -> np.ndarray:
+        """Compute TE for a single source-target pair across frequencies."""
+        src_idx = source_indices[pair_idx]
+        tgt_idx = target_indices[pair_idx]
+        
+        te_values = np.zeros(n_freqs_compute)
+        te_surr = np.zeros((n_freqs_compute, n_surr)) if n_surr > 0 else None
+        
+        for fi, freq_idx in enumerate(freq_indices):
+            # Extract 2D arrays for this frequency, cropped by buffer
+            # Shape: (n_epochs, n_times_cropped)
+            x = data[:, src_idx, freq_idx, t_start:t_end]
+            y = data[:, tgt_idx, freq_idx, t_start:t_end]
+            
+            # Compute actual TE
+            te_values[fi] = gcte_cc(x, y, k=te_k)
+            
+            # Compute surrogate TEs
+            if n_surr > 0:
+                for si, x_surr in enumerate(make_surrogate_arrays(
+                    x, method=surr_method, n_shuffles=n_surr, rng_seed=42 + pair_idx
+                )):
+                    te_surr[fi, si] = gcte_cc(x_surr, y, k=te_k)
+        
+        # Z-score
+        if n_surr > 0:
+            te_mean = np.nanmean(te_surr, axis=1)
+            te_std = np.nanstd(te_surr, axis=1)
+            # Avoid division by zero
+            te_std[te_std == 0] = np.nan
+            te_zscored = (te_values - te_mean) / te_std
+        else:
+            te_zscored = te_values
+        
+        return te_zscored
+    
+    # Compute for all pairs
+    if parallelize and n_pairs > 1:
+        results = Parallel(n_jobs=-1)(
+            delayed(_compute_te_single_pair)(pi) for pi in range(n_pairs)
+        )
+        te_all = np.stack(results, axis=0)  # (n_pairs, n_freqs_compute)
+    else:
+        te_all = np.zeros((n_pairs, n_freqs_compute))
+        for pi in range(n_pairs):
+            te_all[pi, :] = _compute_te_single_pair(pi)
+    
+    # Average across frequencies if band is specified
+    if band is not None:
+        te_result = np.nanmean(te_all, axis=1)  # (n_pairs,)
+        if return_freqs:
+            return te_result, freqs[freq_indices]
+        return te_result
+    else:
+        if return_freqs:
+            return te_all, freqs[freq_indices]
+        return te_all
+
 
 def make_seed_target_df(elec_df: pd.DataFrame, epochs: mne.Epochs, source_roi: str, target_roi: str) -> pd.DataFrame:
     """Create seed-target DataFrame for connectivity.
@@ -424,6 +765,113 @@ def mi_gg(x: np.ndarray, y: np.ndarray, biascorrect: bool = True, demeaned: bool
     return I
 
 
+def te_gg(x: np.ndarray, y: np.ndarray, k: int = 1, biascorrect: bool = True) -> float:
+    """Compute transfer entropy from X to Y assuming Gaussian variables.
+    
+    Transfer entropy TE(X→Y) measures directed information flow from X to Y.
+    It quantifies how much the past of X reduces uncertainty about Y's future,
+    beyond what Y's own past provides.
+    
+    TE(X→Y) = H(Y_future | Y_past) - H(Y_future | Y_past, X_past)
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Source time series (1D array).
+    y : np.ndarray
+        Target time series (1D array).
+    k : int, optional
+        Number of time lags (history length). Default is 1.
+    biascorrect : bool, optional
+        Whether to apply bias correction. Default is True.
+    
+    Returns
+    -------
+    float
+        Transfer entropy in bits.
+    """
+    x = np.atleast_1d(x).flatten()
+    y = np.atleast_1d(y).flatten()
+    
+    if len(x) != len(y):
+        raise ValueError("x and y must have the same length")
+    
+    n = len(x)
+    if n <= k:
+        raise ValueError("Time series length must be greater than lag k")
+    
+    Ntrl = n - k  # number of valid time points
+    
+    # Create lagged embeddings
+    # Y_future: y[k:] (1 x Ntrl)
+    y_future = y[k:].reshape(1, -1)
+    
+    # Y_past: lagged versions y[k-1], y[k-2], ... (k x Ntrl)
+    y_past = np.vstack([y[k-i-1:n-i-1] for i in range(k)])
+    
+    # X_past: lagged versions x[k-1], x[k-2], ... (k x Ntrl)
+    x_past = np.vstack([x[k-i-1:n-i-1] for i in range(k)])
+    
+    # Demean all variables
+    y_future = y_future - y_future.mean(axis=1, keepdims=True)
+    y_past = y_past - y_past.mean(axis=1, keepdims=True)
+    x_past = x_past - x_past.mean(axis=1, keepdims=True)
+    
+    # Stack variables for joint distributions
+    y_f_y_p = np.vstack([y_future, y_past])           # (k+1) x Ntrl
+    y_p_x_p = np.vstack([y_past, x_past])             # (2k) x Ntrl
+    y_f_y_p_x_p = np.vstack([y_future, y_past, x_past])  # (2k+1) x Ntrl
+    
+    # Compute covariance matrices
+    C_y_p = np.dot(y_past, y_past.T) / float(Ntrl - 1)
+    C_y_f_y_p = np.dot(y_f_y_p, y_f_y_p.T) / float(Ntrl - 1)
+    C_y_p_x_p = np.dot(y_p_x_p, y_p_x_p.T) / float(Ntrl - 1)
+    C_y_f_y_p_x_p = np.dot(y_f_y_p_x_p, y_f_y_p_x_p.T) / float(Ntrl - 1)
+
+    eps = 1e-10
+    C_y_p = C_y_p + eps * np.eye(C_y_p.shape[0])
+    C_y_f_y_p = C_y_f_y_p + eps * np.eye(C_y_f_y_p.shape[0])
+    C_y_p_x_p = C_y_p_x_p + eps * np.eye(C_y_p_x_p.shape[0])
+    C_y_f_y_p_x_p = C_y_f_y_p_x_p + eps * np.eye(C_y_f_y_p_x_p.shape[0])
+    
+    # Compute entropies via Cholesky decomposition: H = sum(log(diag(chol(C))))
+    chC_y_p = np.linalg.cholesky(C_y_p)
+    chC_y_f_y_p = np.linalg.cholesky(C_y_f_y_p)
+    chC_y_p_x_p = np.linalg.cholesky(C_y_p_x_p)
+    chC_y_f_y_p_x_p = np.linalg.cholesky(C_y_f_y_p_x_p)
+    
+    H_y_p = np.sum(np.log(np.diagonal(chC_y_p)))
+    H_y_f_y_p = np.sum(np.log(np.diagonal(chC_y_f_y_p)))
+    H_y_p_x_p = np.sum(np.log(np.diagonal(chC_y_p_x_p)))
+    H_y_f_y_p_x_p = np.sum(np.log(np.diagonal(chC_y_f_y_p_x_p)))
+    
+    ln2 = np.log(2)
+    
+    if biascorrect:
+        # Dimensions of each variable set
+        N_y_p = k
+        N_y_f_y_p = k + 1
+        N_y_p_x_p = 2 * k
+        N_y_f_y_p_x_p = 2 * k + 1
+        
+        max_dim = N_y_f_y_p_x_p
+        psiterms = sp.special.psi((Ntrl - np.arange(1, max_dim + 1)).astype(float) / 2.0) / 2.0
+        dterm = (ln2 - np.log(Ntrl - 1.0)) / 2.0
+        
+        H_y_p = H_y_p - N_y_p * dterm - psiterms[:N_y_p].sum()
+        H_y_f_y_p = H_y_f_y_p - N_y_f_y_p * dterm - psiterms[:N_y_f_y_p].sum()
+        H_y_p_x_p = H_y_p_x_p - N_y_p_x_p * dterm - psiterms[:N_y_p_x_p].sum()
+        H_y_f_y_p_x_p = H_y_f_y_p_x_p - N_y_f_y_p_x_p * dterm - psiterms[:N_y_f_y_p_x_p].sum()
+    
+    # Conditional entropies: H(A|B) = H(A,B) - H(B)
+    H_y_f_given_y_p = H_y_f_y_p - H_y_p
+    H_y_f_given_y_p_x_p = H_y_f_y_p_x_p - H_y_p_x_p
+    
+    # Transfer entropy in bits
+    TE = (H_y_f_given_y_p - H_y_f_given_y_p_x_p) / ln2
+    
+    return TE
+
 def gcmi_cc(x: np.ndarray, y: np.ndarray) -> float:
     """Compute Gaussian-copula mutual information.
     
@@ -468,6 +916,280 @@ def gcmi_cc(x: np.ndarray, y: np.ndarray) -> float:
     I = mi_gg(cx,cy,True,True)
     return I
 
+
+def gcte_cc(x: np.ndarray, y: np.ndarray, k: int = 1) -> float:
+    """Compute Gaussian-copula transfer entropy from X to Y.
+    
+    Transfer entropy TE(X→Y) measures directed information flow from X to Y.
+    Uses copula normalization for robustness to non-Gaussian marginals.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        Source time series (1D array).
+    y : np.ndarray
+        Target time series (1D array).
+    k : int, optional
+        Number of time lags (history length). Default is 1.
+    
+    Returns
+    -------
+    float
+        Transfer entropy in bits.
+    """
+    x = np.atleast_1d(x).flatten()
+    y = np.atleast_1d(y).flatten()
+    
+    if len(x) != len(y):
+        raise ValueError("x and y must have the same length")
+    
+    n = len(x)
+    if n <= k:
+        raise ValueError("Time series length must be greater than lag k")
+    
+    # Check for repeated values (copula normalization needs unique ranks)
+    if (np.unique(x).size / float(n)) < 0.9:
+        warnings.warn("Input x has more than 10% repeated values")
+    if (np.unique(y).size / float(n)) < 0.9:
+        warnings.warn("Input y has more than 10% repeated values")
+    
+    # Copula normalization of full time series
+    cx = copnorm(x.reshape(1, -1)).flatten()
+    cy = copnorm(y.reshape(1, -1)).flatten()
+    
+    Ntrl = n - k
+    
+    # Create lagged embeddings from copula-normalized data
+    y_future = cy[k:].reshape(1, -1)
+    y_past = np.vstack([cy[k-i-1:n-i-1] for i in range(k)])
+    x_past = np.vstack([cx[k-i-1:n-i-1] for i in range(k)])
+    
+    # Demean (should already be ~zero mean after copnorm, but ensure it)
+    y_future = y_future - y_future.mean(axis=1, keepdims=True)
+    y_past = y_past - y_past.mean(axis=1, keepdims=True)
+    x_past = x_past - x_past.mean(axis=1, keepdims=True)
+    
+    # Stack for joint distributions
+    y_f_y_p = np.vstack([y_future, y_past])
+    y_p_x_p = np.vstack([y_past, x_past])
+    y_f_y_p_x_p = np.vstack([y_future, y_past, x_past])
+    
+    # Covariance matrices
+    C_y_p = np.dot(y_past, y_past.T) / float(Ntrl - 1)
+    C_y_f_y_p = np.dot(y_f_y_p, y_f_y_p.T) / float(Ntrl - 1)
+    C_y_p_x_p = np.dot(y_p_x_p, y_p_x_p.T) / float(Ntrl - 1)
+    C_y_f_y_p_x_p = np.dot(y_f_y_p_x_p, y_f_y_p_x_p.T) / float(Ntrl - 1)
+    
+    eps = 1e-10
+    C_y_p = C_y_p + eps * np.eye(C_y_p.shape[0])
+    C_y_f_y_p = C_y_f_y_p + eps * np.eye(C_y_f_y_p.shape[0])
+    C_y_p_x_p = C_y_p_x_p + eps * np.eye(C_y_p_x_p.shape[0])
+    C_y_f_y_p_x_p = C_y_f_y_p_x_p + eps * np.eye(C_y_f_y_p_x_p.shape[0])
+    
+    # Entropies via Cholesky
+    chC_y_p = np.linalg.cholesky(C_y_p)
+    chC_y_f_y_p = np.linalg.cholesky(C_y_f_y_p)
+    chC_y_p_x_p = np.linalg.cholesky(C_y_p_x_p)
+    chC_y_f_y_p_x_p = np.linalg.cholesky(C_y_f_y_p_x_p)
+    
+    H_y_p = np.sum(np.log(np.diagonal(chC_y_p)))
+    H_y_f_y_p = np.sum(np.log(np.diagonal(chC_y_f_y_p)))
+    H_y_p_x_p = np.sum(np.log(np.diagonal(chC_y_p_x_p)))
+    H_y_f_y_p_x_p = np.sum(np.log(np.diagonal(chC_y_f_y_p_x_p)))
+    
+    ln2 = np.log(2)
+    
+    # Bias correction
+    N_y_p = k
+    N_y_f_y_p = k + 1
+    N_y_p_x_p = 2 * k
+    N_y_f_y_p_x_p = 2 * k + 1
+    
+    max_dim = N_y_f_y_p_x_p
+    psiterms = sp.special.psi((Ntrl - np.arange(1, max_dim + 1)).astype(float) / 2.0) / 2.0
+    dterm = (ln2 - np.log(Ntrl - 1.0)) / 2.0
+    
+    H_y_p = H_y_p - N_y_p * dterm - psiterms[:N_y_p].sum()
+    H_y_f_y_p = H_y_f_y_p - N_y_f_y_p * dterm - psiterms[:N_y_f_y_p].sum()
+    H_y_p_x_p = H_y_p_x_p - N_y_p_x_p * dterm - psiterms[:N_y_p_x_p].sum()
+    H_y_f_y_p_x_p = H_y_f_y_p_x_p - N_y_f_y_p_x_p * dterm - psiterms[:N_y_f_y_p_x_p].sum()
+    
+    # Conditional entropies and TE
+    H_y_f_given_y_p = H_y_f_y_p - H_y_p
+    H_y_f_given_y_p_x_p = H_y_f_y_p_x_p - H_y_p_x_p
+    
+    TE = (H_y_f_given_y_p - H_y_f_given_y_p_x_p) / ln2
+    
+    return TE
+
+def gcmi_cc_sliding(
+    x: np.ndarray, 
+    y: np.ndarray, 
+    window: int = 100, 
+    step: int = 1,
+    suppress_warnings: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute Gaussian-copula mutual information in a sliding time window.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        First variable with shape (n_trials, n_timepoints) or (n_timepoints,).
+        If 1D, will be treated as a single trial.
+    y : np.ndarray
+        Second variable with same shape as x.
+    window : int, optional
+        Window size in samples. Default is 100.
+    step : int, optional
+        Step size (slide) in samples. Default is 1.
+    suppress_warnings : bool, optional
+        If True, suppress repeated value warnings during sliding computation.
+        Default is True.
+    
+    Returns
+    -------
+    mi_values : np.ndarray
+        Array of mutual information values for each window position.
+        Shape is (n_windows,).
+    window_centers : np.ndarray
+        Array of window center indices (in samples).
+    
+    Examples
+    --------
+    >>> # Two time series with 500 samples each, 50 trials
+    >>> x = np.random.randn(50, 500)
+    >>> y = np.random.randn(50, 500)
+    >>> mi_vals, centers = gcmi_cc_sliding(x, y, window=100, step=10)
+    
+    >>> # Single trial (1D arrays)
+    >>> x = np.random.randn(1000)
+    >>> y = np.random.randn(1000)
+    >>> mi_vals, centers = gcmi_cc_sliding(x, y, window=100, step=1)
+    
+    Notes
+    -----
+    For each window position, MI is computed across trials within that window.
+    If input is 1D, MI is computed using samples within the window as observations.
+    
+    The function expects data in (n_trials, n_timepoints) format, where trials
+    are treated as independent observations for the MI computation.
+    """
+    # Handle 1D input
+    x = np.atleast_2d(x)
+    y = np.atleast_2d(y)
+    
+    # If input was 1D (now shape (1, n_timepoints)), keep as is
+    # The window samples become the "trials" for MI computation
+    if x.shape[0] == 1:
+        # For 1D data, we slide the window and use samples as observations
+        # Reshape to (n_timepoints,) for easier handling
+        x_1d = x.squeeze()
+        y_1d = y.squeeze()
+        
+        n_timepoints = len(x_1d)
+        if len(y_1d) != n_timepoints:
+            raise ValueError("x and y must have the same number of time points")
+        
+        # Calculate number of windows
+        n_windows = (n_timepoints - window) // step + 1
+        
+        if n_windows <= 0:
+            raise ValueError(f"Window size ({window}) is larger than data length ({n_timepoints})")
+        
+        mi_values = np.zeros(n_windows)
+        window_centers = np.zeros(n_windows, dtype=int)
+        
+        with warnings.catch_warnings():
+            if suppress_warnings:
+                warnings.filterwarnings('ignore', message='Input .* has more than 10% repeated values')
+            
+            for i in range(n_windows):
+                start = i * step
+                end = start + window
+                center = start + window // 2
+                
+                # Extract window data - shape becomes (1, window)
+                x_win = x_1d[start:end].reshape(1, -1)
+                y_win = y_1d[start:end].reshape(1, -1)
+                
+                mi_values[i] = gcmi_cc(x_win, y_win)
+                window_centers[i] = center
+    else:
+        # Multi-trial data: (n_trials, n_timepoints)
+        n_trials, n_timepoints = x.shape
+        
+        if y.shape != x.shape:
+            raise ValueError("x and y must have the same shape")
+        
+        # Calculate number of windows
+        n_windows = (n_timepoints - window) // step + 1
+        
+        if n_windows <= 0:
+            raise ValueError(f"Window size ({window}) is larger than data length ({n_timepoints})")
+        
+        mi_values = np.zeros(n_windows)
+        window_centers = np.zeros(n_windows, dtype=int)
+        
+        with warnings.catch_warnings():
+            if suppress_warnings:
+                warnings.filterwarnings('ignore', message='Input .* has more than 10% repeated values')
+            
+            for i in range(n_windows):
+                start = i * step
+                end = start + window
+                center = start + window // 2
+                
+                # Extract window data and reshape for gcmi_cc
+                # gcmi_cc expects (n_vars, n_trials) 
+                # We flatten trials x window samples into observations
+                # Shape: (1, n_trials * window)
+                x_win = x[:, start:end].flatten().reshape(1, -1)
+                y_win = y[:, start:end].flatten().reshape(1, -1)
+                
+                mi_values[i] = gcmi_cc(x_win, y_win)
+                window_centers[i] = center
+    
+    return mi_values, window_centers
+
+
+# def compute_sliding_gcmi(mne_data, buf_ms, indices, window, slide, freqs, n_cycles, mode='cwt_morlet', fmin=None, fmax=None):
+
+#     """
+
+#     Run the sliding window gcmi
+
+#     """
+
+#     pre_buf = buf_ms * (mne_data.info['sfreq']/1000)
+#     post_buf = pre_buf + ((mne_data._data.shape[-1] - (2*buf_ms)) * (mne_data.info['sfreq']/1000)) + 1
+#     buf_mask = (window_centers>=pre_buf) & (window_centers<post_buf)
+
+#                 signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
+#             signal0_amp = np.abs(signal0_hilbert)
+#             signal1_hilbert = hilbert(signal1_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
+#             signal1_amp = np.abs(signal1_hilbert)
+
+#             mode='cwt_morlet',
+#                                             fmin=band[0], fmax=band[1],
+#                                             cwt_freqs=freqs,
+#                                             cwt_n_cycles=n_cycles,
+#             power_data = 
+
+
+#     pwise = []
+#     for ix, _ in enumerate(indices[0]):
+#         mi_values, window_centers = gcmi_cc_sliding(
+#             mne_data._data[:, indices[0][ix], :], 
+#             mne_data._data[:, indices[1][ix], :], 
+#             window, slide,
+#         )
+        
+#         pwise_win = window_centers[buf_mask]
+#         mi_values = mi_values[buf_mask]
+
+#         pwise.append(mi_values)
+
+#     return pwise_win, pwise
 
 def mi_model_gd(x: np.ndarray, y: np.ndarray, Ym: int, biascorrect: bool = True, demeaned: bool = False) -> float:
     """Compute MI between Gaussian and discrete variable.
@@ -1386,6 +2108,16 @@ def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.nda
                                                     cwt_freqs=freqs,
                                                     cwt_n_cycles=n_cycles,
                                                     verbose='warning').get_data()[:, 0])
+    elif metric == 'cacoh':
+        surr_conn = np.abs(np.squeeze(spectral_connectivity_epochs(surr_mne,
+                                                        indices=indices,
+                                                        method=metric,
+                                                        sfreq=surr_mne.info['sfreq'],
+                                                        mode='cwt_morlet',
+                                                        fmin=band[0], fmax=band[1], faverage=True,
+                                                        cwt_freqs=freqs,
+                                                        cwt_n_cycles=n_cycles,
+                                                        verbose='ERROR').get_data()))
     elif metric == 'granger':
         # I don't want to compute multivariate GC, so refactor the indices: 
         surr_conn = []
@@ -1571,10 +2303,46 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
     if metric == 'gr_tc':
         return (ValueError('Use the function compute_gc_tr'))
 
-    elif metric in ['gc', 'imcoh', 'cacoh']: 
+    elif metric in ['granger', 'imcoh', 'cacoh']: 
         indices = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))
 
     if avg_over_dim == 'epochs':
+
+        # if metric == 'sliding_gcmi':
+        #     # Compute power in the band first: 
+        #     signal1_filt = mne.filter.filter_data(signal1,
+        #             mne_data.info['sfreq'],
+        #             l_freq=freqs0[0],
+        #             h_freq=freqs0[1])
+        
+        # corrs = []
+
+        # for ei in range(nevents):
+
+
+        #     pairwise_bins, pairwise_connectivity = compute_sliding_gcmi(mne_data,
+        #     freqs fmin = band[0], fmax = band[1], cwt_freqs=freqs, cwt_n_cycles=n_cycles,
+        #     buf_ms, indices, 100, 1)
+
+
+
+        #     surr_pwise = []
+        #     for surr in surr_data:
+        #         mi_values, window_centers = oscillation_utils.gcmi_cc_sliding(
+        #         surr._data[:, 0, :], 
+        #         surr._data[:, 1, :], 
+        #         100, 1)
+
+        #         buf_mask = (window_centers>=pre_buf) & (window_centers<post_buf)
+
+        #         pwise_win = window_centers[buf_mask]
+        #         pwise = mi_values[buf_mask]
+        #         surr_pwise.append(pwise)
+
+        #     surr_data = oscillation_utils.make_surrogate_data(epochs_reref, method = 'swap_time_blocks', n_shuffles = 100)
+
+        #     zscored_pwise = (pwise - np.nanmean(surr_pwise, axis=0) / np.std(surr_pwise, axis=0))
+
         if metric == 'amp': 
             return (ValueError('Cannot compute amplitude-amplitude coupling over epochs.'))
         if metric == 'psi': 
@@ -1588,25 +2356,46 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                                                                     verbose='warning').get_data()[:, 0])
             # return pairwise_connectivity
         elif metric == 'granger':
-            # I don't want to compute multivariate GC, so refactor the indices: 
-            pairwise_connectivity = []
+            pairwise_connectivity= compute_gc_tr(mne_data=mne_data, 
+                    band=band,
+                    indices=indices, 
+                    freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                    n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                    rank=None, 
+                    gc_n_lags=gc_n_lags, 
+                    buf_ms=buf_ms, 
+                    avg_over_dim='epochs')
+            # # I don't want to compute multivariate GC, so refactor the indices: 
+            # pairwise_connectivity = []
 
-            for ix, _ in enumerate(indices[0]):
-                gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+            # for ix, _ in enumerate(indices[0]):
+            #     gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
             
-                gc = compute_gc_tr(mne_data=mne_data, 
-                        band=band,
-                        indices=gc_indices, 
-                        freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
-                        n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-                        rank=None, 
-                        gc_n_lags=gc_n_lags, 
-                        buf_ms=buf_ms, 
-                        avg_over_dim='epochs')
+            #     gc = compute_gc_tr(mne_data=mne_data, 
+            #             band=band,
+            #             indices=gc_indices, 
+            #             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+            #             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+            #             rank=None, 
+            #             gc_n_lags=gc_n_lags, 
+            #             buf_ms=buf_ms, 
+            #             avg_over_dim='epochs')
                 
-                pairwise_connectivity.append(gc)
+            #     pairwise_connectivity.append(gc)
                 
-            pairwise_connectivity = np.vstack(pairwise_connectivity)
+            # pairwise_connectivity = np.vstack(pairwise_connectivity)
+        
+        elif metric == 'cacoh':
+            pairwise_connectivity = np.abs(np.squeeze(spectral_connectivity_epochs(mne_data,
+                                                    indices=indices,
+                                                    method=metric,
+                                                    sfreq=mne_data.info['sfreq'],
+                                                    mode='cwt_morlet',
+                                                    fmin=band[0], fmax=band[1], faverage=True,
+                                                    cwt_freqs=freqs,
+                                                    cwt_n_cycles=n_cycles,
+                                                    verbose='ERROR').get_data()))
+
 
         else:
             pairwise_connectivity = np.squeeze(spectral_connectivity_epochs(mne_data,
@@ -1618,13 +2407,13 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                                                             cwt_freqs=freqs,
                                                             cwt_n_cycles=n_cycles,
                                                             verbose='ERROR').get_data()[:, 0])
-        if metric in ['gc', 'imcoh', 'cacoh']:
+        if metric in ['granger', 'imcoh', 'cacoh']:
             # no pairs here: computed over whole multivariate state space 
             n_pairs=1
         else: 
             n_pairs = len(indices[0])
 
-        if metric != 'granger':
+        if metric not in ['granger', 'imcoh', 'cacoh']:
             if n_pairs == 1:
                 # reshape data
                 pairwise_connectivity = pairwise_connectivity.reshape((pairwise_connectivity.shape[0], n_pairs))
@@ -1686,25 +2475,34 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                                                                     cwt_n_cycles=n_cycles,
                                                                     verbose='warning').get_data()[:, 0])
                     elif metric == 'granger':
-                        # I don't want to compute multivariate GC, so refactor the indices: 
-                        surr_conn = []
+                        surr_conn= compute_gc_tr(mne_data=surr_mne[ns], 
+                            band=band,
+                            indices=indices, 
+                            freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                            n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                            rank=None, 
+                            gc_n_lags=gc_n_lags, 
+                            buf_ms=buf_ms, 
+                            avg_over_dim='epochs')
+                        # # I don't want to compute multivariate GC, so refactor the indices: 
+                        # surr_conn = []
 
-                        for ix, _ in enumerate(indices[0]):
-                            gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+                        # for ix, _ in enumerate(indices[0]):
+                        #     gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
                         
-                            surr_gc = compute_gc_tr(mne_data=surr_mne[ns], 
-                                    band=band,
-                                    indices=gc_indices, 
-                                    freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
-                                    n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
-                                    rank=None, 
-                                    gc_n_lags=gc_n_lags, 
-                                    buf_ms=buf_ms, 
-                                    avg_over_dim='epochs')
+                        #     surr_gc = compute_gc_tr(mne_data=surr_mne[ns], 
+                        #             band=band,
+                        #             indices=gc_indices, 
+                        #             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                        #             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                        #             rank=None, 
+                        #             gc_n_lags=gc_n_lags, 
+                        #             buf_ms=buf_ms, 
+                        #             avg_over_dim='epochs')
                             
-                            surr_conn.append(surr_gc)
+                        #     surr_conn.append(surr_gc)
                             
-                        surr_conn = np.vstack(surr_conn)
+                        # surr_conn = np.vstack(surr_conn)
 
                     else:
                         surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne[ns],
@@ -1905,7 +2703,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                 # and n_events is the number of events in the data
 
             
-            if metric in ['gc', 'imcoh', 'cacoh']:
+            if metric in ['granger', 'imcoh', 'cacoh']:
                 # no pairs here: computed over whole multivariate state space 
                 n_pairs=1
             else: 
