@@ -1,17 +1,29 @@
-# Table of contents
-# Learn more at https://jupyterbook.org/customize/toc.html
-
 format: jb-book
 root: intro
 chapters:
-# - file: markdown
-- file: module-01-00_BroadIntroduction
-- file: module-01-01_LFPAnalysisIntroduction
-- file: module-01-02_ElectrodeLocalization
-- file: module-02-00_Preprocessing
-# - file: module-03-00_PowerSpectralDensity
-# - file: module-04-00_TimeFrequencyAnalysis
-# - file: module-05-00_Coherence
-# - file: module-06-00_CrossFrequencyCoupling
-# - file: module-07-00_Statistics
-# - file: markdown-notebooks
+  - file: 01_installation
+  - file: 02_data_model
+  - file: 03_quickstart
+    sections:
+      - file: smoke-tests/01_install_and_import
+      - file: smoke-tests/02_load_sample_data
+  - file: 04_electrode_localization
+  - file: 05_referencing
+  - file: 06_artifact_detection
+    sections:
+      - file: smoke-tests/03_reference_and_artifacts
+  - file: 07_baselining
+    sections:
+      - file: smoke-tests/04_baselining_and_epoching
+  - file: 08_synchronization_and_epoching
+  - file: 09_psd_and_fooof
+    sections:
+      - file: smoke-tests/05_psd_and_fooof
+  - file: 10_time_frequency
+    sections:
+      - file: smoke-tests/06_time_frequency
+  - file: 11_connectivity_and_surrogates
+    sections:
+      - file: smoke-tests/07_connectivity_and_surrogates
+  - file: 12_statistics
+  - file: 13_troubleshooting

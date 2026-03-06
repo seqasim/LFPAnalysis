@@ -1,59 +1,33 @@
-# Book settings
-# Learn more at https://jupyterbook.org/customize/config.html
-
-#######################################################################################
-title: LFP Analysis Book
+title: LFPAnalysis Book
 author: Salman E. Qasim
-# logo: logo.png
-only_build_toc_files: false
-#######################################################################################
+only_build_toc_files: true
 
-#######################################################################################
-# Execution settings
 execute:
-  timeout: 5000
-  execute_notebooks: auto  # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
-  cache: ""  # A path to the jupyter cache that will be used to store execution artifacs. Defaults to `_build/.jupyter_cache/` docs/.jupyter_cache/
-  exclude_output: false
-  exclude_input: false
+  execute_notebooks: cache
+  timeout: 1200
+  allow_errors: false
   remove_code_source: false
-  remove_cell_outputs: true
-#######################################################################################
+  remove_cell_outputs: false
 
-
-# # Define the name of the latex output file for PDF builds
-# latex:
-#   latex_documents:
-#     targetname: book.tex
-
-# # Add a bibtex file so that we can create citations
-# bibtex_bibfiles:
-#   - references.bib
-
-#######################################################################################
-# Information about where the book exists on the web
 repository:
-  url: https://github.com/seqasim/LFPAnalysis/tree/main  # Online location of your book
-  path_to_book: LFPAnalysisBook  # Optional path to your book, relative to the repository root
-  branch: master  # Which branch of the repository should be used when creating links (optional)
+  url: https://github.com/seqasim/LFPAnalysis
+  path_to_book: LFPAnalysisBook
+  branch: main
 
-#######################################################################################
-# Launch button settings
 launch_buttons:
-  notebook_interface: "classic"  # The interface interactive links will activate ["classic", "jupyterlab"]
-  colab_url: ""
+  notebook_interface: jupyterlab
   binderhub_url: ""
-  thebe: false  # Add a thebe button to pages (requires the repository to run on Binder)
+  colab_url: ""
+  thebe: false
 
-#######################################################################################
+html:
+  use_issues_button: true
+  use_repository_button: true
+  use_edit_page_button: false
 
-#######################################################################################
-# # Advanced and power-user settings
-# sphinx:
-#   extra_extensions:   # A list of extra extensions to load by Sphinx.
-#   - sphinx_inline_tabs
-#   config:   # key-value pairs to directly over-ride the Sphinx configuration
-#     mathjax_path: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+bibtex_bibfiles:
+  - references.bib
 
-latex:
-  latex_engine: pdflatex  # one of 'pdflatex', 'xelatex' (recommended for unicode), 'luatex', 'platex', 'uplatex'
+sphinx:
+  config:
+    nb_execution_raise_on_error: true
