@@ -410,8 +410,107 @@ def make_surrogate_arrays(
         return list(gen)
 
 
+def _compute_surrogate_te_single(
+    surr_idx: int,
+    x_data: np.ndarray,
+    y_flat: np.ndarray,
+    te_k: int,
+    surr_method: str,
+    rng_seed: int
+) -> float:
+    """Compute TE for a single surrogate.
+    
+    Module-level function for joblib parallelization over surrogates.
+    """
+    # Generate single surrogate
+    rng = np.random.default_rng(rng_seed + surr_idx)
+    n_trials, n_times = x_data.shape
+    
+    if surr_method == 'swap_epochs':
+        perm_idx = rng.permutation(n_trials)
+        x_surr = x_data[perm_idx, :]
+    elif surr_method == 'swap_time_blocks':
+        x_surr = np.zeros_like(x_data)
+        cutpoints = rng.integers(1, n_times, n_trials)
+        for trial_idx in range(n_trials):
+            cut = cutpoints[trial_idx]
+            x_surr[trial_idx, :] = np.concatenate([
+                x_data[trial_idx, cut:], 
+                x_data[trial_idx, :cut]
+            ])
+    else:
+        raise ValueError(f"Unknown method: {surr_method}")
+    
+    x_surr_flat = x_surr.flatten()
+    return gcte_cc(x_surr_flat, y_flat, k=te_k)
+
+
+def _compute_te_for_pair(
+    src_idx: int,
+    tgt_idx: int,
+    data: np.ndarray,
+    freq_indices: np.ndarray,
+    t_start: int,
+    t_end: int,
+    te_k: int,
+    n_surr: int,
+    surr_method: str,
+    pair_idx: int,
+    parallelize: bool = False,
+    n_jobs: int = -1
+) -> np.ndarray:
+    """Compute TE for a single source-target pair across frequencies.
+    
+    Parallelizes over surrogates when parallelize=True.
+    """
+    n_freqs_compute = len(freq_indices)
+    te_values = np.zeros(n_freqs_compute)
+    te_surr = np.zeros((n_freqs_compute, n_surr)) if n_surr > 0 else None
+    
+    for fi, freq_idx in enumerate(freq_indices):
+        # Extract 2D arrays for this frequency, cropped by buffer
+        x = data[:, src_idx, freq_idx, t_start:t_end]
+        y = data[:, tgt_idx, freq_idx, t_start:t_end]
+        
+        # Flatten for TE computation (concatenate across trials)
+        x_flat = x.flatten()
+        y_flat = y.flatten()
+        
+        # Compute actual TE
+        te_values[fi] = gcte_cc(x_flat, y_flat, k=te_k)
+        
+        # Compute surrogate TEs
+        if n_surr > 0:
+            rng_seed = 42 + pair_idx * 1000 + fi  # Unique seed per pair/freq combo
+            
+            if parallelize:
+                # Parallelize over surrogates
+                surr_results = Parallel(n_jobs=n_jobs)(
+                    delayed(_compute_surrogate_te_single)(
+                        si, x, y_flat, te_k, surr_method, rng_seed
+                    ) for si in range(n_surr)
+                )
+                te_surr[fi, :] = np.array(surr_results)
+            else:
+                # Serial computation
+                for si, x_surr in enumerate(make_surrogate_arrays(
+                    x, method=surr_method, n_shuffles=n_surr, rng_seed=rng_seed
+                )):
+                    x_surr_flat = x_surr.flatten()
+                    te_surr[fi, si] = gcte_cc(x_surr_flat, y_flat, k=te_k)
+    
+    # Z-score
+    if n_surr > 0:
+        te_mean = np.nanmean(te_surr, axis=1)
+        te_std = np.nanstd(te_surr, axis=1)
+        te_std[te_std == 0] = np.nan
+        return (te_values - te_mean) / te_std
+    else:
+        return te_values
+
+
 def compute_te(
-    tfr_data: EpochsTFR,
+    tfr_data: Union[EpochsTFR, np.ndarray],
     indices: Tuple[np.ndarray, np.ndarray],
     band: Optional[Tuple[float, float]] = None,
     buf_ms: Union[int, Tuple[int, int]] = 1000,
@@ -419,7 +518,11 @@ def compute_te(
     surr_method: str = 'swap_time_blocks',
     n_surr: int = 100,
     parallelize: bool = False,
-    return_freqs: bool = False
+    n_jobs: int = 8,
+    return_freqs: bool = False,
+    net: bool = False,
+    sfreq: Optional[float] = None,
+    freqs: Optional[np.ndarray] = None
 ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """Compute z-scored transfer entropy from TFR data.
     
@@ -428,8 +531,9 @@ def compute_te(
     
     Parameters
     ----------
-    tfr_data : mne.time_frequency.EpochsTFR
+    tfr_data : mne.time_frequency.EpochsTFR or np.ndarray
         Time-frequency representation data with shape (n_epochs, n_channels, n_freqs, n_times).
+        Can be either an MNE EpochsTFR object or a 4D numpy array.
     indices : tuple of np.ndarray
         Connectivity indices as (source_indices, target_indices). Each pair
         (source_indices[i], target_indices[i]) defines a connection to compute.
@@ -447,9 +551,19 @@ def compute_te(
     n_surr : int, optional
         Number of surrogates for z-scoring. Default is 100. Set to 0 for raw TE.
     parallelize : bool, optional
-        Whether to parallelize across channel pairs. Default is False.
+        Whether to parallelize surrogate computation. Default is False.
+    n_jobs : int, optional
+        Number of parallel jobs. -1 uses all cores. Default is -1.
     return_freqs : bool, optional
         Whether to return frequency array along with TE values. Default is False.
+    net : bool, optional
+        Whether to compute net (directional) transfer entropy as 
+        TE(source→target) - TE(target→source). Default is False.
+    sfreq : float, optional
+        Sampling frequency in Hz. Required if tfr_data is a numpy array.
+    freqs : np.ndarray, optional
+        Array of frequencies in Hz corresponding to the frequency dimension.
+        Required if tfr_data is a numpy array.
     
     Returns
     -------
@@ -457,27 +571,48 @@ def compute_te(
         Z-scored transfer entropy. Shape depends on inputs:
         - If band is None: (n_pairs, n_freqs) 
         - If band is provided: (n_pairs,) averaged across frequencies in band
+        If net=True, returns the difference TE(A→B) - TE(B→A).
     freqs : np.ndarray, optional
         Frequency array (only if return_freqs=True and band is None).
     
     Examples
     --------
-    >>> # Compute TE for all frequencies
+    >>> # Compute TE for all frequencies (EpochsTFR input)
     >>> te_z = compute_te(tfr_data, indices=(np.array([0]), np.array([1])))
     >>> 
     >>> # Compute TE averaged within theta band
     >>> te_z = compute_te(tfr_data, indices=(np.array([0]), np.array([1])), band=(4, 8))
     >>> 
-    >>> # Multiple pairs
+    >>> # Multiple pairs with parallelization
     >>> sources = np.array([0, 0, 1])
     >>> targets = np.array([1, 2, 2])
-    >>> te_z = compute_te(tfr_data, indices=(sources, targets), n_surr=500)
+    >>> te_z = compute_te(tfr_data, indices=(sources, targets), n_surr=500, parallelize=True)
+    >>>
+    >>> # Compute net TE (directional information flow)
+    >>> te_net = compute_te(tfr_data, indices=(sources, targets), net=True)
+    >>>
+    >>> # Using a 4D numpy array instead of EpochsTFR
+    >>> data_array = tfr_data.get_data()  # shape: (n_epochs, n_channels, n_freqs, n_times)
+    >>> te_z = compute_te(data_array, indices=(sources, targets), 
+    ...                   sfreq=500, freqs=np.arange(4, 50))
     """
-    # Get data dimensions
-    data = tfr_data.get_data()  # (n_epochs, n_channels, n_freqs, n_times)
-    sfreq = tfr_data.info['sfreq']
-    freqs = tfr_data.freqs
-    times = tfr_data.times
+    # Handle input type: EpochsTFR or numpy array
+    if isinstance(tfr_data, np.ndarray):
+        if tfr_data.ndim != 4:
+            raise ValueError(f"Expected 4D array (n_epochs, n_channels, n_freqs, n_times), "
+                           f"got {tfr_data.ndim}D array")
+        if sfreq is None:
+            raise ValueError("sfreq must be provided when tfr_data is a numpy array")
+        if freqs is None:
+            raise ValueError("freqs must be provided when tfr_data is a numpy array")
+        data = tfr_data
+        freqs = np.asarray(freqs)
+    else:
+        # Assume EpochsTFR
+        data = tfr_data.get_data()  # (n_epochs, n_channels, n_freqs, n_times)
+        sfreq = tfr_data.info['sfreq']
+        freqs = tfr_data.freqs
+    
     n_epochs, n_channels, n_freqs, n_times = data.shape
     
     # Parse indices
@@ -509,52 +644,39 @@ def compute_te(
     t_start = buf_start
     t_end = n_times - buf_end if buf_end > 0 else n_times
     
-    def _compute_te_single_pair(pair_idx: int) -> np.ndarray:
-        """Compute TE for a single source-target pair across frequencies."""
-        src_idx = source_indices[pair_idx]
-        tgt_idx = target_indices[pair_idx]
-        
-        te_values = np.zeros(n_freqs_compute)
-        te_surr = np.zeros((n_freqs_compute, n_surr)) if n_surr > 0 else None
-        
-        for fi, freq_idx in enumerate(freq_indices):
-            # Extract 2D arrays for this frequency, cropped by buffer
-            # Shape: (n_epochs, n_times_cropped)
-            x = data[:, src_idx, freq_idx, t_start:t_end]
-            y = data[:, tgt_idx, freq_idx, t_start:t_end]
-            
-            # Compute actual TE
-            te_values[fi] = gcte_cc(x, y, k=te_k)
-            
-            # Compute surrogate TEs
-            if n_surr > 0:
-                for si, x_surr in enumerate(make_surrogate_arrays(
-                    x, method=surr_method, n_shuffles=n_surr, rng_seed=42 + pair_idx
-                )):
-                    te_surr[fi, si] = gcte_cc(x_surr, y, k=te_k)
-        
-        # Z-score
-        if n_surr > 0:
-            te_mean = np.nanmean(te_surr, axis=1)
-            te_std = np.nanstd(te_surr, axis=1)
-            # Avoid division by zero
-            te_std[te_std == 0] = np.nan
-            te_zscored = (te_values - te_mean) / te_std
-        else:
-            te_zscored = te_values
-        
-        return te_zscored
-    
-    # Compute for all pairs
-    if parallelize and n_pairs > 1:
-        results = Parallel(n_jobs=-1)(
-            delayed(_compute_te_single_pair)(pi) for pi in range(n_pairs)
+    # Validate buffer doesn't exceed data
+    n_times_cropped = t_end - t_start
+    if n_times_cropped <= te_k:
+        raise ValueError(
+            f"Buffer too large: {buf_ms}ms leaves only {n_times_cropped} time points, "
+            f"but need > {te_k} for te_k={te_k}. "
+            f"Total time points: {n_times}, sfreq: {sfreq}Hz. "
+            f"Try reducing buf_ms or using a shorter te_k."
         )
-        te_all = np.stack(results, axis=0)  # (n_pairs, n_freqs_compute)
-    else:
-        te_all = np.zeros((n_pairs, n_freqs_compute))
+    
+    # Compute for all pairs (forward direction: source → target)
+    # Parallelization happens over surrogates within _compute_te_for_pair
+    te_forward = np.zeros((n_pairs, n_freqs_compute))
+    for pi in range(n_pairs):
+        te_forward[pi, :] = _compute_te_for_pair(
+            source_indices[pi], target_indices[pi], data, freq_indices,
+            t_start, t_end, te_k, n_surr, surr_method, pi,
+            parallelize=parallelize, n_jobs=n_jobs
+        )
+    
+    # Compute reverse direction if net=True (target → source)
+    if net:
+        te_reverse = np.zeros((n_pairs, n_freqs_compute))
         for pi in range(n_pairs):
-            te_all[pi, :] = _compute_te_single_pair(pi)
+            te_reverse[pi, :] = _compute_te_for_pair(
+                target_indices[pi], source_indices[pi], data, freq_indices,
+                t_start, t_end, te_k, n_surr, surr_method, pi + n_pairs,
+                parallelize=parallelize, n_jobs=n_jobs
+            )
+        # Net TE: forward - reverse
+        te_all = te_forward - te_reverse
+    else:
+        te_all = te_forward
     
     # Average across frequencies if band is specified
     if band is not None:
@@ -1891,7 +2013,8 @@ def amp_amp_coupling(mne_data: mne.Epochs, seed_to_target: Tuple[np.ndarray, np.
 
     return pairwise_connectivity
 
-def compute_gc_tr(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, rank: Optional[int] = None, gc_n_lags: int = 15, buf_ms: int = 1000, avg_over_dim: str = 'time') -> np.ndarray:
+def compute_gc_tr(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, rank: Optional[int] = None, 
+gc_n_lags: int = 5, buf_ms: int = 1000, avg_over_dim: str = 'time') -> np.ndarray:
     """Compute Granger causality time-resolved.
     
     Parameters
@@ -2041,7 +2164,8 @@ def compute_gc_tr(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[fl
     else:
         return np.squeeze(gc_tr)
 
-def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], surr_method: str = 'swap_epochs', rng_seed: Optional[int] = None, gc_n_lags: int = 15, buf_ms: int = 1000) -> np.ndarray:
+def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], surr_method: str = 'swap_epochs', rng_seed: Optional[int] = None, 
+gc_n_lags: int = 5, buf_ms: int = 1000) -> np.ndarray:
     """Compute surrogate connectivity over epochs.
     
     Parameters
@@ -2119,25 +2243,35 @@ def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.nda
                                                         cwt_n_cycles=n_cycles,
                                                         verbose='ERROR').get_data()))
     elif metric == 'granger':
-        # I don't want to compute multivariate GC, so refactor the indices: 
-        surr_conn = []
-
-        for ix, _ in enumerate(indices[0]):
-            gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
-        
-            surr_gc = compute_gc_tr(mne_data=surr_mne, 
+        surr_conn = compute_gc_tr(mne_data=surr_mne, 
                     band=band,
-                    indices=gc_indices, 
+                    indices=indices, 
                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                     rank=None, 
                     gc_n_lags=gc_n_lags, 
                     buf_ms=buf_ms, 
                     avg_over_dim='epochs')
+
+        # # I don't want to compute multivariate GC, so refactor the indices: 
+        # surr_conn = []
+
+        # for ix, _ in enumerate(indices[0]):
+        #     gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+        
+        #     surr_gc = compute_gc_tr(mne_data=surr_mne, 
+        #             band=band,
+        #             indices=gc_indices, 
+        #             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+        #             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+        #             rank=None, 
+        #             gc_n_lags=gc_n_lags, 
+        #             buf_ms=buf_ms, 
+        #             avg_over_dim='epochs')
             
-            surr_conn.append(surr_gc)
+        #     surr_conn.append(surr_gc)
             
-        surr_conn = np.vstack(surr_conn)
+        # surr_conn = np.vstack(surr_conn)
     else:
         surr_conn = np.squeeze(spectral_connectivity_epochs(surr_mne,
                                                         indices=indices,
@@ -2166,7 +2300,8 @@ def compute_surr_connectivity_epochs(surr_mne: mne.Epochs, indices: Tuple[np.nda
     return surr_conn
 
 
-def compute_surr_connectivity_time(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], buf_ms: Union[int, Tuple[int, int]], surr_method: str = 'swap_epochs', rng_seed: int = 42, gc_n_lags: int = 15) -> np.ndarray:
+def compute_surr_connectivity_time(surr_mne: mne.Epochs, indices: Tuple[np.ndarray, np.ndarray], metric: str, band: Tuple[float, float], freqs: np.ndarray, n_cycles: Union[float, np.ndarray], buf_ms: Union[int, Tuple[int, int]], surr_method: str = 'swap_epochs', rng_seed: int = 42, 
+gc_n_lags: int = 5) -> np.ndarray:
     """Compute surrogate connectivity over time.
     
     Parameters
@@ -2222,25 +2357,34 @@ def compute_surr_connectivity_time(surr_mne: mne.Epochs, indices: Tuple[np.ndarr
     # method=surr_method, n_shuffles=1, rng_seed=rng_seed, return_generator=False)
 
     if metric == 'granger':
-        # I don't want to compute multivariate GC, so refactor the indices: 
-        surr_conn = []
-
-        for ix, _ in enumerate(indices[0]):
-            gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
-        
-            gc = compute_gc_tr(mne_data=surr_mne, 
+        surr_conn = compute_gc_tr(mne_data=surr_mne, 
                     band=band,
-                    indices=gc_indices, 
+                    indices=indices, 
                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                     n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                     rank=None, 
                     gc_n_lags=gc_n_lags, 
                     buf_ms=buf_ms, 
                     avg_over_dim='time')
+        # I don't want to compute multivariate GC, so refactor the indices: 
+        # surr_conn = []
+
+        # for ix, _ in enumerate(indices[0]):
+        #     gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+        
+        #     gc = compute_gc_tr(mne_data=surr_mne, 
+        #             band=band,
+        #             indices=gc_indices, 
+        #             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+        #             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+        #             rank=None, 
+        #             gc_n_lags=gc_n_lags, 
+        #             buf_ms=buf_ms, 
+        #             avg_over_dim='time')
             
-            surr_conn.append(gc)
+        #     surr_conn.append(gc)
             
-        surr_conn = np.hstack(surr_conn)
+        # surr_conn = np.hstack(surr_conn)
     else:
         surr_conn = np.squeeze(spectral_connectivity_time(data=surr_mne, 
                                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
@@ -2263,7 +2407,7 @@ def compute_surr_connectivity_time(surr_mne: mne.Epochs, indices: Tuple[np.ndarr
     return surr_conn
 
 
-def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, metric: Optional[str] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, buf_ms: int = 1000, avg_over_dim: str = 'time', surr_method: str = 'swap_epochs', n_surr: int = 500, parallelize: bool = False, band1: Optional[Tuple[float, float]] = None, gc_n_lags: int = 7) -> np.ndarray:
+def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, metric: Optional[str] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, buf_ms: int = 1000, avg_over_dim: str = 'time', surr_method: str = 'swap_epochs', n_surr: int = 500, parallelize: bool = False, band1: Optional[Tuple[float, float]] = None, gc_n_lags: int = 7, time_window: Optional[Tuple[float, float]] = None) -> np.ndarray:
     """Compute connectivity metrics.
     
     Parameters
@@ -2294,6 +2438,12 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
         Second frequency band as (low, high).
     gc_n_lags : int, optional
         Number of lags. Default is 7.
+    time_window : tuple, optional
+        Time window as (tmin, tmax) in seconds, relative to epoch onset (time 0).
+        Only used when avg_over_dim='time'. If provided, the data will first have
+        the buffer removed, then be further cropped to this time window before
+        computing the connectivity metric. Default is None (use full epoch after
+        buffer removal).
     
     Returns
     -------
@@ -2557,6 +2707,10 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                 mne_data.crop(tmin=mne_data.tmin + buf_rs,
                             tmax=mne_data.tmax - buf_re)
             
+            # Apply time_window if specified (after buffer removal)
+            if time_window is not None:
+                mne_data.crop(tmin=time_window[0], tmax=time_window[1])
+            
             pairwise_connectivity = phase_gcmi(mne_data,
                                                 indices,
                                                 freqs0=band,
@@ -2605,6 +2759,10 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
             
                 mne_data.crop(tmin=mne_data.tmin + buf_rs,
                             tmax=mne_data.tmax - buf_re)
+
+            # Apply time_window if specified (after buffer removal)
+            if time_window is not None:
+                mne_data.crop(tmin=time_window[0], tmax=time_window[1])
 
             pairwise_connectivity = amp_amp_coupling(mne_data, 
                                                      indices, 
@@ -2664,26 +2822,52 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                 # z_struct = zscore(surr_struct, axis=-1) # take the zscore across surrogate runs and the real data
                 # pairwise_connectivity = z_struct[:, :, -1] # extract the real data      
         else:
+            # Apply time_window if specified - crop to include buffer + time window
+            # The buffer will be handled by padding in spectral_connectivity_time
+            # or by buf_ms in compute_gc_tr
+            if time_window is not None:
+                # Convert buf_ms to seconds for cropping
+                if type(buf_ms) == int:
+                    buf_s = buf_ms / 1000
+                    crop_tmin = time_window[0] - buf_s
+                    crop_tmax = time_window[1] + buf_s
+                elif (type(buf_ms) == tuple) | (type(buf_ms) == list):
+                    buf_s_start = buf_ms[0] / 1000
+                    buf_s_end = buf_ms[1] / 1000
+                    crop_tmin = time_window[0] - buf_s_start
+                    crop_tmax = time_window[1] + buf_s_end
+                mne_data.crop(tmin=crop_tmin, tmax=crop_tmax)
+            
             if metric == 'granger':
-                # I don't want to compute multivariate GC, so refactor the indices: 
-                pairwise_connectivity = []
 
-                for ix, _ in enumerate(indices[0]):
-                    gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
-                
-                    gc = compute_gc_tr(mne_data=mne_data, 
+                pairwise_connectivity = compute_gc_tr(mne_data=mne_data, 
                             band=band,
-                            indices=gc_indices, 
+                            indices=indices, 
                             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
                             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
                             rank=None, 
                             gc_n_lags=gc_n_lags, 
                             buf_ms=buf_ms, 
                             avg_over_dim='time')
+                # # I don't want to compute multivariate GC, so refactor the indices: 
+                # pairwise_connectivity = []
+
+                # for ix, _ in enumerate(indices[0]):
+                #     gc_indices = (np.array([[indices[0][ix]]]), np.array([[indices[1][ix]]]))
+                
+                #     gc = compute_gc_tr(mne_data=mne_data, 
+                #             band=band,
+                #             indices=gc_indices, 
+                #             freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
+                #             n_cycles=n_cycles[(freqs>=band[0]) & (freqs<=band[1])],
+                #             rank=None, 
+                #             gc_n_lags=gc_n_lags, 
+                #             buf_ms=buf_ms, 
+                #             avg_over_dim='time')
                     
-                    pairwise_connectivity.append(gc)
+                #     pairwise_connectivity.append(gc)
                     
-                pairwise_connectivity = np.hstack(pairwise_connectivity)
+                # pairwise_connectivity = np.hstack(pairwise_connectivity)
             else:
                 pairwise_connectivity = np.squeeze(spectral_connectivity_time(data=mne_data, 
                                                     freqs=freqs[(freqs>=band[0]) & (freqs<=band[1])], 
@@ -2720,7 +2904,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                 if parallelize == True:
                     def _process_surrogate_time(ns):
                         # print(f'Computing surrogate # {ns} - parallel')
-                        surrogate_result = compute_surr_connectivity_time(surr_mne[ns], indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags, rng_seed=ns)
+                        surrogate_result = compute_surr_connectivity_time(surr_mne[ns], indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags=gc_n_lags, rng_seed=ns)
                         return surrogate_result
 
                     surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
