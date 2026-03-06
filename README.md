@@ -63,7 +63,7 @@ config = PipelineConfig(
     load=LoadConfig(path=root / "sample_ieeg.fif", file_format="mne"),
     reference=ReferenceConfig(method="none"),
     artifact=ArtifactConfig(methods=["none"]),
-    baseline=BaselineConfig(mode="zscore"),
+    baseline=BaselineConfig(mode="zscore", enabled=False),
     epoch=EpochConfig(enabled=False),
     spectral=SpectralConfig(enabled=False),
 )
