@@ -1,0 +1,117 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "LFPAnalysis"
+version = "1.1.0"
+description = "Local field potential preprocessing and analysis utilities built around MNE-Python."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [
+  { name = "Salman E. Qasim" }
+]
+keywords = ["lfp", "ieeg", "neuroscience", "mne", "signal-processing"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+  "h5io>=0.2",
+  "mne>=1.6",
+  "numpy>=1.24",
+  "openpyxl>=3.1",
+  "pandas>=2.0",
+  "python-Levenshtein>=0.25",
+  "PyYAML>=6.0",
+  "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+analysis = [
+  "dcor>=0.6",
+  "fooof==1.0.0",
+  "ipyevents>=2.0",
+  "ipywidgets>=8.1",
+  "mne-connectivity>=0.7",
+  "neurodsp==2.2.0",
+  "numba>=0.58",
+  "pycatch22>=0.4.5",
+  "seaborn>=0.13",
+  "sparse>=0.15",
+  "statsmodels>=0.14",
+  "tabulate>=0.9",
+  "tensorpac>=0.6.5",
+]
+docs = [
+  "jupyter-book>=1.0.3",
+  "matplotlib>=3.8",
+  "myst-nb>=1.1",
+  "nbsphinx>=0.9",
+  "notebook>=7.2",
+  "pooch>=1.8",
+]
+test = [
+  "coverage[toml]>=7.6",
+  "nbmake>=1.5",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+]
+dev = [
+  "coverage[toml]>=7.6",
+  "dcor>=0.6",
+  "fooof==1.0.0",
+  "ipyevents>=2.0",
+  "ipywidgets>=8.1",
+  "jupyter-book>=1.0.3",
+  "matplotlib>=3.8",
+  "mne-connectivity>=0.7",
+  "myst-nb>=1.1",
+  "nbmake>=1.5",
+  "nbsphinx>=0.9",
+  "neurodsp==2.2.0",
+  "notebook>=7.2",
+  "nox>=2024.10.9",
+  "numba>=0.58",
+  "pooch>=1.8",
+  "pre-commit>=4.0",
+  "pycatch22>=0.4.5",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.7",
+  "seaborn>=0.13",
+  "sparse>=0.15",
+  "statsmodels>=0.14",
+  "tabulate>=0.9",
+  "tensorpac>=0.6.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/seqasim/LFPAnalysis"
+Documentation = "https://github.com/seqasim/LFPAnalysis/tree/main/LFPAnalysisBook"
+Repository = "https://github.com/seqasim/LFPAnalysis"
+Issues = "https://github.com/seqasim/LFPAnalysis/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["LFPAnalysis*"]
+
+[tool.setuptools.package-data]
+LFPAnalysis = ["YBA_ROI_labelled.xlsx"]
+
+[tool.ruff]
+line-length = 100
+src = ["LFPAnalysis", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

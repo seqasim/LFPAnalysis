@@ -1,81 +1,98 @@
 # LFPAnalysis
 
-This package was motivated by the need to get data from an .edf or .nlx file into an MNE structure as easily as possible, preprocess it according to best practices, sync it to behavioral data, and extract spectral information fom it. 
+LFPAnalysis is a Python toolkit for turning human intracranial and local field potential recordings into MNE-native objects, preprocessing them reproducibly, synchronizing them with behavioral data, and running common downstream analyses such as referencing, baselining, PSD/FOOOF, time-frequency analysis, connectivity, and statistics.
 
+## Why this repository exists
 
-The LFPAnalysis folder contains functions split into separate utility libraries depending on what they do. 
+LFPAnalysis is aimed at researchers who need a practical bridge from raw recording formats to analysis-ready MNE objects without rebuilding the same preprocessing stack for each project. The repository now separates a stable beginner-facing workflow from the lower-level utility modules used to support more custom pipelines.
 
-The scripts folder contains notebooks of examples using the functions to process our data. 
+## Features
 
-The "data" folder holds sample test data for people to play around with. 
+- Load EDF, Neuralynx, and MNE-native data into a consistent workflow.
+- Preprocess, reference, baseline, epoch, and synchronize signals with behavioral events.
+- Run spectral, oscillatory, connectivity, and statistics utilities built for iEEG/LFP workflows.
+- Learn the package through a structured Jupyter Book and smoke-test notebooks.
+- Reuse bundled sample data for quick validation and onboarding.
 
-Most of the Python packages you need here should come from the install for mne: https://mne.tools/stable/install/manual_install.html#manual-install
+## Quick install
 
-If missing anything, consult the environment.yml file, which has the fully detailed package information (though not all are necessary).
+### Standard pip install
 
-## Installation
-
-### Option 1: Using pip (Recommended)
-
-The easiest way to install LFPAnalysis is using pip:
+A PyPI release is planned. Until then, install directly from GitHub:
 
 ```bash
 pip install git+https://github.com/seqasim/LFPAnalysis.git
 ```
 
-Or if you want to install in development mode (editable):
+### Contributor install
 
 ```bash
 git clone https://github.com/seqasim/LFPAnalysis.git
 cd LFPAnalysis
-pip install -e .
+pip install -e .[dev]
 ```
 
-### Option 2: Using conda
-
-If you prefer using conda:
+### Conda install
 
 ```bash
-cd path_to_install
 git clone https://github.com/seqasim/LFPAnalysis.git
-conda env create -f environment_manual.yml
+cd LFPAnalysis
+conda env create -f environment.yml
 conda activate LFPAnalysis
 pip install -e .
 ```
 
-**Note:** You'll need to install the package itself after creating the conda environment using `pip install -e .` from the repository directory.
+## Five-minute quickstart
 
-## Updating
+```python
+from pathlib import Path
 
-### If installed via pip:
+from LFPAnalysis import (
+    ArtifactConfig,
+    BaselineConfig,
+    EpochConfig,
+    LoadConfig,
+    PipelineConfig,
+    ReferenceConfig,
+    SpectralConfig,
+    run_pipeline,
+)
 
-```bash
-pip install --upgrade --force-reinstall git+https://github.com/seqasim/LFPAnalysis.git
+root = Path("data")
+config = PipelineConfig(
+    load=LoadConfig(path=root / "sample_ieeg.fif", file_format="mne"),
+    reference=ReferenceConfig(method="none"),
+    artifact=ArtifactConfig(methods=["none"]),
+    baseline=BaselineConfig(mode="zscore"),
+    epoch=EpochConfig(enabled=False),
+    spectral=SpectralConfig(enabled=False),
+)
+result = run_pipeline(config)
+print(result.raw.info["sfreq"])
 ```
 
-### If installed from source (git clone):
+## Supported inputs and outputs
 
-```bash
-cd path_to_install/LFPAnalysis
-git pull
-pip install -e .  # Reinstall to pick up changes
-```
+### Inputs
 
-## Testing
+- EDF recordings
+- Neuralynx `.ncs` and `.nev` recordings
+- MNE `Raw` or `Epochs` objects
+- Electrode metadata in CSV or XLSX format
 
-To run the test suite, first make sure you have the package installed and pytest available:
+### Outputs
 
-```bash
-pip install pytest
-pytest tests/
-```
+- MNE `Raw` and `Epochs` objects
+- pandas tables for artifacts and baselining summaries
+- spectral and connectivity summary objects from analysis workflows
 
-Or run with more verbose output:
+## Documentation
 
-```bash
-pytest tests/ -v
-```
+The canonical onboarding path is the `LFPAnalysisBook/` directory. It covers installation, data contracts, quickstarts, preprocessing choices, artifact handling, baselining, connectivity, statistics, and troubleshooting.
 
-## Where to start? 
+## Contributing and citation
 
-In the scripts folder you'll find some Jupyter notebooks. Condensed Notebook.ipynb is the best starting point! As I run through different analyses I'll add them into their own notebooks.
+- Contribution guide: `CONTRIBUTING.md`
+- Security policy: `SECURITY.md`
+- Citation metadata: `CITATION.cff`
+- Changelog: `CHANGELOG.md`

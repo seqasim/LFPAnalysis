@@ -48,3 +48,15 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+
+# OS files
+.DS_Store
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.nox/
+.venv/
+
+# Documentation builds
+LFPAnalysisBook/_build/
