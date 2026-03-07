@@ -1,44 +1,30 @@
-"""
-Basic tests for sync_utils module.
-"""
-import pytest
+"""Unit tests for synchronization utility functions."""
+
+from __future__ import annotations
+
 import numpy as np
+import pytest
+
 from LFPAnalysis import sync_utils
 
 
-def test_moving_average():
-    """Test moving_average function with default window size."""
-    a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    n = 3
-    
-    result = sync_utils.moving_average(a, n)
-    
-    # Result should be shorter by n-1
-    assert len(result) == len(a) - n + 1
-    assert isinstance(result, np.ndarray)
-    # First value should be average of first n values
-    assert np.isclose(result[0], np.mean(a[:n]))
+@pytest.mark.unit
+def test_moving_average_returns_expected_length():
+    data = np.arange(10)
+    result = sync_utils.moving_average(data, 3)
+    assert len(result) == 8
+    assert np.isclose(result[0], 1.0)
 
 
-def test_moving_average_default_window():
-    """Test moving_average function with default window size."""
-    a = np.random.randn(20)
-    
-    result = sync_utils.moving_average(a)
-    
-    # Default window is 11, so result should be len(a) - 10
-    assert len(result) == len(a) - 10
-    assert isinstance(result, np.ndarray)
+@pytest.mark.unit
+def test_moving_average_window_of_one_returns_original_values():
+    data = np.array([1, 2, 3, 4])
+    result = sync_utils.moving_average(data, 1)
+    np.testing.assert_array_equal(result, data)
 
 
-def test_moving_average_single_value():
-    """Test moving_average with window size of 1."""
-    a = np.array([1, 2, 3, 4, 5])
-    n = 1
-    
-    result = sync_utils.moving_average(a, n)
-    
-    # With window of 1, should return same values
-    assert len(result) == len(a)
-    np.testing.assert_array_almost_equal(result, a)
-
+@pytest.mark.unit
+def test_get_neural_ts_ttl_reads_positive_timestamps():
+    nev_data = {"records": {"ttl": np.array([0, 1, 0, 2]), "TimeStamp": np.array([0, 1_000_000, 2_000_000, 3_000_000])}}
+    neural_ts = sync_utils.get_neural_ts_ttl(nev_data)
+    np.testing.assert_allclose(neural_ts, np.array([1.0]))

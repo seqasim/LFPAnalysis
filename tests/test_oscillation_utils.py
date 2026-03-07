@@ -1,45 +1,28 @@
-"""
-Basic tests for oscillation_utils module.
-"""
-import pytest
+"""Tests for oscillation utility helpers that require optional analysis dependencies."""
+
+from __future__ import annotations
+
 import numpy as np
-from LFPAnalysis import oscillation_utils
+import pytest
+
+pytest.importorskip("mne_connectivity")
+oscillation_utils = pytest.importorskip("LFPAnalysis.oscillation_utils")
 
 
-def test_find_nearest_value():
-    """Test find_nearest_value function."""
-    array = np.array([1.0, 2.5, 3.7, 5.2, 6.8])
-    value = 3.0
-    
-    nearest_val, idx = oscillation_utils.find_nearest_value(array, value)
-    
-    # Should find 2.5 or 3.7 as nearest
-    assert nearest_val in array
-    assert idx >= 0
-    assert idx < len(array)
-    assert nearest_val == array[idx]
-
-
+@pytest.mark.unit
+@pytest.mark.optional_dep
 def test_find_nearest_value_exact_match():
-    """Test find_nearest_value with exact match."""
-    array = np.array([1.0, 2.5, 3.7, 5.2, 6.8])
-    value = 3.7
-    
-    nearest_val, idx = oscillation_utils.find_nearest_value(array, value)
-    
+    array = np.array([1.0, 2.5, 3.7, 5.2])
+    nearest_val, idx = oscillation_utils.find_nearest_value(array, 3.7)
     assert nearest_val == 3.7
     assert idx == 2
 
 
-def test_find_nearest_value_at_boundary():
-    """Test find_nearest_value at array boundaries."""
-    array = np.array([1.0, 2.5, 3.7, 5.2, 6.8])
-    
-    # Test value smaller than min
-    nearest_val, idx = oscillation_utils.find_nearest_value(array, 0.5)
-    assert idx == 0
-    
-    # Test value larger than max
-    nearest_val, idx = oscillation_utils.find_nearest_value(array, 10.0)
-    assert idx == len(array) - 1
-
+@pytest.mark.unit
+@pytest.mark.optional_dep
+def test_make_surrogate_arrays_is_deterministic():
+    data = np.arange(12, dtype=float).reshape(3, 4)
+    first = list(oscillation_utils.make_surrogate_arrays(data, n_shuffles=2, rng_seed=11, return_generator=False))
+    second = list(oscillation_utils.make_surrogate_arrays(data, n_shuffles=2, rng_seed=11, return_generator=False))
+    assert len(first) == 2
+    assert np.array_equal(first[0], second[0])

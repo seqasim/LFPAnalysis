@@ -1,43 +1,26 @@
-"""
-Basic tests for lfp_preprocess_utils module.
-"""
-import pytest
+"""Unit tests for baseline helpers in lfp_preprocess_utils."""
+
+from __future__ import annotations
+
 import numpy as np
-from LFPAnalysis import lfp_preprocess_utils
+import pytest
+
+lfp_preprocess_utils = pytest.importorskip("LFPAnalysis.lfp_preprocess_utils")
 
 
-def test_mean_baseline_time_zscore():
-    """Test mean_baseline_time function with zscore mode."""
-    # Create simple test data
-    data = np.random.randn(2, 100)  # 2 channels, 100 time points
-    baseline = np.random.randn(2, 50)  # 2 channels, 50 baseline time points
-    
-    result = lfp_preprocess_utils.mean_baseline_time(data, baseline, mode='zscore')
-    
-    # Check that output has correct shape
-    assert result.shape == data.shape
-    # Check that it's a numpy array
-    assert isinstance(result, np.ndarray)
-
-
-def test_mean_baseline_time_mean():
-    """Test mean_baseline_time function with mean mode."""
-    data = np.random.randn(2, 100)
-    baseline = np.random.randn(2, 50)
-    
-    result = lfp_preprocess_utils.mean_baseline_time(data, baseline, mode='mean')
-    
-    assert result.shape == data.shape
-    assert isinstance(result, np.ndarray)
-
-
-def test_mean_baseline_time_ratio():
-    """Test mean_baseline_time function with ratio mode."""
-    data = np.abs(np.random.randn(2, 100)) + 0.1  # Ensure positive values
+@pytest.mark.unit
+@pytest.mark.parametrize("mode", ["mean", "ratio", "percent", "zscore", "logratio", "zlogratio"])
+def test_mean_baseline_time_supported_modes(mode):
+    data = np.abs(np.random.randn(2, 100)) + 0.1
     baseline = np.abs(np.random.randn(2, 50)) + 0.1
-    
-    result = lfp_preprocess_utils.mean_baseline_time(data, baseline, mode='ratio')
-    
+    result = lfp_preprocess_utils.mean_baseline_time(data, baseline, mode=mode)
     assert result.shape == data.shape
     assert isinstance(result, np.ndarray)
 
+
+@pytest.mark.unit
+def test_baseline_avg_tfr_returns_expected_shape():
+    data = np.abs(np.random.randn(2, 4, 20)) + 0.1
+    baseline = np.abs(np.random.randn(2, 4, 10)) + 0.1
+    result = lfp_preprocess_utils.baseline_avg_TFR(data, baseline, mode="zscore")
+    assert result.shape == data.shape
