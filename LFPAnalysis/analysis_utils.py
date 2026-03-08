@@ -3,6 +3,7 @@ import seaborn as sns
 import numpy as np
 import scipy as sp
 import math
+from functools import lru_cache
 import pandas as pd
 import mne
 import fooof
@@ -14,6 +15,27 @@ import pkg_resources
 
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
+@lru_cache(maxsize=1)
+def _load_yba_roi_labels() -> pd.DataFrame:
+    """Load and normalize the packaged YBA ROI lookup table once."""
+
+    data_dir = pkg_resources.resource_filename('LFPAnalysis', '../data')
+    file_path = os.path.join(data_dir, 'YBA_ROI_labelled.xlsx')
+    yba_roi_labels = pd.read_excel(file_path)
+    yba_roi_labels['Long.name'] = (
+        yba_roi_labels['Long.name'].astype(str).str.lower().str.replace(" ", "", regex=False)
+    )
+    return yba_roi_labels
+
+
+def _normalize_roi_label(value):
+    """Normalize electrode label text for atlas lookups."""
+
+    if pd.isna(value):
+        return np.nan
+    return str(value).lower().replace(" ", "").strip()
+
+
 def select_rois_picks(elec_data: pd.DataFrame, chan_name: str, manual_col: str = 'collapsed_manual'):
     """Select ROI for specific channel.
     
@@ -32,46 +54,42 @@ def select_rois_picks(elec_data: pd.DataFrame, chan_name: str, manual_col: str =
         ROI label.
     """
 
-    # Load the YBA ROI labels, custom assigned by Salman: 
-    # file_path = pkg_resources.resource_filename('LFPAnalysis', 'data/YBA_ROI_labelled.xlsx')
-    # Get the path to the data directory
-    data_dir = pkg_resources.resource_filename('LFPAnalysis', '../data')
+    yba_roi_labels = _load_yba_roi_labels()
 
-    # Construct the full path to your file
-    file_path = os.path.join(data_dir, 'YBA_ROI_labelled.xlsx')
+    chan_rows = elec_data.loc[elec_data.label == chan_name]
+    if chan_rows.empty:
+        raise KeyError(f"Channel {chan_name!r} was not found in electrode metadata.")
 
-    print(file_path)
-    YBA_ROI_labels = pd.read_excel(file_path)
-    YBA_ROI_labels['Long.name'] = YBA_ROI_labels['Long.name'].str.lower().str.replace(" ", "")
+    chan_row = chan_rows.iloc[0]
 
     roi = np.nan
-    NMM_label = elec_data[elec_data.label==chan_name].NMM.str.lower().str.strip()
-    BN246_label = elec_data[elec_data.label==chan_name].BN246.str.lower().str.strip()
+    nmm_label = _normalize_roi_label(chan_row.get('NMM'))
+    bn246_label = _normalize_roi_label(chan_row.get('BN246'))
 
     # Account for individual differences in labelling: 
-    YBA_label = elec_data[elec_data.label==chan_name].YBA_1.str.lower().str.replace(" ", "")
-    manual_label = elec_data[elec_data.label==chan_name][manual_col].str.lower().str.replace(" ", "")
+    yba_label = _normalize_roi_label(chan_row.get('YBA_1'))
+    manual_label = _normalize_roi_label(chan_row.get(manual_col))
 
     # Only NMM assigns entorhinal cortex 
-    if NMM_label.str.contains('entorhinal').iloc[0]:
+    if isinstance(nmm_label, str) and 'entorhinal' in nmm_label:
         roi = 'EC'
 
     # First priority: Use YBA labels if there is no manual label
-    if pd.isna(manual_label).iloc[0]:
+    if pd.isna(manual_label):
         try:
-            roi = YBA_ROI_labels[YBA_ROI_labels['Long.name']==YBA_label.values[0]].Custom.values[0]
+            roi = yba_roi_labels.loc[yba_roi_labels['Long.name'] == yba_label, 'Custom'].iat[0]
         except IndexError:
             # This is probably white matter or out of brain, but not manually labelled as such
             roi = np.nan
     else:
         # Now look at the manual labels: 
-        if YBA_label.str.contains('unknown').iloc[0]:
+        if isinstance(yba_label, str) and 'unknown' in yba_label:
             # prioritize thalamus labels! Which are not present in YBA for some reason
-            if (manual_label.str.contains('thalamus').iloc[0]):
+            if 'thalamus' in manual_label:
                 roi = 'THAL'
             else:
                 try:
-                    roi = YBA_ROI_labels[YBA_ROI_labels['Long.name']==manual_label.values[0]].Custom.values[0]
+                    roi = yba_roi_labels.loc[yba_roi_labels['Long.name'] == manual_label, 'Custom'].iat[0]
                 except IndexError: 
                     # This is probably white matter or out of brain, and manually labelled as such
                     roi = np.nan
@@ -79,36 +97,36 @@ def select_rois_picks(elec_data: pd.DataFrame, chan_name: str, manual_col: str =
     # Next  use BN246 labels if still unlabeled
     if pd.isna(roi):
         # Just use the dumb BN246 label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
-        if (BN246_label.str.contains('hipp').iloc[0]):
+        if isinstance(bn246_label, str) and 'hipp' in bn246_label:
             roi = 'HPC'
-        elif (BN246_label.str.contains('amyg').iloc[0]):
+        elif isinstance(bn246_label, str) and 'amyg' in bn246_label:
             roi = 'AMY'
-        elif (BN246_label.str.contains('ins').iloc[0]):
+        elif isinstance(bn246_label, str) and 'ins' in bn246_label:
             roi = 'INS'
-        elif (BN246_label.str.contains('ifg').iloc[0]):
+        elif isinstance(bn246_label, str) and 'ifg' in bn246_label:
             roi = 'IFG'
-        elif (BN246_label.str.contains('org').iloc[0]):
+        elif isinstance(bn246_label, str) and 'org' in bn246_label:
             roi = 'OFC' 
-        elif (BN246_label.str.contains('mfg').iloc[0]):
+        elif isinstance(bn246_label, str) and 'mfg' in bn246_label:
             roi = 'dlPFC'
-        elif (BN246_label.str.contains('sfg').iloc[0]):
+        elif isinstance(bn246_label, str) and 'sfg' in bn246_label:
             roi = 'dmPFC'
 
     if pd.isna(roi):
         # Just use the dumb NMM label from LeGui, stripping out the hemisphere which we don't care too much about at the moment
-        if (NMM_label.str.contains('hippocampus').iloc[0]):
+        if isinstance(nmm_label, str) and 'hippocampus' in nmm_label:
             roi = 'HPC'
-        if (NMM_label.str.contains('amygdala').iloc[0]):
+        if isinstance(nmm_label, str) and 'amygdala' in nmm_label:
             roi = 'AMY'
-        if (NMM_label.str.contains('acgc').iloc[0]):
+        if isinstance(nmm_label, str) and 'acgc' in nmm_label:
             roi = 'ACC'
-        if (NMM_label.str.contains('mcgc').iloc[0]):
+        if isinstance(nmm_label, str) and 'mcgc' in nmm_label:
             roi = 'MCC'
-        if (NMM_label.str.contains('ofc').iloc[0]):
+        if isinstance(nmm_label, str) and 'ofc' in nmm_label:
             roi = 'OFC'
-        if (NMM_label.str.contains('mfg').iloc[0]):
+        if isinstance(nmm_label, str) and 'mfg' in nmm_label:
             roi = 'dlPFC'
-        if (NMM_label.str.contains('sfg').iloc[0]):
+        if isinstance(nmm_label, str) and 'sfg' in nmm_label:
             roi = 'dmPFC'  
 
     if pd.isna(roi):
@@ -251,6 +269,38 @@ def plot_TFR(data: np.ndarray, freqs: np.ndarray, pre_win: float, post_win: floa
 
     return f
 
+
+def _rolling_rms_last_axis(data: np.ndarray, window_samples: int) -> np.ndarray:
+    """Compute a trailing-window RMS along the last axis with min_periods=1 semantics."""
+
+    if window_samples < 1:
+        raise ValueError("window_samples must be at least 1")
+
+    squared = np.square(np.asarray(data, dtype=float))
+    cumulative = np.cumsum(squared, axis=-1)
+    rolling_sum = cumulative.copy()
+    if window_samples < squared.shape[-1]:
+        rolling_sum[..., window_samples:] = (
+            cumulative[..., window_samples:] - cumulative[..., :-window_samples]
+        )
+
+    window_denominator = np.minimum(
+        np.arange(1, squared.shape[-1] + 1, dtype=float),
+        float(window_samples),
+    )
+    return np.sqrt(rolling_sum / window_denominator)
+
+
+def _find_segments_above_threshold(mask: np.ndarray, min_length_samples: float, sfreq: float):
+    """Convert a 1D boolean mask into start/stop/duration tuples."""
+
+    padded_mask = np.pad(mask.astype(np.int8), (1, 1))
+    starts = np.flatnonzero(np.diff(padded_mask) == 1)
+    stops = np.flatnonzero(np.diff(padded_mask) == -1)
+    lengths = stops - starts
+    valid = lengths > min_length_samples
+    return list(zip(starts[valid], stops[valid], lengths[valid] / sfreq))
+
 def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70, 200), smooth_win_s: float = 0.02, sd_upper_cutoff: float = 6, sd_lower_cutoff: float = 1):
     """Detect fast burst events in HFA band.
     
@@ -282,30 +332,13 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
     # Step 1: band-pass filter the data
     filtered_data = mne_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
 
-    # Create an empty array to store the rolling RMS for each trial and time series
-    rolling_rms_array = np.zeros_like(filtered_data._data)
-
-    # Loop over each trial and each time series and calculate the rolling RMS
-    for i in range(filtered_data._data.shape[0]):
-        for j in range(filtered_data._data.shape[1]):
-            column_values = ['signal'] 
-            df = pd.DataFrame(data = filtered_data._data[i, j, :], columns = column_values)
-            smoothed_data = df['signal'].pow(2).rolling(round(smooth_win_s * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt)
-            rolling_rms_array[i, j, :] = smoothed_data.values
+    smooth_win_samples = max(1, round(smooth_win_s * mne_data.info['sfreq']))
+    rolling_rms_array = _rolling_rms_last_axis(filtered_data._data, smooth_win_samples)
 
     # Step 2: band-pass filter the baseline data
     filtered_baseline = baseline_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
 
-    # Create an empty array to store the rolling RMS for each trial and time series
-    rolling_rms_baseline = np.zeros_like(filtered_baseline._data)
-
-    # Loop over each trial and each time series and calculate the rolling RMS
-    for i in range(filtered_baseline._data.shape[0]):
-        for j in range(filtered_baseline._data.shape[1]):
-            column_values = ['signal'] 
-            df = pd.DataFrame(data = filtered_baseline._data[i, j, :], columns = column_values)
-            smoothed_data = df['signal'].pow(2).rolling(round(smooth_win_s * mne_data.info['sfreq']), min_periods=1).mean().apply(np.sqrt)
-            rolling_rms_baseline[i, j, :] = smoothed_data.values
+    rolling_rms_baseline = _rolling_rms_last_axis(filtered_baseline._data, smooth_win_samples)
 
     # calculate mean and standard deviation of smoothed rms data, across all epochs and timepoints
     smoothed_mean = rolling_rms_baseline.mean()
@@ -315,39 +348,24 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
     lower_cutoff = smoothed_mean + sd_lower_cutoff * smoothed_sd
     upper_cutoff = smoothed_mean + sd_upper_cutoff * smoothed_sd
 
-    burst_events_index = np.asarray(np.where((rolling_rms_array > lower_cutoff) & (rolling_rms_array < upper_cutoff)))
+    burst_mask = (rolling_rms_array > lower_cutoff) & (rolling_rms_array < upper_cutoff)
 
     # Step 4: detected burst events with a duration shorter than 3 cycles of the lower bound frequency or longer than 500 ms, were rejected.
     min_length_burst_event = min_burst_s * mne_data.info['sfreq'] # add an input parameter for duration of burst event
 
     burst_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
+    event_indices = np.unique(np.where(burst_mask)[0])
+    channel_indices = np.unique(np.where(burst_mask)[1])
 
-    for ch_ in np.unique(burst_events_index[1]):
-        burst_dict = {x:np.nan for x in np.unique(burst_events_index[0])}
-        for ev in np.unique(burst_events_index[0]):
-            # let's index the bursts for this ch_ and this ev 
-            ev_index = np.where(burst_events_index[0] == ev)
-            ch_index = np.where(burst_events_index[1] == ch_)
-            overlapping_index = np.intersect1d(ev_index, ch_index)
-            burst_ch_ev = burst_events_index[-1][overlapping_index]
-
-            burst_events_differences = np.array([0] + np.diff(burst_ch_ev))
-
-            # get the lengths and indices of consecutive 1s (this is how we know that they are sequential samples)
-            _, idx, counts = np.unique(np.cumsum(1-burst_events_differences)*burst_events_differences, return_index=True, return_counts=True)    
-
-            burst_events_index_correct_time = idx[np.where((counts > min_length_burst_event))] # index of burst events that reach criterion
-            burst_events_length_samples = counts[np.where((counts > min_length_burst_event))]  # length in samples of burst events that reach criterion
-            burst_end_index = burst_events_index_correct_time + burst_events_length_samples
-            burst_events_length_seconds = burst_events_length_samples/mne_data.info['sfreq'] # length in seconds of burst events that reach criterion
-
-            # # zip the three lists using zip() function --> burst_results is a list of tuples containing the starting index of each burst, the ending index of each burst, and the length of each burst in seconds
-            burst_results = list(zip(burst_ch_ev[burst_events_index_correct_time],
-                                    burst_ch_ev[burst_end_index],
-                                    burst_events_length_seconds))
-            num_burst = len(burst_results) # this is the number of bursts
-            burst_dict[ev] = burst_results
-        burst_samps_dict[mne_data.ch_names[ch_]]= burst_dict
+    for ch_idx in channel_indices:
+        burst_dict = {event_idx: np.nan for event_idx in event_indices}
+        for event_idx in event_indices:
+            burst_dict[event_idx] = _find_segments_above_threshold(
+                burst_mask[event_idx, ch_idx, :],
+                min_length_burst_event,
+                mne_data.info['sfreq'],
+            )
+        burst_samps_dict[mne_data.ch_names[ch_idx]] = burst_dict
 
         # if plot:
         # # plot the burst using span for each trial and channel
