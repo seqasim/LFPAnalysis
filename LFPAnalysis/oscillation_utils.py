@@ -160,6 +160,18 @@ def make_surrogate_data(
     return surrogate
 
 
+def _swap_time_blocks_batch(data: np.ndarray, cutpoints: np.ndarray) -> np.ndarray:
+    """Vectorized block swap along the last axis for one cutpoint per series."""
+
+    if data.ndim < 2:
+        raise ValueError("data must have at least one leading dimension and one time dimension")
+    if cutpoints.ndim != data.ndim - 1:
+        raise ValueError("cutpoints must match the leading dimensions of data")
+
+    time_indices = (np.arange(data.shape[-1]) + cutpoints[..., None]) % data.shape[-1]
+    return np.take_along_axis(data, time_indices, axis=-1)
+
+
 def _shuffle_epochs(
     data: Union[mne.Epochs, EpochsTFR], 
     n_shuffles: int, 
@@ -201,19 +213,22 @@ def _shuffle_epochs(
     rng = np.random.default_rng(rng_seed)
     
     for _ in range(n_shuffles):
-        surr_arr = np.zeros_like(data_arr)
-        
-        for ch_idx in range(n_channels):
-            # Generate permutation indices for this channel
-            perm_idx = rng.permutation(n_epochs)
-            
-            if is_tfr:
-                # 4D: (n_epochs, n_channels, n_freqs, n_times)
-                # Apply same permutation across all frequencies
-                surr_arr[:, ch_idx, :, :] = data_arr[perm_idx, ch_idx, :, :]
-            else:
-                # 3D: (n_epochs, n_channels, n_times)
-                surr_arr[:, ch_idx, :] = data_arr[perm_idx, ch_idx, :]
+        perm_idx = rng.random((n_channels, n_epochs)).argsort(axis=1)
+
+        if is_tfr:
+            channel_major = np.moveaxis(data_arr, 1, 0)
+            surr_arr = np.moveaxis(
+                np.take_along_axis(channel_major, perm_idx[:, :, None, None], axis=1),
+                0,
+                1,
+            )
+        else:
+            channel_major = np.moveaxis(data_arr, 1, 0)
+            surr_arr = np.moveaxis(
+                np.take_along_axis(channel_major, perm_idx[:, :, None], axis=1),
+                0,
+                1,
+            )
         
         if is_tfr:
             # Use explicit keyword arguments for EpochsTFRArray
@@ -276,26 +291,12 @@ def _shuffle_within_epochs(
     rng = np.random.default_rng(rng_seed)
     
     for _ in range(n_shuffles):
-        surr_arr = np.zeros_like(data_arr)
         # One cutpoint per epoch/channel (same across frequencies)
         cutpoints = rng.integers(1, n_times, (n_epochs, n_channels))
-        
-        for ev_idx in range(n_epochs):
-            for ch_idx in range(n_channels):
-                cut = cutpoints[ev_idx, ch_idx]
-                
-                if is_tfr:
-                    # 4D: Apply same cutpoint across all frequencies
-                    n_freqs = data_arr.shape[2]
-                    for freq_idx in range(n_freqs):
-                        surr_arr[ev_idx, ch_idx, freq_idx, :] = _swap_time_blocks(
-                            data_arr[ev_idx, ch_idx, freq_idx, :], cut
-                        )
-                else:
-                    # 3D: Single time series
-                    surr_arr[ev_idx, ch_idx, :] = _swap_time_blocks(
-                        data_arr[ev_idx, ch_idx, :], cut
-                    )
+        if is_tfr:
+            surr_arr = _swap_time_blocks_batch(data_arr, cutpoints[:, :, None])
+        else:
+            surr_arr = _swap_time_blocks_batch(data_arr, cutpoints)
         
         if is_tfr:
             # Use explicit keyword arguments for EpochsTFRArray
@@ -393,13 +394,8 @@ def make_surrogate_arrays(
                 
             elif method == 'swap_time_blocks':
                 # Swap time blocks at random cutpoint for each trial
-                surr_arr = np.zeros_like(data)
                 cutpoints = rng.integers(1, n_times, n_trials)
-                for trial_idx in range(n_trials):
-                    surr_arr[trial_idx, :] = _swap_time_blocks(
-                        data[trial_idx, :], cutpoints[trial_idx]
-                    )
-                yield surr_arr
+                yield _swap_time_blocks_batch(data, cutpoints)
             else:
                 raise ValueError(f"Unknown method: {method}")
     
@@ -430,14 +426,8 @@ def _compute_surrogate_te_single(
         perm_idx = rng.permutation(n_trials)
         x_surr = x_data[perm_idx, :]
     elif surr_method == 'swap_time_blocks':
-        x_surr = np.zeros_like(x_data)
         cutpoints = rng.integers(1, n_times, n_trials)
-        for trial_idx in range(n_trials):
-            cut = cutpoints[trial_idx]
-            x_surr[trial_idx, :] = np.concatenate([
-                x_data[trial_idx, cut:], 
-                x_data[trial_idx, :cut]
-            ])
+        x_surr = _swap_time_blocks_batch(x_data, cutpoints)
     else:
         raise ValueError(f"Unknown method: {surr_method}")
     
