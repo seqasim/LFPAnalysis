@@ -10,6 +10,7 @@ import os
 import warnings
 import numpy as np
 import datetime
+from pathlib import Path
 
 HEADER_LENGTH = 16 * 1024  # 16 kilobytes of header
 
@@ -48,6 +49,43 @@ NEV_RECORD = np.dtype([('stx',           np.int16),      # Reserved
 VOLT_SCALING = (1, u'V')
 MILLIVOLT_SCALING = (1000, u'mV')
 MICROVOLT_SCALING = (1000000, u'µV')
+
+
+def _normalize_name_set(names):
+    """Normalize a sequence of channel names to a lowercase lookup set."""
+
+    return {str(name).lower() for name in (names or [])}
+
+
+def _normalize_channel_name(chan_path: str) -> str:
+    """Extract a canonical lowercase channel name from an NCS filepath."""
+
+    chan_name = Path(chan_path).stem.lower()
+    return chan_name.split('_', 1)[0]
+
+
+def _infer_channel_type(
+    chan_name: str,
+    eeg_names,
+    resp_names,
+    ekg_names,
+    seeg_names,
+    include_micros: bool,
+):
+    """Infer a single MNE channel type for a Neuralynx channel."""
+
+    if chan_name in eeg_names:
+        return 'eeg'
+    if chan_name in resp_names:
+        return 'bio'
+    if chan_name in ekg_names or ('ekg' in chan_name and not ekg_names):
+        return 'ecg'
+    if seeg_names:
+        if chan_name in seeg_names:
+            return 'seeg'
+        if chan_name.startswith('u') or chan_name.startswith('pde'):
+            return 'seeg' if include_micros else None
+    return 'misc'
 
 
 def read_header(fid):
@@ -364,61 +402,48 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
         Tuple containing (signals, srs, ch_name, ch_type).
     """
 
+    eeg_name_set = _normalize_name_set(eeg_names)
+    resp_name_set = _normalize_name_set(resp_names)
+    ekg_name_set = _normalize_name_set(ekg_names)
+    seeg_name_set = _normalize_name_set(seeg_names)
+    drop_name_set = _normalize_name_set(drop_names)
+
     signals = [] 
     srs = [] 
     ch_name = [] 
     ch_type = []
 
     for chan_path in ncs_files:
-        chan_name = chan_path.split('/')[-1].replace('.ncs','').lower()
-        # strip the file type off the end if needed 
-        if '_' in chan_name:
-            chan_name = chan_name.split('_')[0].lower()
+        chan_name = _normalize_channel_name(chan_path)
+
+        if chan_name in drop_name_set:
+            warnings.warn(
+                f'Channel selected to skip (bad or empty) {chan_path}',
+                stacklevel=2,
+            )
+            continue
+
+        channel_type = _infer_channel_type(
+            chan_name,
+            eeg_name_set,
+            resp_name_set,
+            ekg_name_set,
+            seeg_name_set,
+            include_micros,
+        )
+        if channel_type is None:
+            continue
+
         try:
             fdata = load_ncs(chan_path)
         except IndexError: 
-            print(f'No data in channel {chan_path}')
+            warnings.warn(f'No data in channel {chan_path}', stacklevel=2)
             continue
-        if drop_names: 
-            drop_names = [x.lower() for x in drop_names]
-            if chan_name in drop_names:
-                print(f'Channel selected to skip (bad or empty) {chan_path}')
-                continue
-        #  scalp eeg
-        if eeg_names:
-            eeg_names = [x.lower() for x in eeg_names]
-            if chan_name in eeg_names:
-                ch_type.append('eeg')
-        if resp_names:
-            resp_names = [x.lower() for x in resp_names]
-            if chan_name in resp_names:
-                ch_type.append('bio')
-        if ekg_names:
-            ekg_names = [x.lower() for x in ekg_names]
-            if (chan_name in ekg_names): 
-                ch_type.append('ecg') 
-        else:
-            ekg_names = []
-            if 'ekg' in chan_name:
-                ch_type.append('ecg')
-                ekg_names.append(chan_name)
-        if seeg_names: 
-            seeg_names = [x.lower() for x in seeg_names]
-            if chan_name in seeg_names:
-                ch_type.append('seeg')  
-            elif (chan_name[0] == 'u') | (chan_name[:3] == 'pde'):
-                # microwire data
-                if include_micros==True:
-                    ch_type.append('seeg')  
-                else: # skip
-                    continue
+
         signals.append(fdata['data'])
         srs.append(fdata['sampling_rate'])
         ch_name.append(chan_name)
-        if len(ch_type) < len(ch_name):
-            # This means we were unable to assign tha channel a type
-            ch_type.append('misc')
-            print(f'Unidentified data type in {chan_name}')
+        ch_type.append(channel_type)
 
     return signals, srs, ch_name, ch_type
 
