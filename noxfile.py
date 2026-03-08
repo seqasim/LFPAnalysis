@@ -22,6 +22,8 @@ def tests(session: nox.Session) -> None:
         "-m",
         "not notebook and not slow",
         "--cov=LFPAnalysis.workflow",
+        "--cov=LFPAnalysis.builders",
+        "--cov=LFPAnalysis.legacy",
         "--cov-fail-under=80",
     )
 
@@ -40,4 +42,6 @@ def notebooks(session: nox.Session) -> None:
         "--nbmake",
         "--nbmake-timeout=1200",
         "LFPAnalysisBook/smoke-tests",
+        "LFPAnalysisBook/worked-examples/01_first_import_and_load.ipynb",
+        "LFPAnalysisBook/worked-examples/07_migrating_condensed_notebook.ipynb",
     )

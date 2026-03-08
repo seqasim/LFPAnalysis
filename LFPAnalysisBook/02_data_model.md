@@ -1,41 +1,45 @@
-# Data Model, Supported Files, and Sample Data
+# What Files You Need Before Starting
 
-## Primary data model
+## What this step is for
 
-The stable workflow API is built around MNE-Python objects.
+This chapter explains the repository's input contract so you know which files must exist before a workflow can succeed.
 
-- Continuous recordings are represented as `mne.io.Raw`
-- Epoched recordings are represented as `mne.Epochs`
-- Summary tables are returned as pandas `DataFrame` objects
+## When you should use it
 
-## Supported input formats
+Read this before trying to reference channels, epoch events, or run analysis notebooks on your own dataset.
 
-- EDF files
-- Neuralynx `.ncs` collections and `.nev` event files
-- Existing MNE `.fif` files
-- Electrode metadata in CSV or XLSX form
+## Required inputs
 
-## Electrode metadata contract
+- electrophysiology data in EDF, Neuralynx, or MNE FIF form
+- optional electrode metadata in CSV or XLSX form
+- optional behavioral event timestamps in seconds
 
-### Required columns
+## Minimal example
 
-- `label`
+```python
+from LFPAnalysis import load_electrode_metadata
 
-### Common optional columns
+electrodes = load_electrode_metadata("../tests/data/electrodes.csv")
+print(electrodes.columns)
+```
 
-- `x`, `y`, `z`
-- `NMM`
-- `BN246`
-- `YBA_1`
-- `collapsed_manual`
+## How to inspect the result
 
-## Sample data in this repository
+Confirm that your table includes `label` and that channel names match the electrophysiology file or can be translated deterministically.
 
-The `data/` directory includes small FIF and table assets that support smoke tests and examples. Use them to validate your environment before pointing the workflow at patient data.
+## Common mistakes
 
-## File-format preparation guide
+- mixing milliseconds and seconds in behavioral timestamps
+- assuming the package performs electrode localization itself
+- treating atlas columns as required when only `label` is required for validation
 
-- Keep one recording session per logical dataset directory.
-- Store behavioral timestamps separately from electrophysiology files.
-- Normalize electrode labels early so they match recording channel names.
-- Keep raw files immutable; save processed outputs as new files.
+## Old-to-new translation note
+
+The old notebooks often encoded file assumptions inline. The refactored repo makes the file contract explicit and validates it before running the rest of the workflow.
+
+## Supported inputs and outputs
+
+- inputs: EDF, Neuralynx `.ncs`, MNE FIF, electrode CSV/XLSX, behavior timestamps
+- outputs: MNE `Raw`, MNE `Epochs`, artifact tables, baseline summaries, spectral outputs
+
+Next step: {doc}`03_first_load`

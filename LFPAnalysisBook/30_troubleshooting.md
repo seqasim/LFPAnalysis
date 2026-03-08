@@ -1,0 +1,36 @@
+# Troubleshooting and FAQ
+
+## Missing dependencies
+
+If you see missing-module errors for `mne`, `fooof`, or `mne_connectivity`, install the relevant extras instead of guessing.
+
+- beginner path: `pip install -e .[dev]`
+- analysis-heavy path: `pip install -e .[analysis]`
+
+## Mismatched channel labels
+
+If referencing fails, validate the electrode table first. Most label problems are metadata problems, not signal problems.
+
+## Reference method confusion
+
+Use `none` for first-load inspection, `bipolar` when you have ordered contacts, and `wm` when your lab already has a white-matter convention.
+
+## Baseline window confusion
+
+A baseline window must overlap the data you are baselining. If it does not, the stable API now fails clearly instead of silently guessing.
+
+## Why did this return empty tables?
+
+An empty artifact table usually means either the detector was `none` or the chosen detector did not find any events under the configured thresholds.
+
+## Why is there both a workflow API and legacy utilities?
+
+Because the repo is in a staged transition. The stable API exists for approachability and reproducibility. The legacy layer exists so existing users can translate workflows without rewriting everything at once.
+
+## Common mistakes
+
+- skipping the interface guide
+- reading advanced notebooks before succeeding with the first-load workflow
+- assuming a compatibility shim means the stable API already has feature parity
+
+Next step: revisit {doc}`00_interface_guide` if you still are not sure which surface to use.

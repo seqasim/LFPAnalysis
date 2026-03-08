@@ -1,29 +1,42 @@
 format: jb-book
 root: intro
 chapters:
+  - file: 00_interface_guide
   - file: 01_installation
   - file: 02_data_model
-  - file: 03_quickstart
+  - file: 03_first_load
     sections:
+      - file: worked-examples/01_first_import_and_load
       - file: smoke-tests/01_install_and_import
       - file: smoke-tests/02_load_sample_data
-  - file: 04_electrode_localization
-  - file: 05_referencing
-  - file: 06_artifact_detection
+  - file: 04_first_reference
     sections:
+      - file: worked-examples/02_first_preprocessing_run
       - file: smoke-tests/03_reference_and_artifacts
-  - file: 07_baselining
+  - file: 05_first_artifact_pass
+  - file: 06_first_baseline
+  - file: 07_first_event_locked_workflow
     sections:
+      - file: worked-examples/03_first_epoching_run
       - file: smoke-tests/04_baselining_and_epoching
-  - file: 08_synchronization_and_epoching
-  - file: 09_psd_and_fooof
+  - file: 08_first_psd_and_fooof
     sections:
+      - file: worked-examples/04_first_psd_and_fooof_run
       - file: smoke-tests/05_psd_and_fooof
-  - file: 10_time_frequency
+  - file: 09_first_time_frequency
     sections:
+      - file: worked-examples/05_first_tfr_run
       - file: smoke-tests/06_time_frequency
-  - file: 11_connectivity_and_surrogates
+  - file: 10_first_connectivity_and_surrogates
     sections:
+      - file: worked-examples/06_first_connectivity_run
       - file: smoke-tests/07_connectivity_and_surrogates
-  - file: 12_statistics
-  - file: 13_troubleshooting
+  - file: 20_old_repo_mental_model
+  - file: 21_legacy_function_mapping
+  - file: 22_translate_condensed_notebook
+    sections:
+      - file: worked-examples/07_migrating_condensed_notebook
+  - file: 23_translate_tfr_workflow
+  - file: 24_translate_connectivity_workflow
+  - file: 25_legacy_only_surfaces
+  - file: 30_troubleshooting

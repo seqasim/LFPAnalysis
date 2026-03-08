@@ -1,5 +1,10 @@
 """Stable public exports for the beginner-facing LFPAnalysis workflow API."""
 
+from .builders import (
+    build_basic_pipeline_config,
+    build_event_locked_pipeline_config,
+    build_spectral_pipeline_config,
+)
 from .config import (
     ArtifactConfig,
     BaselineConfig,
@@ -38,6 +43,9 @@ __all__ = [
     "ArtifactConfig",
     "BASELINE_SUMMARY_COLUMNS",
     "BaselineConfig",
+    "build_basic_pipeline_config",
+    "build_event_locked_pipeline_config",
+    "build_spectral_pipeline_config",
     "ConfigurationError",
     "DataContractError",
     "ELECTRODE_OPTIONAL_COLUMNS",

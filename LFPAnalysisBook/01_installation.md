@@ -1,51 +1,45 @@
 # Installation and Environment Setup
 
-## Supported Python versions
+## What this step is for
 
-`LFPAnalysis` currently supports Python 3.10 through 3.12.
+This chapter gets you into a working environment with the right dependency level for the workflow you want.
 
-## Quick install paths
+## When you should use it
 
-### Source install from GitHub
+Read this before running any notebook or sample-data workflow.
+
+## Required inputs
+
+- Python 3.10 to 3.12
+- the repository clone or the GitHub URL
+- enough disk space for optional scientific dependencies
+
+## Minimal example
 
 ```bash
 git clone https://github.com/seqasim/LFPAnalysis.git
 cd LFPAnalysis
-pip install -e .
-```
-
-### Contributor install
-
-```bash
 pip install -e .[dev]
-pre-commit install
 ```
 
-### Conda install
+## How to inspect the result
 
-```bash
-conda env create -f environment.yml
-conda activate LFPAnalysis
-pip install -e .
-```
+Run `python -c "import LFPAnalysis; print('ok')"` and confirm that the import succeeds.
 
-## Optional dependency groups
+## Common mistakes
 
-- `analysis`: FOOOF, connectivity, tensorpac, and related scientific extras
-- `docs`: Jupyter Book and documentation tooling
-- `test`: pytest, coverage, and notebook smoke-test tooling
-- `dev`: everything above plus formatting and pre-commit hooks
+- installing into one environment and running notebooks from another
+- using docs-only extras when you need analysis dependencies
+- assuming a PyPI release exists already
 
-## Installation troubleshooting
+## Old-to-new translation note
 
-### `ModuleNotFoundError: mne`
+The old repo implicitly relied on a lab-specific environment. The refactored repo separates `analysis`, `docs`, `test`, and `dev` extras so you can install only what you need.
 
-Install the package into your active environment with `pip install -e .` or `pip install -e .[dev]`.
+## Quick install paths
 
-### Notebook build failures
+- everyday contributor path: `pip install -e .[dev]`
+- documentation only: `pip install -e .[docs]`
+- analysis workflows: `pip install -e .[analysis]`
 
-Install docs extras with `pip install -e .[docs]`.
-
-### Connectivity or FOOOF import failures
-
-Install analysis extras with `pip install -e .[analysis]`.
+Next step: {doc}`02_data_model`
