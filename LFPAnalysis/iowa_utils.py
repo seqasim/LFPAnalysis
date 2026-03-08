@@ -1,7 +1,33 @@
 import pandas as pd 
 import numpy as np 
-from itertools import chain
 from LFPAnalysis import lfp_preprocess_utils
+
+
+def _expand_channel_rows(channel_rows: pd.Series) -> list[int]:
+    """Expand single-channel and ranged Iowa channel entries into integers."""
+
+    if channel_rows.empty:
+        return []
+
+    normalized_rows = channel_rows.astype(str).str.strip()
+    single_mask = ~normalized_rows.str.contains(':')
+    channels = normalized_rows[single_mask].astype(int).tolist()
+
+    range_rows = normalized_rows[~single_mask]
+    if not range_rows.empty:
+        bounds = range_rows.str.split(':', expand=True).astype(int).to_numpy()
+        channels.extend(
+            np.concatenate([np.arange(start, end + 1) for start, end in bounds]).tolist()
+        )
+
+    return channels
+
+
+def _to_lfpx_names(channels) -> list[str]:
+    """Format integer Neuralynx channels as canonical lowercase names."""
+
+    return [f'LFPx{channel}'.lower() for channel in channels]
+
 
 def extract_names_connect_table(connect_table_path: str):
     """Extract channel types from Iowa connection table.
@@ -29,78 +55,27 @@ def extract_names_connect_table(connect_table_path: str):
     connect_table.dropna(subset=['Code'], inplace=True)
 
     eegCode =['scalp']
-    all_eeg = [x[7:].split(', ') for x in connect_table[connect_table.Code.str.lower().str.contains(eegCode[0])]['Contact Location'].astype(str).tolist()]
-    eeg_labels = [x.lower().replace(u'\xa0', u' ') for x in list(chain(*all_eeg))]
     # NOTE: The following names are set MANUALLY upon data UPLOAD. In the original table they read as "BP" which is not informative.
     respCode = ['CAN', 'THERM', 'BELT']
     ekgCode = ['EKG']
     unusedCode = ['UNUSED']
-    refCode = ['REF']
-    sync_name = 'ttl' 
-
-    # The relevant channels could vary in length: 
-    seeg_chs = [] 
 
     # relevant_rows = connect_table['NLX-LFPx channel'][~connect_table.Code.isin(respCode+ekgCode+eegCode+unusedCode+refCode)].dropna()
     mask = pd.notna(connect_table['Contact Location']) & connect_table['Contact Location'].str.startswith(('Left', 'Right'))
     relevant_rows = connect_table[mask]['NLX-LFPx channel'].dropna()
-    # single channels 
-    seeg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
-    # channel range:
-    starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
-    ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
-    for a,b in zip(starts, ends):
-        seeg_chs += np.arange(a, b).tolist()
-    seeg_names = [f'LFPx{ch}'.lower() for ch in seeg_chs]
+    seeg_names = _to_lfpx_names(_expand_channel_rows(relevant_rows))
 
-    # The relevant channels could vary in length: 
-    resp_chs = [] 
     relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(respCode)].dropna()
-    # single channels 
-    resp_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
-    # channel range:
-    starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
-    ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
-    for a,b in zip(starts, ends):
-        resp_chs += np.arange(a, b).tolist()
-    resp_names = [f'LFPx{ch}'.lower() for ch in resp_chs]
+    resp_names = _to_lfpx_names(_expand_channel_rows(relevant_rows))
 
-    # The relevant channels could vary in length: 
-    ekg_chs = [] 
     relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(ekgCode)].dropna()
-    # single channels 
-    ekg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
-    # channel range:
-    starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
-    ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
-    for a,b in zip(starts, ends):
-        ekg_chs += np.arange(a, b).tolist()
-    ekg_names = [f'LFPx{ch}'.lower() for ch in ekg_chs]
+    ekg_names = _to_lfpx_names(_expand_channel_rows(relevant_rows))
 
-    # The relevant channels could vary in length: 
-    eeg_chs = [] 
     relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(eegCode)].dropna()
-    # single channels 
-    eeg_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
-    # channel range:
-    starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
-    ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
-    for a,b in zip(starts, ends):
-        eeg_chs += np.arange(a, b).tolist()
+    eeg_names = _to_lfpx_names(_expand_channel_rows(relevant_rows))
 
-    eeg_names = [f'LFPx{ch}'.lower() for ch in eeg_chs]
-
-    # The relevant channels could vary in length: 
-    drop_chs = [] 
     relevant_rows = connect_table['NLX-LFPx channel'][connect_table.Code.isin(unusedCode)].dropna()
-    # single channels 
-    drop_chs += relevant_rows[~relevant_rows.str.contains(':')].tolist()
-    # channel range:
-    starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int)
-    ends = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1
-    for a,b in zip(starts, ends):
-        drop_chs += np.arange(a, b).tolist()
-    drop_names = [f'LFPx{ch}'.lower() for ch in drop_chs]
+    drop_names = _to_lfpx_names(_expand_channel_rows(relevant_rows))
 
     return eeg_names, resp_names, ekg_names, seeg_names, drop_names
 
