@@ -1,8 +1,6 @@
 import numpy as np
 import scipy.stats
 import warnings
-from scipy.stats import pearsonr
-from collections import defaultdict 
 
 # Utility functions for synchronization
 
@@ -38,6 +36,18 @@ def moving_average(a, n=11) :
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
+
+
+def _normalized_sliding_windows(data, window_size: int, step_size: int = 1) -> np.ndarray:
+    """Return z-normalized sliding windows for vectorized correlation."""
+
+    windows = np.lib.stride_tricks.sliding_window_view(
+        np.asarray(data, dtype=float),
+        window_shape=window_size,
+    )[::step_size]
+    centered = windows - windows.mean(axis=1, keepdims=True)
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    return np.divide(centered, norms, out=np.zeros_like(centered), where=norms > 0)
 
 # def fastCorr(x, y):
 #     # faster version of corr
@@ -117,32 +127,32 @@ def pulsealign(beh_ms=None, pulses=None, windSize: int = 15):
     
     beh_d = np.diff(beh_ms)
     pulse_d = np.diff(pulses)
-    
-    print(f"{len(eegBlockStart)} blocks")
+
+    if len(beh_d) < windSize or len(pulse_d) < windSize:
+        return np.array([]), np.array([])
+
+    beh_windows = _normalized_sliding_windows(beh_d, windSize)
     
     blockR = np.zeros(len(eegBlockStart))
     blockBehMatch = np.zeros(len(eegBlockStart), dtype=int)
 
     # iterate through blocks of neural ts
     for b in range(len(eegBlockStart)):
-        print(".", end="")
         eeg_d = pulse_d[eegBlockStart[b]:eegBlockStart[b]+windSize]
-        r = np.zeros(len(beh_d) - len(eeg_d))
-        p = np.zeros(len(beh_d) - len(eeg_d))
-        for i in range(len(beh_d) - len(eeg_d)):
-            # sometimes the lengths mismatch by one entry if we are by an edge: 
-            length = min(len(eeg_d), len(beh_d[i:i+windSize]))
-            # 1/31/24: slows down correlation but more confident in result.
-            r[i] = np.corrcoef(beh_d[i:i+length], eeg_d[:length])[0, 1]
+        eeg_centered = eeg_d - eeg_d.mean()
+        eeg_norm = np.linalg.norm(eeg_centered)
+        if eeg_norm == 0:
+            blockR[b] = np.nan
+            continue
+        r = beh_windows @ (eeg_centered / eeg_norm)
 
         blockR[b] = np.max(r)
         blockBehMatch[b] = np.argmax(r)
-    print("\n")
     
     # now, for each block, check if it had a good correlation. if so, then add the set of matching pulses into the output
     
-    eeg_offset = np.array([])
-    good_beh_ms = np.array([])
+    matched_eeg_offsets = []
+    matched_beh_ms = []
     
     for b in np.where(blockR > corrThresh)[0]:
         x = pulses[eegBlockStart[b]:eegBlockStart[b]+windSize]
@@ -150,15 +160,14 @@ def pulsealign(beh_ms=None, pulses=None, windSize: int = 15):
         slope, offset, rval = sync_matched_pulses(y, x)
         # 1/31/24: Let's only concatenate if slope is within some reasonable distance to 1
         if (rval > corrThresh) & (np.abs(1-slope)<=0.05):
-            eeg_offset = np.concatenate([eeg_offset, x])
-            
-            good_beh_ms = np.concatenate([good_beh_ms, y])
-            # FOR DEBUGGING:
-            # print(slope)
-            # print(offset)
-            # print(rval)
-        
-    print(f"found matches for {len(eeg_offset)} of {len(pulses)} pulses")
+            matched_eeg_offsets.append(x)
+            matched_beh_ms.append(y)
+
+    if not matched_eeg_offsets:
+        return np.array([]), np.array([])
+
+    eeg_offset = np.concatenate(matched_eeg_offsets)
+    good_beh_ms = np.concatenate(matched_beh_ms)
     
     return good_beh_ms, eeg_offset
 
@@ -211,52 +220,37 @@ def synchronize_data_robust(beh_ts=None, neural_ts=None, window_size: int = 15, 
     neural_diff = np.diff(neural_ts)
     beh_diff = np.diff(beh_ts)
 
-    # Initialize variables to store matching epochs
-    matching_epochs = []
+    if len(neural_diff) < window_size or len(beh_diff) < window_size:
+        raise ValueError("Not enough timestamps to compute robust synchronization.")
 
-    corr = -1
-    # Iterate through windows in neural_diff
-    for i in range(0, len(neural_diff) - window_size + 1, step_size):
-        print(".", end="")
-        neural_window = neural_diff[i:i + window_size]
-        if corr > correlation_threshold:
-            continue
-        # Iterate through windows in beh_diff
-        for j in range(0, len(beh_diff) - window_size + 1, step_size):
-            beh_window = beh_diff[j:j + window_size]
+    neural_windows = _normalized_sliding_windows(neural_diff, window_size, step_size)
+    beh_windows = _normalized_sliding_windows(beh_diff, window_size, step_size)
+    neural_starts = np.arange(0, len(neural_diff) - window_size + 1, step_size)
+    beh_starts = np.arange(0, len(beh_diff) - window_size + 1, step_size)
 
-            # Calculate Pearson correlation coefficient
-            corr, _ = pearsonr(beh_window, neural_window)
+    correlation_matrix = neural_windows @ beh_windows.T
+    matching_pairs = np.argwhere(correlation_matrix > correlation_threshold)
 
-            # Check if correlation coefficient exceeds the threshold
-            if corr > correlation_threshold:
-                # Save matching epoch details
-                neural_matching_window = neural_ts[i:i + window_size + 1]
-                beh_matching_window = beh_ts[j:j + window_size + 1]
-                slope, offset, rval = sync_matched_pulses(beh_matching_window, neural_matching_window)
-                if np.abs(1-slope)<=0.05:
-                    matching_epochs.append({
-                        'neural_timestamps': neural_matching_window,
-                        'beh_timestamps': beh_matching_window,
-                        'slope': slope,
-                        'offset': offset,
-                        'correlation_coefficient': rval
-                    })
-        corr = -1
-    print("\n")
+    matched_neural = []
+    matched_beh = []
+    for neural_idx, beh_idx in matching_pairs:
+        i = neural_starts[neural_idx]
+        j = beh_starts[beh_idx]
+        neural_matching_window = neural_ts[i:i + window_size + 1]
+        beh_matching_window = beh_ts[j:j + window_size + 1]
+        slope, offset, rval = sync_matched_pulses(beh_matching_window, neural_matching_window)
+        if np.abs(1-slope)<=0.05:
+            matched_neural.append(neural_matching_window)
+            matched_beh.append(beh_matching_window)
 
-    merged_dict = defaultdict(list)
+    if not matched_neural:
+        raise ValueError("No matching epochs exceeded the requested correlation threshold.")
 
-    for d in matching_epochs:
-        for key, value in d.items():
-            merged_dict[key].append(value)
-
-    # If you want to convert defaultdict back to a regular dictionary
-    merged_dict = dict(merged_dict)
-    
     # stack and compute final sync
-    slope, offset, rval = sync_matched_pulses(np.hstack(merged_dict['beh_timestamps']), 
-                                          np.hstack(merged_dict['neural_timestamps']))      
+    slope, offset, rval = sync_matched_pulses(
+        np.hstack(matched_beh),
+        np.hstack(matched_neural),
+    )
 
     return slope, offset, rval
 
@@ -317,15 +311,11 @@ def synchronize_data(beh_ts=None, mne_sync=None, smoothSize: int = 11, windSize:
             windSize += 5
         if rval < 0.99:
             raise ValueError(f'this sync for subject has failed - running robust synch now')
-    except: 
-        print('fast sync failed - running robust sync now')
+    except Exception:
+        windSize = 15
         while (rval<0.99) & (windSize < 60):
-            windSize = 15
             slope, offset, rval = synchronize_data_robust(beh_ts, neural_ts, window_size=windSize, step_size=1)
             windSize += 5
         if rval < 0.99:
             raise ValueError(f'this sync for subject has failed - CHECK YOUR INPUT DATA')
-        else:
-            print('successful sync!')
     return slope, offset
-
