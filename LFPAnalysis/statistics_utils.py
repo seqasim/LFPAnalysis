@@ -55,43 +55,30 @@ def permutation_regression_zscore(data: pd.DataFrame, formula: str, n_permutatio
     y, X = patsy.dmatrices(formula, data, return_type='dataframe')
     original_model = OLS(y, X).fit()
     
-    # Extract original coefficients
-    # original_params = original_model.params
-    results = pd.DataFrame(original_model.params).rename(columns={0:'raw_beta'})
-    results['raw_p'] = original_model.pvalues   
-    results = results.reset_index()
-    results.rename(columns={'index':'predictor'}, inplace=True)
+    predictor_names = X.columns.tolist()
+    results = pd.DataFrame(
+        {
+            'predictor': predictor_names,
+            'raw_beta': original_model.params.values,
+            'raw_p': original_model.pvalues.values,
+        }
+    )
     
     # Prepare data for permutations
     y_values = y.values.ravel()
     
     # Perform permutations
-    # permuted_params = []
-    # permuted_y_values = []
-    surr_results = []
-    for _ in tqdm(range(n_permutations), desc="Permutations"):
+    permuted_params = np.empty((n_permutations, len(predictor_names)), dtype=float)
+    for perm_idx in tqdm(range(n_permutations), desc="Permutations"):
         y_permuted = np.random.permutation(y_values)
-        surr_result = pd.DataFrame(OLS(y_permuted, X).fit().params).rename(columns={0:'surr_beta'})
-        surr_results.append(surr_result.reset_index())
-        # permuted_params.append(fit_permuted_model(y_permuted, X_values))
-        # permuted_y_values.append(y_permuted)
-    
-    # # Convert to numpy array for faster computations
-    # permuted_params = np.array(permuted_params)
-    
-    # # Compute z-scores
-    # permuted_means = np.mean(permuted_params, axis=0)
-    # permuted_stds = np.std(permuted_params, axis=0)
-    # z_scores = (original_params - permuted_means) / permuted_stds
+        permuted_params[perm_idx, :] = OLS(y_permuted, X).fit().params
 
-    surr_means = pd.concat(surr_results).groupby('index').mean(numeric_only=True)['surr_beta']
-    surr_stds = pd.concat(surr_results).groupby('index').std(numeric_only=True)['surr_beta']
+    surr_means = permuted_params.mean(axis=0)
+    surr_stds = permuted_params.std(axis=0, ddof=1)
     
     # Compute p-values from z-scores
     # p_values = 2 * (1 - stats.norm.cdf(np.abs(z_scores)))
-
-    for predictor in results.predictor.unique():
-        results.loc[results.predictor==predictor, 'z_beta'] = (results.loc[results.predictor==predictor, 'raw_beta']  - surr_means[surr_means.index==predictor].values[0]) / (surr_stds[surr_stds.index==predictor].values[0])
+    results['z_beta'] = (results['raw_beta'].to_numpy() - surr_means) / surr_stds
 
     # twoway z-test 
 
@@ -165,34 +152,41 @@ def shuffle_data_for_mlm(df: pd.DataFrame, y: str = 'tfr', lower_group: str = 'u
     """
     surr_df = df.copy()
 
-    for individ in surr_df[higher_group].unique():
-        # Get the relevant data subset for the participant
-        group_mask = surr_df[higher_group] == individ
-        
-        # Extract unique trials for this subject and shuffle them
-        original_trial = df[df[higher_group] == individ][trial_key].unique()
+    trial_maps = []
+    for individ, group_df in df.groupby(higher_group):
+        original_trial = group_df[trial_key].drop_duplicates().to_numpy()
         shuffled_trial = np.random.permutation(original_trial)
-        
-        # Create a mapping of original to shuffled trials
-        trial_map = dict(zip(original_trial, shuffled_trial))
-        
-        for unique_label in surr_df.loc[group_mask, lower_group].unique():
-            label_mask = surr_df[lower_group] == unique_label
-            # Apply the shuffle map to the dependent variable
-            try:
-                surr_df.loc[(group_mask) & (label_mask), y] = surr_df.loc[(group_mask) & (label_mask)].apply(
-                    lambda row: surr_df.loc[(group_mask) & (label_mask) & (surr_df[trial_key] == trial_map[row[trial_key]]), y].values[0][0],
-                    axis=1
-                )
-            except IndexError: 
-                try:
-                    surr_df.loc[(group_mask) & (label_mask), y] = surr_df.loc[(group_mask) & (label_mask)].apply(
-                    lambda row: surr_df.loc[(group_mask) & (label_mask) & (surr_df[trial_key] == trial_map[row[trial_key]]), y].values[0],
-                    axis=1
-                )
-                except IndexError:
-                    print('IndexError')
-                
+        trial_maps.append(
+            pd.DataFrame(
+                {
+                    higher_group: individ,
+                    trial_key: original_trial,
+                    '_shuffled_trial': shuffled_trial,
+                }
+            )
+        )
+
+    trial_map_df = pd.concat(trial_maps, ignore_index=True)
+    value_lookup = (
+        df[[higher_group, lower_group, trial_key, y]]
+        .drop_duplicates(subset=[higher_group, lower_group, trial_key], keep='first')
+        .rename(
+            columns={
+                trial_key: '_shuffled_trial',
+                y: '_shuffled_value',
+            }
+        )
+    )
+
+    surr_df = surr_df.merge(trial_map_df, on=[higher_group, trial_key], how='left')
+    surr_df = surr_df.merge(
+        value_lookup,
+        on=[higher_group, lower_group, '_shuffled_trial'],
+        how='left',
+    )
+    surr_df[y] = surr_df['_shuffled_value']
+    surr_df.drop(columns=['_shuffled_trial', '_shuffled_value'], inplace=True)
+
     return surr_df
 
 def generate_surrogate_results(df: pd.DataFrame, formula: str = 'tfr ~ 1 + zrpe*phit', y: str = 'tfr', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial', n_permutations: int = 100):
