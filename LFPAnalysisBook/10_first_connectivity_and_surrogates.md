@@ -34,4 +34,6 @@ Inspect the output array shape, metric name, frequency window, and surrogate met
 
 Connectivity remains an advanced workflow. The migration chapters show how to translate old notebook code, but the stable API is intentionally not pretending to wrap the whole space yet.
 
-Next step: {doc}`20_old_repo_mental_model`
+If you need to combine connectivity helpers with lower-level parsing, synchronization, or baseline utilities, read {doc}`11_advanced_utility_interoperability` next.
+
+Next step: {doc}`11_advanced_utility_interoperability`

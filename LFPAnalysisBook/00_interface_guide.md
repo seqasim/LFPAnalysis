@@ -48,6 +48,8 @@ Use `LFPAnalysis.legacy` when you need a gentle bridge from old notebook code. T
 
 Use the advanced modules only when the stable API or compatibility layer does not yet cover your workflow, especially for time-frequency and connectivity analyses.
 
+Read {doc}`11_advanced_utility_interoperability` before chaining utility modules directly. It documents the shared naming, warning, baseline, and surrogate conventions that now span the utility layer.
+
 ## Decision guide
 
 - I just want to load sample data: `build_basic_pipeline_config`

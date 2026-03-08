@@ -9,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOK = ROOT / "LFPAnalysisBook"
+ADVANCED_UTILITY_CHAPTER = BOOK / "11_advanced_utility_interoperability.md"
 
 BEGINNER_CHAPTERS = [
     BOOK / "03_first_load.md",
@@ -63,6 +64,38 @@ def test_interface_guide_names_all_public_surfaces():
     assert "stable beginner-facing API" in text
     assert "compatibility/legacy shims" in text
     assert "advanced legacy utilities" in text
+    assert "11_advanced_utility_interoperability" in text
+
+
+@pytest.mark.unit
+def test_advanced_utility_chapter_names_the_shared_module_stack():
+    text = ADVANCED_UTILITY_CHAPTER.read_text()
+    for module_name in [
+        "iowa_utils",
+        "nlx_utils",
+        "sync_utils",
+        "lfp_preprocess_utils",
+        "analysis_utils",
+        "oscillation_utils",
+        "statistics_utils",
+    ]:
+        assert module_name in text
+    assert "## Shared conventions after cleanup" in text
+
+
+@pytest.mark.unit
+def test_worked_notebooks_reference_advanced_utility_guidance():
+    notebook_paths = [
+        BOOK / "worked-examples" / "04_first_psd_and_fooof_run.ipynb",
+        BOOK / "worked-examples" / "06_first_connectivity_run.ipynb",
+        BOOK / "worked-examples" / "07_migrating_condensed_notebook.ipynb",
+    ]
+    for path in notebook_paths:
+        notebook = json.loads(path.read_text())
+        markdown = "\n".join(
+            "".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "markdown"
+        )
+        assert "11_advanced_utility_interoperability" in markdown
 
 
 @pytest.mark.unit

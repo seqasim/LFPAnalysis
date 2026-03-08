@@ -43,6 +43,15 @@ epochs = legacy.make_epochs(
 
 Use `lfp_preprocess_utils`, `analysis_utils`, and `oscillation_utils` when the stable API does not yet cover your workflow, especially for time-frequency and connectivity analyses.
 
+The advanced utility layer now shares a few explicit conventions:
+
+- Iowa and Neuralynx channel helpers normalize channel names to lowercase `lfpx...` labels before downstream matching.
+- Neuralynx parsers emit warnings for skipped or empty channels instead of printing progress noise during library calls.
+- Baseline helpers in `lfp_preprocess_utils` use NumPy broadcasting, so their outputs feed directly into surrogate and statistics helpers without manual reshaping.
+- Surrogate helpers in `oscillation_utils` remain deterministic when you pass `rng_seed`.
+
+If you need to combine utility modules directly, use the advanced utility interoperability chapter in `LFPAnalysisBook/11_advanced_utility_interoperability.md`.
+
 ## Which entry point should I use?
 
 - I just want to load sample data: `build_basic_pipeline_config(...)`
@@ -100,6 +109,7 @@ print(result.baseline_summary.head())
 The canonical onboarding path is `LFPAnalysisBook/`.
 
 - Beginner Track: first load, first reference, first artifact pass, first baseline, first event-locked workflow, first PSD/TFR/connectivity workflow
+- Advanced Utility Interoperability: how `iowa_utils`, `nlx_utils`, `sync_utils`, `lfp_preprocess_utils`, `analysis_utils`, `oscillation_utils`, and `statistics_utils` fit together
 - Coming From The Old Repo: side-by-side translations for the condensed notebook, TFR, and connectivity workflows
 
 ## What is stable vs transitional

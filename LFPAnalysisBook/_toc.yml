@@ -31,6 +31,7 @@ chapters:
     sections:
       - file: worked-examples/06_first_connectivity_run
       - file: smoke-tests/07_connectivity_and_surrogates
+  - file: 11_advanced_utility_interoperability
   - file: 20_old_repo_mental_model
   - file: 21_legacy_function_mapping
   - file: 22_translate_condensed_notebook
