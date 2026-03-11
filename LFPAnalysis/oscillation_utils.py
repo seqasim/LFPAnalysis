@@ -1620,7 +1620,7 @@ def gcmi_mixture_cd(x: np.ndarray, y: np.ndarray, Ym: int) -> float:
         # robust measure of loc from median
         cxmscaled = cxmscaled + xmmed
         classdat.append(cxmscaled)
-        ydat.append(yi*np.ones(xm.shape[1],dtype=np.int))
+        ydat.append(yi*np.ones(xm.shape[1],dtype=int))
 
     cx = np.concatenate(classdat,axis=1) 
     newy = np.concatenate(ydat)
@@ -3047,7 +3047,7 @@ def BOSC_detect(b: np.ndarray, powthresh: float, durthresh: float, Fsample: floa
     # Step 1: power threshold
     x=b>powthresh
     # we have to turn the boolean to numeric
-    x = np.array(list(map(np.int, x)))
+    x = np.array(list(map(int, x)))
     # show the +1 and -1 edges
     dx=np.diff(x)
     if np.size(np.where(dx==1))!=0:
@@ -3100,7 +3100,7 @@ def BOSC_detect(b: np.ndarray, powthresh: float, durthresh: float, Fsample: floa
                 detected[np.arange(H[0][h], H[1][h],1)]=1
         
     # ensure that outputs are integer
-    detected = np.array(list(map(np.int, detected)))
+    detected = np.array(list(map(int, detected)))
     return detected
 
 def eBOSC_getThresholds(cfg_eBOSC: dict, TFR: np.ndarray, eBOSC: dict) -> Tuple[dict, np.ndarray, np.ndarray]:
@@ -3305,7 +3305,7 @@ def eBOSC_episode_postproc_fwhm(cfg_eBOSC: dict, episodes: dict, TFR: np.ndarray
         # get temporary amplitude vector
         a_ = episodes['Power'][e]
         # location in time with reference to matrix TFR
-        t_ind = np.int_(np.arange(episodes['ColID'][e][0], episodes['ColID'][e][-1]+1))
+        t_ind = int(np.arange(episodes['ColID'][e][0], episodes['ColID'][e][-1]+1))
         # initiate bias matrix (only requires to encode frequencies occuring within episode)
         biasMat = np.zeros([len(f_unique),len(a_)])
 
