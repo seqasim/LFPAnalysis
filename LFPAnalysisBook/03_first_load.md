@@ -2,16 +2,15 @@
 
 ## What this step is for
 
-This is the first end-to-end success checkpoint. You should be able to point the stable API at bundled sample data and inspect the returned MNE object.
+Load the real 22-channel gambling-task recording and confirm the object contract before any preprocessing. This is the first end-to-end success checkpoint on the case-study path.
 
 ## When you should use it
 
-Use this before making any preprocessing decisions. If loading is unclear, every downstream choice becomes harder.
+Use this before referencing, synchronization, or epoching. If loading is unclear, every downstream choice becomes harder.
 
 ## Required inputs
 
-- a supported file path
-- the file format label
+- `../data/sample_ieeg.fif` — monopolar sEEG, 500 Hz, channels `rmolf1`–`rmolf12` and `racas1`–`racas10`
 
 ## Minimal example
 
@@ -21,28 +20,35 @@ from LFPAnalysis import build_basic_pipeline_config, run_pipeline
 
 config = build_basic_pipeline_config(Path("../data/sample_ieeg.fif"), file_format="mne")
 result = run_pipeline(config)
+
+print(f"Sampling rate: {result.raw.info['sfreq']} Hz")
+print(f"Channels ({len(result.raw.ch_names)}): {result.raw.ch_names[:5]} …")
+print(f"Duration: {result.raw.n_times / result.raw.info['sfreq']:.1f} s")
 ```
+
+The worked notebook plots a short raw trace and a sanity-check PSD for one channel.
 
 ## How to inspect the result
 
 Check:
 
-- `result.raw.info["sfreq"]`
-- `result.raw.ch_names[:10]`
-- `result.metadata`
+- `result.raw.info["sfreq"]` — expect 500 Hz
+- `result.raw.ch_names` — 22 lowercase sEEG labels
+- `result.metadata` — records `input_format`, `reference_method`, etc.
+- Recording duration — ~788 s
 
 ## Common mistakes
 
-- using a directory path when the stable API expects a specific file path
-- choosing the wrong `file_format`
-- trying to reference channels before checking the loaded data object
+- Using `sample_ieeg_continuous_rest.fif` when you want the full task recording (that 4-channel file is a lightweight smoke-test clip, not the gambling task)
+- Choosing the wrong `file_format`
+- Trying to reference channels before confirming the loaded channel list
 
 ## Old-to-new translation note
 
-If you previously started by manually reading files or calling `make_mne`, the new recommended first step is a builder plus `run_pipeline`.
+If you previously started by calling `make_mne`, the new recommended first step is `build_basic_pipeline_config` plus `run_pipeline`.
 
 ## Worked example and smoke checks
 
-Read the worked notebook first, then use the smoke notebooks when you only want to verify that the environment still works.
+Read the worked notebook for plots, then use the smoke notebooks when you only need to verify the environment.
 
 Next step: {doc}`04_first_reference`

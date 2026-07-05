@@ -2,47 +2,52 @@
 
 ## What this step is for
 
-This chapter helps you choose and inspect a baseline instead of inheriting one from a specific notebook.
+Choose and inspect a baseline correction on real feedback-locked epochs. Baselining expresses power or amplitude relative to a pre-event window—a core interpretability step before comparing conditions.
 
 ## When you should use it
 
-Use this after you understand your event timing and before comparing power or event-locked responses.
+Use this after epoching and before comparing reward vs no-reward responses.
 
 ## Required inputs
 
-- continuous or epoched data
-- a baseline mode
-- a baseline window if baselining is enabled
+- Epoched data (we use pre-built `sample_feedback_start-epo.fif` or epochs you create in chapter 07)
+- Baseline mode (e.g. `zscore`)
+- Baseline window overlapping the pre-stimulus period
 
 ## Minimal example
 
 ```python
 from pathlib import Path
-from LFPAnalysis import build_event_locked_pipeline_config, run_pipeline
+from LFPAnalysis import build_spectral_pipeline_config, run_pipeline
 
-config = build_event_locked_pipeline_config(
-    Path("../data/sample_ieeg_continuous_rest.fif"),
+config = build_spectral_pipeline_config(
+    Path("../data/sample_feedback_start-epo.fif"),
     file_format="mne",
-    event_name="demo",
-    event_times=[5.0, 10.0, 15.0],
     baseline_mode="zscore",
     baseline_window=(-0.5, 0.0),
 )
 result = run_pipeline(config)
+print(result.baseline_summary.head())
 ```
+
+For event-locked baselining from continuous data, use `build_event_locked_pipeline_config` with real `feedback_start` times from `sample_beh.csv` (chapter 07).
 
 ## How to inspect the result
 
-Review `result.baseline_summary` and confirm that the chosen window overlaps the data you think it does.
+Review `result.baseline_summary`:
+
+- `baseline_mean` and `baseline_std` per channel
+- Confirm the window `(-0.5, 0.0)` overlaps `epochs.times`
+- The worked notebook plots baseline-corrected evoked activity for one channel
 
 ## Common mistakes
 
-- enabling baselining without setting a window
-- using a baseline mode by habit instead of because it fits the design
-- assuming the baseline summary is optional bookkeeping instead of QA
+- Enabling baselining without setting a window
+- Using a baseline mode by habit instead of because it fits the design (`zscore` is common for oscillatory power)
+- Assuming the baseline summary is optional bookkeeping—it is QA
 
 ## Old-to-new translation note
 
-Older notebooks often mixed epoch creation and baselining in one flow. The refactored API makes the baseline choice explicit and returns a dedicated summary table.
+Older notebooks mixed epoch creation and baselining in one flow. The refactored API makes the baseline choice explicit and returns a dedicated summary table.
 
 Next step: {doc}`07_first_event_locked_workflow`

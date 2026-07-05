@@ -2,43 +2,51 @@
 
 ## What this step is for
 
-This chapter shows the first spectral workflow that remains mostly inside the stable API.
+Compute power spectral density and optional FOOOF fits on real feedback-locked epochs, then compare **reward vs no-reward** spectra. This is the first spectral contrast in the case study.
 
 ## When you should use it
 
-Use this after load, reference, and epoching are already believable.
+Use this after epoching with behavioral metadata (chapter 07) or load the pre-built `sample_feedback_start-epo.fif` and attach metadata manually.
 
 ## Required inputs
 
-- continuous or epoched data
-- `analysis` dependencies if you want FOOOF
+- `../data/sample_feedback_start-epo.fif` — 80 feedback epochs, 15 bipolar channels
+- `../data/sample_beh.csv` — for reward labels if attaching metadata
+- `analysis` dependencies for FOOOF (`pip install -e .[analysis]`)
 
 ## Minimal example
 
 ```python
+import pandas as pd
 from pathlib import Path
-from LFPAnalysis import build_spectral_pipeline_config, run_pipeline
+from LFPAnalysis import load_lfp
+from LFPAnalysis.config import LoadConfig
 
-config = build_spectral_pipeline_config(
-    Path("../data/sample_feedback_start-epo.fif"),
-    file_format="mne",
-    spectral_method="psd",
-)
-result = run_pipeline(config)
+beh = pd.read_csv(Path("../data/sample_beh.csv"))
+epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne"))
+epochs.metadata = beh[["reward", "rpe"]]
+chan = "racas1-racas2"
+reward_psd = epochs["reward == 1"].copy().pick([chan]).compute_psd(fmin=1, fmax=80)
+loss_psd = epochs["reward == 0"].copy().pick([chan]).compute_psd(fmin=1, fmax=80)
+print(reward_psd.get_data().shape)
 ```
+
+The worked notebook plots reward vs loss PSD for one channel and runs FOOOF via `analysis_utils`.
 
 ## How to inspect the result
 
-Confirm that `result.spectral` includes the chosen method and inspect the returned spectrum or FOOOF table.
+- PSD frequency range and channel count
+- Visual comparison of reward vs no-reward spectra (not just shape prints)
+- FOOOF table columns: `frequency`, `PSD_raw`, `PSD_corrected`, `PSD_exp`
 
 ## Common mistakes
 
-- trying FOOOF before confirming the PSD is sensible
-- assuming TFR and connectivity are covered by the same stable spectral wrapper
-- forgetting to install `analysis` extras
+- Trying FOOOF before confirming the PSD looks sensible
+- Assuming TFR and connectivity are covered by `build_spectral_pipeline_config`
+- Forgetting to install `analysis` extras for FOOOF
 
 ## Old-to-new translation note
 
-The old notebooks often jumped directly into PSD and FOOOF functions. The refactored path encourages getting a valid `PipelineResult` first and then using the advanced utilities only where needed.
+Old notebooks jumped directly into PSD/FOOOF functions. The refactored path encourages a valid `PipelineResult` first, then advanced utilities where needed.
 
 Next step: {doc}`09_first_time_frequency`

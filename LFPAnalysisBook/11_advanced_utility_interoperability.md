@@ -77,6 +77,6 @@ Inspect each handoff, not just the final output:
 
 ## Old-to-new translation note
 
-If your old notebooks chained utility calls directly, keep doing that only where the stable API still does not cover the workflow. For load, reference, and epoch setup, prefer the stable API or `LFPAnalysis.legacy`. For PSD, TFR, connectivity, and custom statistics, the advanced utilities are still the correct surface, but they now share stricter conventions and tests.
+If your old notebooks chained utility calls directly, keep doing that only where the stable API still does not cover the workflow. For this book's case study, follow chapters 02–10b: the stable API handles load, reference, artifact QC, epoching, and baselining; advanced utilities handle FOOOF, TFR, connectivity, and time-resolved statistics on the same gambling-task dataset.
 
 Next step: {doc}`20_old_repo_mental_model`

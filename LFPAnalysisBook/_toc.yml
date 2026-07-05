@@ -13,6 +13,10 @@ chapters:
     sections:
       - file: worked-examples/02_first_preprocessing_run
       - file: smoke-tests/03_reference_and_artifacts
+  - file: 04b_first_synchronization
+    sections:
+      - file: worked-examples/08_first_synchronization_run
+      - file: smoke-tests/08_synchronization
   - file: 05_first_artifact_pass
   - file: 06_first_baseline
   - file: 07_first_event_locked_workflow
@@ -31,6 +35,9 @@ chapters:
     sections:
       - file: worked-examples/06_first_connectivity_run
       - file: smoke-tests/07_connectivity_and_surrogates
+  - file: 10b_first_time_resolved_stats
+    sections:
+      - file: worked-examples/09_first_stats_run
   - file: 11_advanced_utility_interoperability
   - file: 20_old_repo_mental_model
   - file: 21_legacy_function_mapping

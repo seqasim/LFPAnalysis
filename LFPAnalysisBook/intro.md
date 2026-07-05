@@ -6,12 +6,7 @@ This book now has two explicit tracks.
 
 Choose this path if you are new to the repository, new to MNE, or want the shortest route from a sample file to an interpretable result.
 
-You will learn:
-
-- which public interface to choose
-- which files you need before starting
-- how to load, reference, inspect, epoch, baseline, and summarize data
-- where the stable workflow API ends and the advanced utilities begin
+This book walks one gambling-task iEEG dataset end-to-end: load, reference, synchronize, artifact QC, epoch with real behavioral times, then reward contrasts in PSD/TFR/connectivity and time-resolved regression against reward prediction error.
 
 ## Coming From The Old Repo
 

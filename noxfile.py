@@ -44,4 +44,6 @@ def notebooks(session: nox.Session) -> None:
         "LFPAnalysisBook/smoke-tests",
         "LFPAnalysisBook/worked-examples/01_first_import_and_load.ipynb",
         "LFPAnalysisBook/worked-examples/07_migrating_condensed_notebook.ipynb",
+        "LFPAnalysisBook/worked-examples/08_first_synchronization_run.ipynb",
+        "LFPAnalysisBook/worked-examples/09_first_stats_run.ipynb",
     )
