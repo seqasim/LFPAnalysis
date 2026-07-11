@@ -2067,7 +2067,7 @@ def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_
     beh_ts = [x for x in beh_ts if ~np.isnan(x)]
     
     # Bin these times into the epoched bins
-    ev_starts = [x - ev_start_s for x in beh_ts]
+    ev_starts = [x + ev_start_s for x in beh_ts]
     ev_ends = [x + ev_end_s for x in beh_ts]
 
     IED_df = _bin_channelwise_times_into_behav_evs(IED_sec_dict, ev_starts, ev_ends)
