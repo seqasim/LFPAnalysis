@@ -48,7 +48,7 @@ def test_mean_baseline_time_supports_2d_inputs(monkeypatch):
         axis=-1, keepdims=True
     )
 
-    np.testing.assert_allclose(result, expected)
+    np.testing.assert_allclose(result, expected, rtol=1e-5, atol=1e-6)
 
 
 def test_baseline_trialwise_tfr_uses_broadcasting_equivalent_math(monkeypatch):
@@ -68,7 +68,7 @@ def test_baseline_trialwise_tfr_uses_broadcasting_equivalent_math(monkeypatch):
     baseline_mean = np.nanmean(reshaped_baseline, axis=-1).reshape(1, 2, 2, 1)
     expected = data - baseline_mean
 
-    np.testing.assert_allclose(result, expected)
+    np.testing.assert_allclose(result, expected, rtol=1e-5, atol=1e-6)
 
 
 def test_baseline_tfr_permute_matches_manual_sampling(monkeypatch):
@@ -116,4 +116,4 @@ def test_baseline_tfr_permute_matches_manual_sampling(monkeypatch):
     std = np.nanstd(sampled, axis=-1).reshape(1, 2, 2, 1)
     expected = (data - mean) / std
 
-    np.testing.assert_allclose(result, expected)
+    np.testing.assert_allclose(result, expected, rtol=1e-5, atol=1e-6)

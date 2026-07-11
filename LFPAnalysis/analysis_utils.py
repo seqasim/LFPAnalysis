@@ -12,6 +12,10 @@ import os
 import pycatch22
 import pkg_resources
 
+from .config import WORKING_DTYPE
+
+# NumPy dtype object resolved once at import (config stores the name string only).
+_WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
 
 
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
@@ -276,17 +280,19 @@ def _rolling_rms_last_axis(data: np.ndarray, window_samples: int) -> np.ndarray:
     if window_samples < 1:
         raise ValueError("window_samples must be at least 1")
 
-    squared = np.square(np.asarray(data, dtype=float))
-    cumulative = np.cumsum(squared, axis=-1)
-    rolling_sum = cumulative.copy()
+    squared = np.square(np.asarray(data, dtype=_WORKING_DTYPE))
+    cumulative = np.cumsum(squared, axis=-1, dtype=_WORKING_DTYPE)
+    rolling_sum = cumulative
     if window_samples < squared.shape[-1]:
+        # In-place update of the trailing window without a full buffer copy.
+        rolling_sum = cumulative.copy()
         rolling_sum[..., window_samples:] = (
             cumulative[..., window_samples:] - cumulative[..., :-window_samples]
         )
 
     window_denominator = np.minimum(
-        np.arange(1, squared.shape[-1] + 1, dtype=float),
-        float(window_samples),
+        np.arange(1, squared.shape[-1] + 1, dtype=_WORKING_DTYPE),
+        _WORKING_DTYPE(window_samples),
     )
     return np.sqrt(rolling_sum / window_denominator)
 
@@ -654,7 +660,7 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
                                                 tmax=tmax,
                                                 verbose=False)
                                                 
-    psds = epo_spectrum._data
+    psds = np.asarray(epo_spectrum._data, dtype=_WORKING_DTYPE)
     freqs = epo_spectrum.freqs
             
     # average across epochs
@@ -671,98 +677,57 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
     FOOOFGroup_res.fit(freqs, psd_trial_avg, kwargs['freq_range'])
 
     all_chan_dfs = []
-    # Go through individual channels
+    n_freqs = len(freqs)
+    # Go through individual channels; build DataFrames from arrays (avoid .tolist() copies).
     for chan in range(len(epochs.ch_names)):
 
         ind_fits = FOOOFGroup_res.get_fooof(ind=chan, regenerate=True)
         ind_fits.fit()
 
         # Create a dataframe to store results 
-        chan_data_df = pd.DataFrame(columns=['channel', 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'peak_freq', 'peak_height', 'PSD_exp'])
-
-        chan_data_df['frequency'] = ind_fits.freqs.tolist()
-        chan_data_df['PSD_raw'] = ind_fits.power_spectrum.tolist()
-        chan_data_df['PSD_corrected'] = ind_fits._spectrum_flat.tolist()
-
-        # Get aperiodic exponent
-        exp = ind_fits.get_params('aperiodic_params', 'exponent')
-        chan_data_df['PSD_exp'] = exp
+        chan_data_df = pd.DataFrame({
+            'channel': epochs.ch_names[chan],
+            'frequency': ind_fits.freqs,
+            'PSD_raw': ind_fits.power_spectrum,
+            'PSD_corrected': ind_fits._spectrum_flat,
+            'in_FOOOF_peak': np.zeros(n_freqs, dtype=_WORKING_DTYPE),
+            'peak_freq': np.zeros(n_freqs, dtype=_WORKING_DTYPE),
+            'peak_height': np.zeros(n_freqs, dtype=_WORKING_DTYPE),
+            'PSD_exp': ind_fits.get_params('aperiodic_params', 'exponent'),
+        })
 
         # Get peak info
         peaks = fooof.analysis.get_band_peak_fm(ind_fits, band=(1, 30), select_highest=False)
-        in_FOOOF_peaks = [] 
-        peak_freqs = []
-        peak_heights = []
-        # in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
-        # peak_freq = np.ones_like(ind_fits.freqs) * np.nan
-        # peak_height = np.ones_like(ind_fits.freqs) * np.nan
+        in_FOOOF_peaks = np.zeros(n_freqs, dtype=_WORKING_DTYPE)
+        peak_freqs = np.zeros(n_freqs, dtype=_WORKING_DTYPE)
+        peak_heights = np.zeros(n_freqs, dtype=_WORKING_DTYPE)
         
         # Iterate through the peaks and create dataframe friendly data that assigns each frequency to a peak (or not)
-        if np.ndim(peaks) == 1: # only one peak
+        if peaks is not None and np.ndim(peaks) == 1: # only one peak
 
             center_pk = peaks[0]
             low_freq = peaks[0] - (peaks[2]/2)
             high_freq = peaks[0] + (peaks[2]/2)
             pk_height = peaks[1]
-            in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
-            in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = 1
-            peak_freq = np.zeros_like(ind_fits.freqs)
-            peak_freq[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = center_pk
-            peak_height = np.zeros_like(ind_fits.freqs)
-            peak_height[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = pk_height
+            mask = (ind_fits.freqs >= low_freq) & (ind_fits.freqs <= high_freq)
+            in_FOOOF_peaks[mask] = 1
+            peak_freqs[mask] = center_pk
+            peak_heights[mask] = pk_height
 
-            in_FOOOF_peaks.append(in_FOOOF_peak)
-            peak_freqs.append(peak_freq)
-            peak_heights.append(peak_height)   
-
-        elif np.ndim(peaks) > 1: # more than one peak
+        elif peaks is not None and np.ndim(peaks) > 1: # more than one peak
             for ix, pk in enumerate(peaks):
                 center_pk = pk[0]
                 low_freq = pk[0] - (pk[2]/2)
                 high_freq = pk[0] + (pk[2]/2)
                 pk_height = pk[1]
-                in_FOOOF_peak = np.zeros_like(ind_fits.freqs)
-                in_FOOOF_peak[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = ix + 1
-                peak_freq = np.zeros_like(ind_fits.freqs)
-                peak_freq[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = center_pk
-                peak_height = np.zeros_like(ind_fits.freqs)
-                peak_height[(ind_fits.freqs>=low_freq) & (ind_fits.freqs<=high_freq)] = pk_height
-
-                in_FOOOF_peaks.append(in_FOOOF_peak)
-                peak_freqs.append(peak_freq)
-                peak_heights.append(peak_height)
-
-        if peaks is not None:
-            in_FOOOF_peaks = sum(in_FOOOF_peaks)
-            peak_freqs = sum(peak_freqs)
-            peak_heights = sum(peak_heights)
+                mask = (ind_fits.freqs >= low_freq) & (ind_fits.freqs <= high_freq)
+                in_FOOOF_peaks[mask] = ix + 1
+                peak_freqs[mask] = center_pk
+                peak_heights[mask] = pk_height
 
         chan_data_df['in_FOOOF_peak'] = in_FOOOF_peaks
         chan_data_df['peak_freq'] = peak_freqs
         chan_data_df['peak_height'] = peak_heights
-
-        # , 'peak_pow', 'band_pow', 'band_pow_flat', 'band', 'exp'
-
-        # 'frequency', 'PSD_raw', 'PSD_corrected', 'in_FOOOF_peak', 'PSD_exp'  
-
-        # band_labels = []
-        # peak_pow = [] 
-        # band_pow = []
-        # band_pow_flats = []
-
-        # for label, definition in bands:
-        #     band_labels.append(label)
-        #     peak_pow.append(fooof.analysis.get_band_peak_fm(ind_fits, definition)[1])
-        #     band_pow.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits.power_spectrum, definition)[1]))
-        #     band_pow_flats.append(np.mean(fooof.utils.trim_spectrum(ind_fits.freqs, ind_fits._spectrum_flat, definition)[1]))
-
-        # chan_data_df['peak_pow'] = peak_pow
-        # chan_data_df['band_pow'] = band_pow
-        # chan_data_df['band_pow_flat'] = band_pow_flats
-        # chan_data_df['band'] = band_labels
-        # chan_data_df['exp'] = exp
-        chan_data_df['channel'] = epochs.ch_names[chan]
-        # chan_data_df['region'] = epochs.metadata.region.unique()[0]
 
         all_chan_dfs.append(chan_data_df)
 

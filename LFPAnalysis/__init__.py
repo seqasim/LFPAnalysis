@@ -6,6 +6,7 @@ from .builders import (
     build_spectral_pipeline_config,
 )
 from .config import (
+    WORKING_DTYPE,
     ArtifactConfig,
     BaselineConfig,
     EpochConfig,
@@ -58,6 +59,7 @@ __all__ = [
     "PipelineResult",
     "ReferenceConfig",
     "SpectralConfig",
+    "WORKING_DTYPE",
     "baseline_lfp",
     "compute_spectral_features",
     "detect_artifacts",

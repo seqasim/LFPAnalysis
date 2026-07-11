@@ -15,6 +15,50 @@ import os
 import warnings
 from ast import literal_eval
 
+from .config import WORKING_DTYPE
+
+_WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
+
+
+def _nan_mask_tfr_events(power_data, event_times_by_channel, ch_names, sfreq, n_times, pad_s=0.1):
+    """NaN-out TFR windows around per-channel event times without nested Python loops.
+
+    Parameters
+    ----------
+    power_data : np.ndarray
+        Shape (n_epochs, n_channels, n_freqs, n_times) or (n_channels, n_freqs, n_times).
+    event_times_by_channel : mapping
+        Channel name -> iterable of (epoch_index, time_seconds) or time_seconds.
+        For epoched data, values are typically a Series of stringified lists per epoch.
+    """
+    is_epoched = power_data.ndim == 4
+    for ch_ix, ch_name in enumerate(ch_names):
+        if ch_name not in event_times_by_channel:
+            continue
+        column = event_times_by_channel[ch_name]
+        if hasattr(column, "dropna"):
+            valid = column.dropna()
+            for ev_ix, cell in valid.items():
+                times = literal_eval(cell) if isinstance(cell, str) else cell
+                if not hasattr(times, "__iter__"):
+                    times = [times]
+                for t_sec in times:
+                    start = max(0, int(np.floor((float(t_sec) - pad_s) * sfreq)))
+                    end = min(n_times, int(np.ceil((float(t_sec) + pad_s) * sfreq)))
+                    if is_epoched:
+                        power_data[int(ev_ix), ch_ix, :, start:end] = np.nan
+                    else:
+                        power_data[ch_ix, :, start:end] = np.nan
+        else:
+            for t_sec in column:
+                start = max(0, int(np.floor((float(t_sec) - pad_s) * sfreq)))
+                end = min(n_times, int(np.ceil((float(t_sec) + pad_s) * sfreq)))
+                if is_epoched:
+                    # Ambiguous without epoch index; skip.
+                    continue
+                power_data[ch_ix, :, start:end] = np.nan
+    return power_data
+
 
 def _apply_baseline_mode(data: np.ndarray, mean: np.ndarray, std: np.ndarray, mode: str):
     """Apply a baseline correction mode using broadcastable mean/std arrays."""
@@ -512,7 +556,8 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         # closest_wm_elec_dist = np.take_along_axis(dists, closest_wm_elec_ix, axis=1)
 
         # get the variance of the 3 closest wm electrodes
-        wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist())._data
+        wm_picks = elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist()
+        wm_data = _get_mne_data_array(mne_data, picks=wm_picks)
         
         wm_vars = wm_data.var(axis=1)
         wm_elec_var = []
@@ -585,7 +630,8 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         # closest_wm_elec_dist = np.take_along_axis(dists, closest_wm_elec_ix, axis=1)
 
         # get the variance of the 3 closest wm electrodes
-        wm_data = mne_data.copy().pick_channels(elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist())._data
+        wm_picks = elec_data.loc[wm_elec_ix, 'label'].str.lower().tolist()
+        wm_data = _get_mne_data_array(mne_data, picks=wm_picks)
         
         wm_vars = wm_data.var(axis=1)
         wm_elec_var = []
@@ -1013,6 +1059,25 @@ def detect_bad_elecs(mne_data, sEEG_mapping_dict: dict):
     # 
     return bad_channels
 
+def _get_mne_data_array(mne_data, *, picks=None, dtype=None):
+    """Materialize MNE signal data once, compatible with Raw and Epochs."""
+    if dtype is None:
+        dtype = _WORKING_DTYPE
+    if picks is not None:
+        try:
+            arr = mne_data.get_data(picks=picks)
+        except TypeError:
+            arr = mne_data.copy().pick(picks)._data
+    elif hasattr(mne_data, "_data") and mne_data._data is not None and getattr(mne_data, "preload", True):
+        arr = mne_data._data
+    else:
+        try:
+            arr = mne_data.get_data(copy=False)
+        except TypeError:
+            arr = mne_data.get_data()
+    return np.asarray(arr, dtype=dtype)
+
+
 def detect_misc_artifacts(mne_data, peak_thresh: float = 6):
     """Detect miscellaneous artifacts in LFP signal.
     
@@ -1028,21 +1093,21 @@ def detect_misc_artifacts(mne_data, peak_thresh: float = 6):
     dict
         Dictionary of artifact times per channel.
     """
-    # 1. take the gradient of the signal: 
-    gradient_signal = np.gradient(mne_data.copy()._data, axis=-1)
+    # Read once without a defensive full-object copy.
+    data = _get_mne_data_array(mne_data)
+    gradient_signal = np.gradient(data, axis=-1)
 
     # 2. zscore the gradient of the signal:
     zscored_gradient = zscore(gradient_signal, axis=-1)
 
-    # 3. find where the zscored gradient is above 5
+    # 3. find where the zscored gradient is above threshold
     artifact_samps = np.where(np.abs(zscored_gradient) >= peak_thresh)
 
-    artifact_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
-    artifact_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
-
-    for ch_ in mne_data.ch_names:
-        artifact_samps_dict[ch_] = artifact_samps[1][artifact_samps[0] == mne_data.ch_names.index(ch_)]
-        artifact_sec_dict[ch_] = (artifact_samps_dict[ch_] / mne_data.info['sfreq'])
+    artifact_sec_dict = {f'{x}': np.nan for x in mne_data.ch_names}
+    sfreq = mne_data.info['sfreq']
+    for ch_ix, ch_ in enumerate(mne_data.ch_names):
+        ch_samps = artifact_samps[1][artifact_samps[0] == ch_ix]
+        artifact_sec_dict[ch_] = ch_samps / sfreq
 
     return artifact_sec_dict
 
@@ -1098,9 +1163,14 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
     IED_samps_dict = {f'{x}':np.nan for x in mne_data.ch_names}
     IED_sec_dict = {f'{x}':np.nan for x in mne_data.ch_names}
 
+    # Materialize once as float32; avoid per-channel get_data() calls.
+    filtered_arr = _get_mne_data_array(filtered_data)
+    raw_arr = _get_mne_data_array(mne_data)
+    raw_z = zscore(raw_arr, axis=-1)
+
     if data_type == 'continuous':
-        for ch_ in filtered_data.ch_names:
-            sig = filtered_data.get_data(picks=[ch_])[0, :]
+        for ch_ix, ch_ in enumerate(filtered_data.ch_names):
+            sig = filtered_arr[ch_ix]
 
             # Find peaks 
             IED_samps, _ = find_peaks(sig, height=peak_thresh, distance=closeness_thresh * sr)
@@ -1111,26 +1181,20 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
         all_IEDs = np.sort(np.concatenate(list(IED_samps_dict.values())).ravel())
 
         # Remove lame IEDs 
-        for ch_ in filtered_data.ch_names:
-            sig = filtered_data.get_data(picks=[ch_])[0, :]
+        for ch_ix, ch_ in enumerate(filtered_data.ch_names):
+            sig = filtered_arr[ch_ix]
             # 1. Too wide  
-            # Whick IEDs are longer than 200 ms?
             widths = peak_widths(sig, IED_samps_dict[ch_], rel_height=0.75)
             wide_IEDs = np.where(widths[0] > min_width)[0]
             # 2. Too small 
-            # Which IEDs are below 3 in z-scored unfiltered signal? 
-            small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[0, IED_samps_dict[ch_]] < 3)[0]
+            small_IEDs = np.where(raw_z[ch_ix, IED_samps_dict[ch_]] < 3)[0]
             local_IEDs = [] 
             # 3. Too local 
-            # Which IEDs are not present on enough electrodes? 
-            # Logic - aggregate IEDs across all channels as a reference point 
-            # Check each channel's IED across aggregate to find ones that are close in time (but are<500 ms so can't be same channel)
             for IED_ix, indvid_IED in enumerate(IED_samps_dict[ch_]): 
-                # compute the time (in samples) to all IEDS if the 5 closest aren't all within 100 ms, then reject
+                # compute the time (in samples) to all IEDS if the 5 closest aren't all within threshold, then reject
                 diff_with_all_IEDs = np.sort(np.abs(indvid_IED - all_IEDs))[0:5]
                 if any(diff_with_all_IEDs>=across_chan_threshold_samps): 
                     local_IEDs.append(IED_ix)
-                    # print(diff_with_all_IEDs)
             local_IEDs = np.array(local_IEDs).astype(int)   
             elim_IEDs = np.unique(np.hstack([small_IEDs, wide_IEDs, local_IEDs]))
             revised_IED_samps = np.delete(IED_samps_dict[ch_], elim_IEDs)
@@ -1139,31 +1203,29 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
           
         return IED_sec_dict
     elif data_type == 'epoch':
-        # Detect the IEDs in every event in epoch time
-        for ch_ in filtered_data.ch_names:
-            sig = filtered_data.get_data(picks=[ch_])[:,0,:]
+        # filtered_arr shape: (n_epochs, n_channels, n_times)
+        for ch_ix, ch_ in enumerate(filtered_data.ch_names):
+            sig = filtered_arr[:, ch_ix, :]
             IED_dict = {x:np.nan for x in np.arange(sig.shape[0])}
             for event in np.arange(sig.shape[0]):
                 IED_samps, _ = find_peaks(sig[event, :], height=peak_thresh, distance=closeness_thresh * sr)
-                # IED_s = (IED_samps / sr)
                 if len(IED_samps) == 0: 
                     IED_samps = np.array([np.nan])
-                    # IED_s = np.nan
                 IED_dict[event] = IED_samps
             IED_samps_dict[ch_] = IED_dict
         # aggregate all IEDs
         all_IEDs = np.sort(np.concatenate([list(x.values())[0] for x in list(IED_samps_dict.values())]).ravel())
 
-        for ch_ in filtered_data.ch_names:
-            sig = filtered_data.get_data(picks=[ch_])[:,0,:]
+        for ch_ix, ch_ in enumerate(filtered_data.ch_names):
+            sig = filtered_arr[:, ch_ix, :]
             for event in np.arange(sig.shape[0]):
                 if all(~np.isnan(IED_samps_dict[ch_][event])): # Make sure there are IEDs here to begin with during this event 
                     widths = peak_widths(sig[event, :], IED_samps_dict[ch_][event], rel_height=0.75)
                     wide_IEDs = np.where(widths[0] > min_width)[0]
-                    small_IEDs = np.where(zscore(mne_data.get_data(picks=[ch_]), axis=-1)[event, 0, IED_samps_dict[ch_][event]] < 3)[0]
+                    small_IEDs = np.where(raw_z[event, ch_ix, IED_samps_dict[ch_][event]] < 3)[0]
                     local_IEDs = [] 
                     for IED_ix, indvid_IED in enumerate(IED_samps_dict[ch_][event]): 
-                        # compute the time (in samples) to all IEDS if the 5 closest aren't all within 100 ms, then reject
+                        # compute the time (in samples) to all IEDS if the 5 closest aren't all within threshold, then reject
                         diff_with_all_IEDs = np.sort(np.abs(indvid_IED - all_IEDs))[0:5]
                         if any(diff_with_all_IEDs>=across_chan_threshold_samps): 
                             local_IEDs.append(IED_ix)
@@ -2296,25 +2358,23 @@ def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.
         IED_df = pd.read_csv(f'{load_path}/{baseline_name}_IED_df.csv') 
         artifact_df = pd.read_csv(f'{load_path}/{baseline_name}_artifact_df.csv') 
 
-
-        # Now, let's iterate through each channel, and each ied/artifact, and NaN 100 ms before and after these timepoints
-        for ch_ix, ch_name in enumerate(baseline_epochs_reref.ch_names): 
-            ied_ev_list = IED_df[ch_name].dropna().index.tolist()
-            artifact_ev_list = artifact_df[ch_name].dropna().index.tolist() 
-            for ev_ in ied_ev_list: 
-                for ied_ in literal_eval(IED_df[ch_name].iloc[ev_]):
-                    # remove 100 ms before 
-                    ev_ix_start = np.max([0, np.floor((ied_- 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
-                    # remove 100 ms after 
-                    ev_ix_end = np.min([baseline_power.data.shape[-1], np.ceil((ied_ + 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
-                    baseline_power.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
-            for ev_ in artifact_ev_list: 
-                for artifact_ in literal_eval(artifact_df[ch_name].iloc[ev_]):
-                    # remove 100 ms before 
-                    ev_ix_start = np.max([0, np.floor((artifact_- 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
-                    # remove 100 ms after
-                    ev_ix_end = np.min([baseline_power.data.shape[-1], np.ceil((artifact_ + 0.1) * baseline_epochs_reref.info['sfreq'])]).astype(int)
-                    baseline_power.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
+        baseline_power.data = np.asarray(baseline_power.data, dtype=_WORKING_DTYPE)
+        _nan_mask_tfr_events(
+            baseline_power.data,
+            IED_df,
+            baseline_epochs_reref.ch_names,
+            baseline_epochs_reref.info['sfreq'],
+            baseline_power.data.shape[-1],
+        )
+        _nan_mask_tfr_events(
+            baseline_power.data,
+            artifact_df,
+            baseline_epochs_reref.ch_names,
+            baseline_epochs_reref.info['sfreq'],
+            baseline_power.data.shape[-1],
+        )
+    else:
+        baseline_power.data = np.asarray(baseline_power.data, dtype=_WORKING_DTYPE)
     
     # remove epochs from memory
     del baseline_epochs_reref
@@ -2347,6 +2407,7 @@ def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.
         #                                          average=False)
     
         temp_pow.crop(tmin=task_events[event][0], tmax=task_events[event][1])
+        temp_pow.data = np.asarray(temp_pow.data, dtype=_WORKING_DTYPE)
         
         if IED_artifact_thresh:
             # NAN out the bad data
@@ -2354,24 +2415,20 @@ def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.
             IED_df = pd.read_csv(f'{load_path}/{event}_IED_df.csv') 
             artifact_df = pd.read_csv(f'{load_path}/{event}_artifact_df.csv') 
 
-            # Now, let's iterate through each channel, and each ied/artifact, and NaN 100 ms before and after these timepoints
-            for ch_ix, ch_name in enumerate(event_epochs_reref.ch_names): 
-                ied_ev_list = IED_df[ch_name].dropna().index.tolist()
-                artifact_ev_list = artifact_df[ch_name].dropna().index.tolist() 
-                for ev_ in ied_ev_list: 
-                    for ied_ in literal_eval(IED_df[ch_name].iloc[ev_]):
-                        # remove 100 ms before 
-                        ev_ix_start = np.max([0, np.floor((ied_- 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
-                        # remove 100 ms after
-                        ev_ix_end = np.min([temp_pow.data.shape[-1], np.ceil((ied_ + 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
-                        temp_pow.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan
-                for ev_ in artifact_ev_list: 
-                    for artifact_ in literal_eval(artifact_df[ch_name].iloc[ev_]):
-                        # remove 100 ms before 
-                        ev_ix_start = np.max([0, np.floor((artifact_- 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
-                        # remove 100 ms after
-                        ev_ix_end = np.min([temp_pow.data.shape[-1], np.ceil((artifact_ + 0.1) * event_epochs_reref.info['sfreq'])]).astype(int)
-                        temp_pow.data[ev_, ch_ix, :, ev_ix_start:ev_ix_end] = np.nan    
+            _nan_mask_tfr_events(
+                temp_pow.data,
+                IED_df,
+                event_epochs_reref.ch_names,
+                event_epochs_reref.info['sfreq'],
+                temp_pow.data.shape[-1],
+            )
+            _nan_mask_tfr_events(
+                temp_pow.data,
+                artifact_df,
+                event_epochs_reref.ch_names,
+                event_epochs_reref.info['sfreq'],
+                temp_pow.data.shape[-1],
+            )    
     
         # Compute first pass of baseline
         baseline_corrected_power = baseline_trialwise_TFR(data=temp_pow.data, include_epoch_in_baseline=False, 
@@ -2408,6 +2465,7 @@ def compute_and_baseline_tfr(baseline_event: dict, task_events: dict, freqs: np.
                                     temp_pow.times, freqs)
 
         zpow.metadata = event_epochs_reref.metadata
+        del event_epochs_reref, temp_pow
         
         # check if save_path exists, if not, make the directory
         if not os.path.exists(save_path):
@@ -2531,7 +2589,7 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
     ch_names = raw.ch_names
     
     # Get the raw data: shape (n_channels, n_times)
-    data = raw.get_data()
+    data = _get_mne_data_array(raw)
     times = raw.times
     
     # ==========================================
@@ -2552,7 +2610,8 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
                                   decim=decim,
                                   n_jobs=n_jobs)
         # Remove the epoch dimension: (n_channels, n_freqs, n_times)
-        power = power[0]
+        power = np.asarray(power[0], dtype=_WORKING_DTYPE)
+        del data_3d, data
     else:
         raise NotImplementedError(f"TFR method '{tfr_method}' not implemented for continuous data. Use 'morlet'.")
     
@@ -2612,8 +2671,8 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
         large_z_flag = True
         iteration = 0
         
-        # Work with a copy of the power for iterative cleaning
-        temp_power = power.copy()
+        # Work with power in place for iterative cleaning (already float32).
+        temp_power = power
         
         while large_z_flag and iteration < max_iter:
             print(f'baseline z-score iteration # {iteration}')

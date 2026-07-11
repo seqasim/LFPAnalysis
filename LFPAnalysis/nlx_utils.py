@@ -314,7 +314,7 @@ def load_ncs(file_path: str, load_time: bool = True, rescale_data: bool = True, 
     if rescale_data:
         try:
             # ADBitVolts specifies the conversion factor between the ADC counts and volts
-            data = data.astype(np.float64) * (np.float64(header['ADBitVolts']) * signal_scaling[0])
+            data = data.astype(np.float32) * (np.float32(header['ADBitVolts']) * np.float32(signal_scaling[0]))
         except KeyError:
             warnings.warn('Unable to rescale data, no ADBitVolts value specified in header')
             rescale_data = False

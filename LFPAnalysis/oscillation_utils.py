@@ -125,7 +125,7 @@ def make_surrogate_data(
     method: str = 'swap_epochs', 
     n_shuffles: int = 1000, 
     rng_seed: int = 42, 
-    return_generator: bool = False
+    return_generator: bool = True
 ) -> Union[List[Union[mne.Epochs, EpochsTFR]], Generator[Union[mne.Epochs, EpochsTFR], None, None]]:
     """Create surrogate data for connectivity null hypothesis.
     
@@ -141,7 +141,8 @@ def make_surrogate_data(
     rng_seed : int, optional
         Random seed. Default is 42.
     return_generator : bool, optional
-        Whether to return generator. Default is False.
+        Whether to return a generator (default True) to avoid materializing all
+        surrogates in RAM at once. Set False only when you need a full list.
     
     Returns
     -------
@@ -541,9 +542,12 @@ def compute_te(
     n_surr : int, optional
         Number of surrogates for z-scoring. Default is 100. Set to 0 for raw TE.
     parallelize : bool, optional
-        Whether to parallelize surrogate computation. Default is False.
+        Whether to parallelize surrogate computation with joblib. Default is False
+        (safer for memory-constrained local machines). Enable with ``n_jobs`` when
+        you have spare cores and enough RAM for concurrent surrogate workers.
     n_jobs : int, optional
-        Number of parallel jobs. -1 uses all cores. Default is -1.
+        Number of parallel jobs when ``parallelize=True``. -1 uses all cores.
+        Default is -1.
     return_freqs : bool, optional
         Whether to return frequency array along with TE values. Default is False.
     net : bool, optional

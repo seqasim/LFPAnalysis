@@ -35,7 +35,7 @@ def test_rolling_rms_last_axis_matches_trailing_window(monkeypatch):
             np.sqrt((3.0**2 + 4.0**2) / 2.0),
         ]]]
     )
-    np.testing.assert_allclose(result, expected)
+    np.testing.assert_allclose(result, expected, rtol=1e-5, atol=1e-6)
 
 
 def test_select_rois_picks_caches_yba_lookup(monkeypatch):

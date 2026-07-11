@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# NumPy must remain importable before fixtures build MNE objects. The repo-root
+# conftest.py preloads NumPy for pytest-cov; keep this import for fixture use.
 import numpy as np
 import pytest
 

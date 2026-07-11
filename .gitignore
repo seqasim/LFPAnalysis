@@ -60,3 +60,6 @@ pip-delete-this-directory.txt
 
 # Documentation builds
 LFPAnalysisBook/_build/
+
+# Cursor session handoffs (local, disposable)
+.cursor/handoffs/

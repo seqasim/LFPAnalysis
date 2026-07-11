@@ -10,6 +10,7 @@ import pandas as pd
 
 from . import nlx_utils
 from .config import (
+    WORKING_DTYPE,
     ArtifactConfig,
     BaselineConfig,
     EpochConfig,
@@ -50,6 +51,7 @@ BASELINE_METHODS = {
     "continuous",
 }
 SPECTRAL_METHODS = {"none", "psd", "fooof"}
+_WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
 
 
 def _require_mne():
@@ -58,6 +60,49 @@ def _require_mne():
 
 def _legacy_preprocess_module():
     return ensure_dependency("LFPAnalysis.lfp_preprocess_utils", install_hint="pip install -e .[dev]")
+
+
+def _ensure_preloaded(data):
+    """Load data into memory when an in-RAM array is required."""
+    if hasattr(data, "preload") and not data.preload and hasattr(data, "load_data"):
+        data.load_data()
+    return data
+
+
+def _get_data_array(data, *, copy: bool = False, dtype=None):
+    """Return signal data as a NumPy array, compatible with Raw and Epochs.
+
+    MNE Raw.get_data does not accept ``copy``; Epochs.get_data does. Prefer the
+    preloaded ``_data`` buffer when available to avoid an extra materialization.
+    """
+    if dtype is None:
+        dtype = _WORKING_DTYPE
+    _ensure_preloaded(data)
+    if hasattr(data, "_data") and data._data is not None and getattr(data, "preload", True):
+        arr = data._data
+        if copy:
+            arr = np.array(arr, copy=True)
+    else:
+        try:
+            arr = data.get_data(copy=copy)
+        except TypeError:
+            arr = data.get_data()
+            if copy:
+                arr = np.array(arr, copy=True)
+    return np.asarray(arr, dtype=dtype)
+
+
+def _downcast_mne_data(data, dtype=None):
+    """Cast preloaded MNE signal arrays to the working dtype in place when possible."""
+    if dtype is None:
+        dtype = _WORKING_DTYPE
+    if not hasattr(data, "preload") or not data.preload:
+        return data
+    if not hasattr(data, "_data") or data._data is None:
+        return data
+    if data._data.dtype != dtype:
+        data._data = np.asarray(data._data, dtype=dtype)
+    return data
 
 
 def load_electrode_metadata(path: str | Path) -> pd.DataFrame:
@@ -82,12 +127,14 @@ def load_lfp(config: LoadConfig):
     mne = _require_mne()
 
     if hasattr(config.path, "info") and hasattr(config.path, "copy"):
-        data = config.path.copy()
+        # Caller-owned object: return as-is (no defensive copy) and downcast if preloaded.
+        data = config.path
     elif config.file_format == "mne":
         path = resolve_existing_path(config.path, field_name="path")
         if path.suffix.lower() == ".fif" and ("epo" in path.name or path.name.endswith("-epo.fif")):
             data = mne.read_epochs(path, preload=config.preload)
         else:
+            # memmap=True uses MNE's disk-backed path when preload is False.
             data = mne.io.read_raw_fif(path, preload=config.preload)
     elif config.file_format == "edf":
         path = resolve_existing_path(config.path, field_name="path")
@@ -114,20 +161,22 @@ def load_lfp(config: LoadConfig):
         if len(set(srs)) != 1:
             raise ConfigurationError("Neuralynx channels must share a common sampling rate.")
         info = mne.create_info(ch_names=ch_names, sfreq=float(srs[0]), ch_types=ch_types)
-        data = mne.io.RawArray(np.vstack(signals), info)
+        stacked = np.asarray(np.vstack(signals), dtype=_WORKING_DTYPE)
+        data = mne.io.RawArray(stacked, info)
 
     if config.pick_channels and hasattr(data, "pick"):
         data.pick(config.pick_channels)
     if config.resample_sfreq and hasattr(data, "resample"):
+        _ensure_preloaded(data)
         data.resample(config.resample_sfreq)
-    return data
+    return _downcast_mne_data(data)
 
 
 def preprocess_lfp(data, config: ReferenceConfig):
     """Apply an optional re-referencing step to continuous data."""
     ensure_supported(config.method, field_name="reference.method", supported=REFERENCE_METHODS)
     if config.method == "none":
-        return data.copy() if hasattr(data, "copy") else data
+        return data
     if not hasattr(data, "copy"):
         raise ConfigurationError("Reference operations require an MNE Raw-like object.")
     if not config.electrode_path:
@@ -135,13 +184,16 @@ def preprocess_lfp(data, config: ReferenceConfig):
 
     electrode_path = str(resolve_existing_path(config.electrode_path, field_name="electrode_path"))
     legacy = _legacy_preprocess_module()
+    _ensure_preloaded(data)
     if config.method in {"wm", "bipolar"}:
-        return legacy.ref_mne(
-            mne_data=data.copy(),
+        # Single copy into the legacy rereferencer (which may also copy internally).
+        referenced = legacy.ref_mne(
+            mne_data=data,
             elec_path=electrode_path,
             method=config.method,
             site=config.site,
         )
+        return _downcast_mne_data(referenced)
     raise ConfigurationError(
         "The 'laplacian' registry entry is reserved, but the legacy laplacian implementation is not yet complete."
     )
@@ -153,12 +205,14 @@ def _artifact_none(data, config: ArtifactConfig) -> pd.DataFrame:
 
 def _artifact_misc(data, config: ArtifactConfig) -> pd.DataFrame:
     legacy = _legacy_preprocess_module()
+    _ensure_preloaded(data)
     channel_events = legacy.detect_misc_artifacts(data, peak_thresh=config.misc_peak_thresh)
     return build_event_table(channel_events, event_kind="misc", sfreq=float(data.info["sfreq"]))
 
 
 def _artifact_ied(data, config: ArtifactConfig) -> pd.DataFrame:
     legacy = _legacy_preprocess_module()
+    _ensure_preloaded(data)
     channel_events = legacy.detect_IEDs(
         data,
         peak_thresh=config.ied_peak_thresh,
@@ -225,49 +279,44 @@ def baseline_lfp(data, config: BaselineConfig):
         return data, empty_baseline_summary()
 
     mne = _require_mne()
+    _ensure_preloaded(data)
     if isinstance(data, mne.BaseEpochs):
         indices = _get_baseline_indices(data.times, config.baseline_window)
-        data_copy = data.copy()
-        all_data = data_copy.get_data(copy=True)
+        # Single materialization; mutate in place on a float32 working buffer.
+        all_data = _get_data_array(data, copy=False)
         baseline = all_data[:, :, indices]
-        corrected = np.empty_like(all_data)
-        for epoch_index in range(all_data.shape[0]):
-            corrected[epoch_index] = _apply_baseline_array(
-                all_data[epoch_index],
-                baseline[epoch_index],
-                config.mode,
-            )
-        data_copy._data = corrected
+        # Vectorized across epochs via the shared baseline helper (operates on full array).
+        corrected = _apply_baseline_array(all_data, baseline, config.mode)
+        data._data = np.asarray(corrected, dtype=_WORKING_DTYPE)
         summary = build_baseline_summary(
             target="epochs",
-            channel_names=data_copy.ch_names,
+            channel_names=data.ch_names,
             mode=config.mode,
             baseline_start=config.baseline_window[0],
             baseline_stop=config.baseline_window[1],
             baseline_mean=baseline.mean(axis=(0, 2)),
             baseline_std=baseline.std(axis=(0, 2)),
         )
-        return data_copy, summary
+        return data, summary
 
     if not hasattr(data, "get_data"):
         raise ConfigurationError("Baselining requires an MNE Raw or Epochs object.")
 
-    data_copy = data.copy()
-    time_axis = np.arange(data_copy.n_times) / float(data_copy.info["sfreq"])
+    time_axis = np.arange(data.n_times) / float(data.info["sfreq"])
     indices = _get_baseline_indices(time_axis, config.baseline_window)
-    all_data = data_copy.get_data()
+    all_data = _get_data_array(data, copy=False)
     baseline = all_data[:, indices]
-    data_copy._data = _apply_baseline_array(all_data, baseline, config.mode)
+    data._data = np.asarray(_apply_baseline_array(all_data, baseline, config.mode), dtype=_WORKING_DTYPE)
     summary = build_baseline_summary(
         target="raw",
-        channel_names=data_copy.ch_names,
+        channel_names=data.ch_names,
         mode=config.mode,
         baseline_start=config.baseline_window[0],
         baseline_stop=config.baseline_window[1],
         baseline_mean=baseline.mean(axis=1),
         baseline_std=baseline.std(axis=1),
     )
-    return data_copy, summary
+    return data, summary
 
 
 def make_epochs(data, config: EpochConfig):
@@ -280,10 +329,11 @@ def make_epochs(data, config: EpochConfig):
     if not config.event_times:
         raise ConfigurationError("epoch.event_times must be provided when epoching is enabled.")
 
+    _ensure_preloaded(data)
     transformed_times = [(time_value * config.slope) + config.offset for time_value in config.event_times]
     events = np.column_stack(
         [
-            np.asarray(transformed_times, dtype=float) * float(data.info["sfreq"]),
+            np.asarray(transformed_times, dtype=_WORKING_DTYPE) * float(data.info["sfreq"]),
             np.zeros(len(transformed_times), dtype=int),
             np.ones(len(transformed_times), dtype=int),
         ]
@@ -293,8 +343,9 @@ def make_epochs(data, config: EpochConfig):
         metadata = pd.DataFrame(config.metadata)
         if len(metadata) != len(events):
             raise ConfigurationError("epoch.metadata must have the same number of rows as event_times.")
-    return mne.Epochs(
-        data.copy(),
+    # Avoid an extra full Raw copy: Epochs will materialize its own preloaded array.
+    epochs = mne.Epochs(
+        data,
         events=events,
         event_id={config.event_name: 1},
         tmin=config.tmin,
@@ -304,6 +355,7 @@ def make_epochs(data, config: EpochConfig):
         metadata=metadata,
         verbose=False,
     )
+    return _downcast_mne_data(epochs)
 
 
 def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
@@ -312,6 +364,7 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
     if not config.enabled or config.method == "none":
         return {}
 
+    _ensure_preloaded(data)
     if config.method == "psd":
         spectrum = data.compute_psd(fmin=config.fmin, fmax=config.fmax, n_fft=config.n_fft)
         return {"method": "psd", "spectrum": spectrum}
@@ -341,9 +394,17 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
 
 
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
-    """Run the stable end-to-end workflow and return structured outputs."""
+    """Run the stable end-to-end workflow and return structured outputs.
+
+    To limit peak RAM on local machines, superseded continuous stages are dropped
+    from the result when epoching is enabled (``raw`` / ``referenced`` become
+    ``None``). When referencing produces a new object, the original ``raw`` is
+    also dropped.
+    """
     raw = load_lfp(config.load)
     referenced = preprocess_lfp(raw, config.reference)
+    keep_raw = referenced is raw
+
     artifact_tables = detect_artifacts(referenced, config.artifact)
     epochs = make_epochs(referenced, config.epoch)
 
@@ -355,16 +416,30 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         referenced = baselined_target
 
     spectral = compute_spectral_features(baselined_target, config.spectral)
+
+    if epochs is not None:
+        # Continuous arrays are superseded by the epoched working copy.
+        raw_out = None
+        referenced_out = None
+        del raw, referenced
+    else:
+        raw_out = raw if keep_raw else None
+        referenced_out = referenced
+        if not keep_raw:
+            del raw
+
     metadata = {
         "input_format": config.load.file_format,
         "reference_method": config.reference.method,
         "artifact_methods": list(config.artifact.methods),
         "baseline_mode": config.baseline.mode,
         "spectral_method": config.spectral.method,
+        "working_dtype": str(WORKING_DTYPE),
+        "preload": bool(config.load.preload),
     }
     return PipelineResult(
-        raw=raw,
-        referenced=referenced,
+        raw=raw_out,
+        referenced=referenced_out,
         epochs=epochs,
         artifact_tables=artifact_tables,
         baseline_summary=baseline_summary,

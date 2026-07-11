@@ -17,14 +17,17 @@ def lint(session: nox.Session) -> None:
 @nox.session
 def tests(session: nox.Session) -> None:
     session.install("-e", ".[dev]")
+    # Preload NumPy before pytest-cov traces package imports (avoids NumPy/pandas reload breakage).
     session.run(
-        "pytest",
-        "-m",
-        "not notebook and not slow",
-        "--cov=LFPAnalysis.workflow",
-        "--cov=LFPAnalysis.builders",
-        "--cov=LFPAnalysis.legacy",
-        "--cov-fail-under=80",
+        "python",
+        "-c",
+        "import numpy; import pytest; raise SystemExit(pytest.main(["
+        "'-m', 'not notebook and not slow', "
+        "'--cov=LFPAnalysis.workflow', "
+        "'--cov=LFPAnalysis.builders', "
+        "'--cov=LFPAnalysis.legacy', "
+        "'--cov-fail-under=80'"
+        "]))",
     )
 
 

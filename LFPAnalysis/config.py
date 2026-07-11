@@ -23,6 +23,11 @@ ReferenceMethod = Literal["none", "bipolar", "wm", "laplacian"]
 SpectralMethod = Literal["none", "psd", "fooof"]
 InputFormat = Literal["edf", "neuralynx", "mne"]
 
+# Default working dtype name for signal / TFR arrays. float32 halves RAM vs float64
+# while remaining sufficient for typical iEEG/LFP analysis on local machines.
+# Resolved to a NumPy dtype at use sites via ``numpy.dtype(WORKING_DTYPE)``.
+WORKING_DTYPE = "float32"
+
 
 @dataclass(slots=True)
 class LoadConfig:
@@ -30,7 +35,8 @@ class LoadConfig:
 
     path: PathLike | Sequence[PathLike] | Any
     file_format: InputFormat = "mne"
-    preload: bool = True
+    preload: bool = False
+    memmap: bool = True
     resample_sfreq: float | None = None
     include_micros: bool = False
     eeg_names: list[str] = field(default_factory=list)

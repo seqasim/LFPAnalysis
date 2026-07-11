@@ -1,0 +1,41 @@
+---
+description: >-
+  Multi-agent decision council with confirmation gate. Triggers: "convene a
+  council", "run a council", "council this decision".
+alwaysApply: false
+---
+
+# LLM Council
+
+Pressure-test a high-stakes decision through parallel advisors. Default is frugal; full peer review is opt-in.
+
+## Hard gates (never skip)
+
+1. **Worth-it check** — If the question is trivial or has a discoverable factual answer, answer directly. Do not propose a council.
+2. **Confirmation gate** — Never spawn subagents implicitly, even on a trigger phrase. First present:
+   - Framed question
+   - Proposed seats (persona + model per seat)
+   - Mode: quick (default) or full
+   - Cost note: full mode roughly doubles token use
+   Use AskQuestion and wait for explicit confirmation. If declined, answer normally.
+
+## Context (gather once)
+
+The main agent reads relevant files and passes members a short curated context block plus file paths. Members must **not** explore the repo independently.
+
+## Quick council (default)
+
+1. **Collect** — Launch 3 parallel Task subagents:
+   - First-principles architect → strong model (e.g. Opus)
+   - Skeptic → faster model (e.g. Sonnet)
+   - Pragmatist → faster model (e.g. Composer)
+   Each response ≤ ~400 words: position, top 3 reasons, biggest risk.
+2. **Chairman** — Main agent synthesizes in-session (no extra subagent). Pick the best-argued position, even a minority view. End with one clear next step.
+
+## Full council (opt-in only)
+
+After collect, anonymize responses as A/B/C. Launch reviewers (rankings + weakest-claim notes only, no re-litigating). Chairman reads answers + reviews, then synthesizes.
+
+## Escalation
+
+User may request more members or specific models — update the confirmation prompt before launching.
