@@ -4,5 +4,8 @@ channels:
 dependencies:
   - python=3.11
   - pip
+  - ipykernel
+  - notebook
+  - jupyterlab
   - pip:
       - -e .[dev]

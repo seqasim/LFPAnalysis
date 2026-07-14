@@ -126,6 +126,18 @@ nox -s notebooks
 
 ---
 
+## Scaffolding user analysis notebooks
+
+When a user brings their own dataset and wants analysis notebooks (TFR, band power, regressions, PSD/FOOOF, connectivity, etc.), use the project Cursor skill:
+
+**[`.cursor/skills/scaffold-analysis/`](../.cursor/skills/scaffold-analysis/SKILL.md)**
+
+Workflow: interview (one question at a time) → Dataset Profile → select recipes → write hybrid notebooks under `notebooks/<slug>/` with `PATHS` placeholders and sample-data dry-run defaults.
+
+Canonical code sources for recipes are the LFPAnalysisBook chapters and `LFPAnalysisBook/worked-examples/` (see the skill's `recipes.md`). Do not overwrite book notebooks; generated work stays in `notebooks/` (gitignored).
+
+---
+
 ## How to debug
 
 ### Use exception types as signposts

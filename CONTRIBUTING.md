@@ -25,6 +25,10 @@ conda activate LFPAnalysis-dev
 3. Run the relevant checks before opening a pull request.
 4. Update documentation and tests alongside behavior changes.
 
+## Cursor: scaffolding analysis notebooks
+
+This repository ships a shared Cursor skill at [`.cursor/skills/scaffold-analysis/`](.cursor/skills/scaffold-analysis/SKILL.md). In Cursor, describe your dataset and analysis goals; the agent interviews you and writes hybrid notebooks under `notebooks/<slug>/` (that directory is gitignored — keep local analysis notebooks out of PRs unless intentionally shared).
+
 ## Required local checks
 
 ```bash

@@ -4,6 +4,9 @@ channels:
 dependencies:
   - python=3.11
   - pip
+  - ipykernel
+  - notebook
+  - jupyterlab
   - h5io
   - mne>=1.6
   - numpy>=1.24

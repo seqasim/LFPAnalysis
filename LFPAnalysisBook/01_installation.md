@@ -19,17 +19,29 @@ Read this before running any notebook or sample-data workflow.
 ```bash
 git clone https://github.com/seqasim/LFPAnalysis.git
 cd LFPAnalysis
-pip install -e .[dev]
+conda env create -f environment.yml      # this already runs `pip install -e .`
+conda activate LFPAnalysis
+python -m ipykernel install --user --name LFPAnalysis --display-name "LFPAnalysis"
 ```
+
+In Jupyter or VS Code, select the **LFPAnalysis** kernel before running any notebook.
 
 ## How to inspect the result
 
-Run `python -c "import LFPAnalysis; print('ok')"` and confirm that the import succeeds.
+Verify the install from a neutral directory (not the repo root), so a broken or cwd-masked install fails loudly:
+
+```bash
+cd ~
+python -c "import sys, LFPAnalysis; print(sys.executable); print(LFPAnalysis.__file__)"
+```
+
+Confirm that `sys.executable` points into the `LFPAnalysis` conda env and that `LFPAnalysis.__file__` resolves under your clone.
 
 ## Common mistakes
 
-- installing into one environment and running notebooks from another
-- using docs-only extras when you need analysis dependencies
+- installing into one environment and running notebooks from another — select the `LFPAnalysis` kernel
+- trusting an `import LFPAnalysis` that only works from inside the repo directory (cwd is on `sys.path` and can hide a broken editable install)
+- installing extras you do not need, or skipping analysis extras when you need FOOOF / connectivity
 - assuming a PyPI release exists already
 
 ## Old-to-new translation note
@@ -38,8 +50,11 @@ The old repo implicitly relied on a lab-specific environment. The refactored rep
 
 ## Quick install paths
 
-- everyday contributor path: `pip install -e .[dev]`
+- recommended conda path: `conda env create -f environment.yml` (already includes the editable install)
+- everyday pip contributor path: `pip install -e .[dev]`
 - documentation only: `pip install -e .[docs]`
 - analysis workflows: `pip install -e .[analysis]`
+
+If imports fail after install, see {doc}`30_troubleshooting`.
 
 Next step: {doc}`02_data_model`

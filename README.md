@@ -61,28 +61,32 @@ If you need to combine utility modules directly, use the advanced utility intero
 
 ## Install
 
-### Contributor install
+### Recommended: conda
 
 ```bash
 git clone https://github.com/seqasim/LFPAnalysis.git
 cd LFPAnalysis
-pip install -e .[dev]
-```
-
-### Analysis-heavy install
-
-```bash
-pip install -e .[analysis]
-```
-
-### Conda install
-
-```bash
-git clone https://github.com/seqasim/LFPAnalysis.git
-cd LFPAnalysis
-conda env create -f environment.yml
+conda env create -f environment.yml      # this already runs `pip install -e .`
 conda activate LFPAnalysis
-pip install -e .
+python -m ipykernel install --user --name LFPAnalysis --display-name "LFPAnalysis"
+```
+
+Verify the install from a neutral directory (not the repo root), so a broken or cwd-masked install fails loudly:
+
+```bash
+cd ~
+python -c "import sys, LFPAnalysis; print(sys.executable); print(LFPAnalysis.__file__)"
+```
+
+In Jupyter or VS Code, select the **LFPAnalysis** kernel before running any notebook.
+
+### Alternative: pip / venv
+
+```bash
+git clone https://github.com/seqasim/LFPAnalysis.git
+cd LFPAnalysis
+pip install -e .[dev]          # contributor path
+# or: pip install -e .[analysis]
 ```
 
 ## Beginner quickstart
