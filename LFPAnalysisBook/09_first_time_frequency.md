@@ -24,7 +24,7 @@ from LFPAnalysis import load_lfp
 from LFPAnalysis.config import LoadConfig
 
 beh = pd.read_csv(Path("../../data/sample_beh.csv"))
-epochs = load_lfp(LoadConfig(path=Path("../../data/sample_feedback_start-epo.fif"), file_format="mne"))
+epochs = load_lfp(LoadConfig(path=Path("../../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True))
 epochs.metadata = beh[["reward", "rpe"]]
 
 # Subset for speed: one ACC channel, beta band
@@ -50,6 +50,7 @@ The worked notebook plots TFR heatmaps and the reward-minus-loss difference.
 
 ## Common mistakes
 
+- Loading with default `preload=False` then calling `.pick()` / TFR helpers that need in-memory data — pass `preload=True` (or call `epochs.load_data()`)
 - Treating TFR as a first-step visualization instead of a later-stage summary
 - Running TFR on all 15 channels × 80 trials without subsetting (slow in CI)
 - Assuming the stable API currently wraps the whole TFR pipeline

@@ -19,12 +19,19 @@ Read this before running any notebook or sample-data workflow.
 ```bash
 git clone https://github.com/seqasim/LFPAnalysis.git
 cd LFPAnalysis
-conda env create -f environment.yml      # this already runs `pip install -e .`
+conda env create -f environment.yml      # installs editable package + analysis extras (FOOOF, connectivity, …)
 conda activate LFPAnalysis
 python -m ipykernel install --user --name LFPAnalysis --display-name "LFPAnalysis"
 ```
 
 In Jupyter or VS Code, select the **LFPAnalysis** kernel before running any notebook.
+
+If you already created the env from an older `environment.yml` (base install only), upgrade in place:
+
+```bash
+conda activate LFPAnalysis
+python -m pip install -e ".[analysis]"
+```
 
 ## How to inspect the result
 
@@ -50,10 +57,10 @@ The old repo implicitly relied on a lab-specific environment. The refactored rep
 
 ## Quick install paths
 
-- recommended conda path: `conda env create -f environment.yml` (already includes the editable install)
+- recommended conda path: `conda env create -f environment.yml` (editable install + `[analysis]` extras)
 - everyday pip contributor path: `pip install -e .[dev]`
 - documentation only: `pip install -e .[docs]`
-- analysis workflows: `pip install -e .[analysis]`
+- analysis only (existing env): `pip install -e .[analysis]`
 
 If imports fail after install, see {doc}`30_troubleshooting`.
 

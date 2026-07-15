@@ -64,12 +64,12 @@ from LFPAnalysis import load_lfp
 from LFPAnalysis.config import LoadConfig
 
 beh = pd.read_csv(P["behavior"])
-epochs = load_lfp(LoadConfig(path=P["epochs"], file_format="mne"))
+epochs = load_lfp(LoadConfig(path=P["epochs"], file_format="mne", preload=True))
 # Attach only columns that exist / are needed:
 epochs.metadata = beh[["reward", "rpe"]].copy()  # adapt to Dataset Profile
 ```
 
-If `load_lfp` is awkward for a given file, `mne.read_epochs(P["epochs"], preload=True)` is acceptable (as in book chapter 10b).
+Use `preload=True` whenever you will `.pick()`, filter, or run spectral/connectivity helpers. If `load_lfp` is awkward for a given file, `mne.read_epochs(P["epochs"], preload=True)` is acceptable (as in book chapter 10b).
 
 **Electrodes:**
 

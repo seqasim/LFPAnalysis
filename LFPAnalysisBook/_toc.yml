@@ -56,4 +56,5 @@ chapters:
   - file: 23_translate_tfr_workflow
   - file: 24_translate_connectivity_workflow
   - file: 25_legacy_only_surfaces
+  - file: 26_resources_and_references
   - file: 30_troubleshooting

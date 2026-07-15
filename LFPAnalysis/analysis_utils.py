@@ -4,13 +4,13 @@ import numpy as np
 import scipy as sp
 import math
 from functools import lru_cache
+from pathlib import Path
 import pandas as pd
 import mne
 import fooof
 from fooof import FOOOFGroup
 import os
 import pycatch22
-import pkg_resources
 
 from .config import WORKING_DTYPE
 
@@ -18,13 +18,18 @@ from .config import WORKING_DTYPE
 _WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
 
 
+def _yba_roi_excel_path() -> Path:
+    """Return path to the packaged YBA ROI lookup table."""
+
+    return Path(__file__).resolve().parent / "YBA_ROI_labelled.xlsx"
+
+
 # There are some things that MNE is not that good at, or simply does not do. Let's write our own code for these. 
 @lru_cache(maxsize=1)
 def _load_yba_roi_labels() -> pd.DataFrame:
     """Load and normalize the packaged YBA ROI lookup table once."""
 
-    data_dir = pkg_resources.resource_filename('LFPAnalysis', '../data')
-    file_path = os.path.join(data_dir, 'YBA_ROI_labelled.xlsx')
+    file_path = _yba_roi_excel_path()
     yba_roi_labels = pd.read_excel(file_path)
     yba_roi_labels['Long.name'] = (
         yba_roi_labels['Long.name'].astype(str).str.lower().str.replace(" ", "", regex=False)
@@ -677,12 +682,13 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
     FOOOFGroup_res.fit(freqs, psd_trial_avg, kwargs['freq_range'])
 
     all_chan_dfs = []
-    n_freqs = len(freqs)
     # Go through individual channels; build DataFrames from arrays (avoid .tolist() copies).
     for chan in range(len(epochs.ch_names)):
 
         ind_fits = FOOOFGroup_res.get_fooof(ind=chan, regenerate=True)
         ind_fits.fit()
+        # FOOOF trims to freq_range; peak markers must match that length (not full PSD).
+        n_freqs = len(ind_fits.freqs)
 
         # Create a dataframe to store results 
         chan_data_df = pd.DataFrame({

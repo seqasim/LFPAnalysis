@@ -1,6 +1,7 @@
 import importlib
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -54,9 +55,9 @@ def test_select_rois_picks_caches_yba_lookup(monkeypatch):
         )
 
     monkeypatch.setattr(
-        analysis_utils.pkg_resources,
-        "resource_filename",
-        lambda package, resource: "/tmp",
+        analysis_utils,
+        "_yba_roi_excel_path",
+        lambda: Path("/tmp") / "YBA_ROI_labelled.xlsx",
     )
     monkeypatch.setattr(analysis_utils.pd, "read_excel", fake_read_excel)
 

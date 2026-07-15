@@ -26,7 +26,7 @@ from LFPAnalysis.config import LoadConfig
 from LFPAnalysis import oscillation_utils
 
 beh = pd.read_csv(Path("../data/sample_beh.csv"))
-epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne"))
+epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True))
 epochs.metadata = beh[["reward", "rpe"]]
 
 # ACC–frontal pair, beta band
@@ -54,6 +54,7 @@ The worked notebook plots connectivity and surrogate distributions.
 
 ## Common mistakes
 
+- Loading with default `preload=False` then calling `.pick()` / connectivity helpers that need in-memory data — pass `preload=True` (or call `epochs.load_data()`)
 - Using connectivity as a first-pass QA tool
 - Omitting the surrogate method from analysis notes
 - Assuming a stable API wrapper exists for every connectivity metric

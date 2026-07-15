@@ -23,7 +23,7 @@ from LFPAnalysis import load_lfp
 from LFPAnalysis.config import LoadConfig
 
 beh = pd.read_csv(Path("../data/sample_beh.csv"))
-epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne"))
+epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True))
 epochs.metadata = beh[["reward", "rpe"]]
 chan = "racas1-racas2"
 reward_psd = epochs["reward == 1"].copy().pick([chan]).compute_psd(fmin=1, fmax=80)
@@ -41,6 +41,7 @@ The worked notebook plots reward vs loss PSD for one channel and runs FOOOF via 
 
 ## Common mistakes
 
+- Loading with default `preload=False` then calling `.pick()` / spectral helpers that need in-memory data — pass `preload=True` (or call `epochs.load_data()`)
 - Trying FOOOF before confirming the PSD looks sensible
 - Assuming TFR and connectivity are covered by `build_spectral_pipeline_config`
 - Forgetting to install `analysis` extras for FOOOF
