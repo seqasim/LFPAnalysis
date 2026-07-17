@@ -12,25 +12,14 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 
-import warnings 
-warnings.filterwarnings('ignore')
+import warnings
+
 
 def fit_permuted_model(y_permuted, X):
-    """Fit OLS model with permuted data.
-    
-    Parameters
-    ----------
-    y_permuted
-        Permuted dependent variable.
-    X
-        Design matrix.
-    
-    Returns
-    -------
-    np.ndarray
-        Model parameters.
-    """
-    return OLS(y_permuted, X).fit().params
+    """Archived OLS helper — prefer ``permutation_regression_zscore``."""
+    from ._scratch_utils import fit_permuted_model as _archived
+
+    return _archived(y_permuted, X)
 
 def permutation_regression_zscore(data: pd.DataFrame, formula: str, n_permutations: int = 1000, plot_res: bool = False):
     """Perform regression with permutation-based z-scores.
@@ -235,7 +224,10 @@ def generate_surrogate_results(df: pd.DataFrame, formula: str = 'tfr ~ 1 + zrpe*
 
 def time_resolved_regression_single_channel(smoothed_df: pd.DataFrame = None, y: str = 'tfr', formula: str = '1 + zrpe*phit', permute: bool = False, n_permutations: int = 100):
     """Run time-resolved regression for single channel.
-    
+
+    Prefer ``time_resolved_mlm`` for hierarchical designs. This helper is lightly
+    maintained.
+
     Parameters
     ----------
     smoothed_df : pd.DataFrame, optional
@@ -248,24 +240,18 @@ def time_resolved_regression_single_channel(smoothed_df: pd.DataFrame = None, y:
         Whether to use permutation testing. Default is False.
     n_permutations : int, optional
         Number of permutations. Default is 100.
-    
+
     Returns
     -------
     pd.DataFrame
         Results DataFrame with regression statistics.
     """
-
-    # # Optional: bin the data
-    # if smooth: 
-    #     slices = np.lib.stride_tricks.sliding_window_view(np.arange(timeseries.shape[-1]), win_len)[::slide_len]
-    #     midpoints = np.ceil(np.mean(slices, axis=1))
-    #     # Smooth the timeseries (easier to do here than to store smoothed data)
-    #     sig = np.zeros([timeseries.shape[0], slices.shape[0]])
-    #     for stride in range(slices.shape[0]):
-    #         sig[:, stride] = np.nanmean(timeseries[:, slices[stride]], axis=1)
-    #         # [np.nanmean(timeseries[trial, i:i+win_len]) for i in range(0, timeseries.shape[1], slide_len) if i+win_len <= timeseries.shape[1]]
-    # else:
-    #     sig = timeseries
+    warnings.warn(
+        "`time_resolved_regression_single_channel` is lightly maintained; "
+        "prefer `time_resolved_mlm` for hierarchical models.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     all_res = []
     # write the regression formula
@@ -374,7 +360,7 @@ def process_single_timepoint(ts, smoothed_df: pd.DataFrame, formula: str, lower_
         
     return results
 
-def time_resolved_mlm(smoothed_df: pd.DataFrame, y: str = 'tfr', formula: str = 'tfr ~ 1 + zrpe*phit', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial', n_permutations: int = 100, n_jobs: int = -1):
+def time_resolved_mlm(smoothed_df: pd.DataFrame, y: str = 'tfr', formula: str = 'tfr ~ 1 + zrpe*phit', lower_group: str = 'unique_label', higher_group: str = 'participant', trial_key: str = 'trial', n_permutations: int = 100, n_jobs: int = 1):
     """Run time-resolved mixed-effects model with parallelization.
     
     Parameters
@@ -394,12 +380,18 @@ def time_resolved_mlm(smoothed_df: pd.DataFrame, y: str = 'tfr', formula: str = 
     n_permutations : int, optional
         Number of permutations. Default is 100.
     n_jobs : int, optional
-        Number of parallel jobs. Default is -1.
-    
+        Number of parallel jobs. Default is 1 (local-machine friendly).
+        Pass ``n_jobs=-1`` on a cluster.
+
     Returns
     -------
     pd.DataFrame
         Results DataFrame with all timepoints.
+
+    Notes
+    -----
+    Permutation draws are not seeded; results are not bit-reproducible unless
+    the caller sets a global NumPy seed.
     """
     unique_ts = smoothed_df.ts.unique()
     
@@ -420,220 +412,3 @@ def time_resolved_mlm(smoothed_df: pd.DataFrame, y: str = 'tfr', formula: str = 
 
 
 
-# def time_resolved_mlm(smoothed_df,
-#                       y='tfr',
-#                       formula='tfr ~ 1 + zrpe*phit',
-#                       lower_group='unique_label',
-#                       higher_group='participant',
-#                       trial_key='trial',
-#                       n_permutations=100):
-#     """
-
-#     Parameters
-#     ----------
-#     timeseries : 2D ndarray, dimensions = trials x times
-#         Time-varying neural data.
-#     regressors : pandas.DataFrame, dimensions = trials x regressors
-#         Dataframe containing the regressors.
-#     win_len : int
-#         Length of the window for the time-resolved regression.
-#     slide_len : int
-#         Step size for the time-resolved regression.
-#     standardize : bool
-#         Whether to standardize the regressors. The default is True.
-#     smooth : bool
-#         Whether to bin the timeseries according to win_len and slide_len. The default is Fault.
-#     sr: int
-#         sampling rate to determine the proper timing of the resulting timeseries of coefficients
-
-#     """
-#     all_res = []
-#     for ts in smoothed_df.ts.unique():
-#         model_df  = smoothed_df[smoothed_df.ts==ts]
-#         test_model = smf.mixedlm(formula, 
-#                             data=model_df, 
-#                             groups=model_df[lower_group]).fit()
-
-#         # Convert results to DataFrame
-#         results = pd.DataFrame(test_model.params).rename(columns={0:'raw_beta'})
-#         results['raw_bse'] = test_model.bse.values
-#         results['raw_p'] = test_model.pvalues.values
-#         results = results.reset_index().rename(columns={'index':'parameter'})
-
-#         # Vectorized surrogate generation
-#         surr_results = generate_surrogate_results(model_df,
-#                                                     formula = formula,
-#                                                     y=y, 
-#                                                     lower_group=lower_group, 
-#                                                     higher_group=higher_group,
-#                                                     trial_key=trial_key,
-#                                                     n_permutations=n_permutations)
-        
-#         surr_df = pd.concat(surr_results)
-    
-#         # Compute mean and standard deviation of surrogate estimates
-#         surr_means = surr_df.groupby('index')['Surrogate_Estimate'].mean()
-#         surr_stds = surr_df.groupby('index')['Surrogate_Estimate'].std()
-
-#         zscores = (test_model.params.values - surr_means.values) / surr_stds.values
-#         p_values = 2 * (1 - stats.norm.cdf(np.abs(zscores)))
-
-#         # let's also compute p-values empirically, by counting the extreme values that exceed the params (two-sided)
-#         count_p_values = [np.sum(np.abs(surr_df.loc[surr_df['index']==x, 
-#                                                     'Surrogate_Estimate']) > np.abs(test_model.params[x]), 
-#                                                     axis=0) / n_permutations for x in test_model.params.keys()]
-
-#         results['z_p'] = p_values
-#         results['count_p'] = count_p_values
-#         results['z_beta'] = zscores
-#         results['ts'] = ts
-#         all_res.append(results)
-
-#     all_res = pd.concat(all_res)
-
-#     return all_res
-
-
-# def mixed_effects_electrodes(model_df, predictor, re_var='participant', plot=True):
-#     """
-#     This function is for instances in which you've computed an electrode-level measure
-#     and you want to know if this measure is significant in a region. 
-    
-#     Your first inclination might be to do a t-test of the population of all electrodes in the region against 0. 
-    
-#     However, different patients contribute different numbers of electrodes, 
-#     and an effect might be driven by just the electrodes in one patient! 
-    
-#     So, we want to do a mixed-effects regression with subject as a random effect to assess
-#     whether this region effect, grouped across electrodes, is consistent across patients
-    
-#     Parameters
-#     ----------
-#     model_df : pd.DataFrame
-#         A dataframe with columns for the predictor variable and the random effect variable
-#     predictor : str
-#         The name of the column in model_df that contains the predictor variable
-#     re_var : str
-#         The name of the column in model_df that contains the random effect variable
-#     plot : bool
-#         Whether to plot the results
-
-#     Returns
-#     -------
-#     results : statsmodels.regression.mixed_linear_model.MixedLMResults
-#         The results of the mixed-effects regression
-    
-    
-#     """
-    
-#     model = smf.mixedlm(f"{predictor} ~ 1", data=model_df, groups=f'{re_var}')
-#     results = model.fit()
-    
-#     if plot:
-#         # Create a scatter plot of individual data points
-#         fig, ax = plt.subplots(1, 1, figsize=(10, 5), dpi=300)
-#         sns.stripplot(x=f'{re_var}', y=f'{predictor}', data=model_df, 
-#                       jitter=True, alpha=0.6, color="gray", s=6, ax=ax)
-
-#         # plot the mean line
-#         subject_means = model_df.groupby(f'{re_var}')[f'{predictor}'].mean()
-
-#         sns.boxplot(showmeans=True,
-#                     meanline=True,
-#                     meanprops={'color': 'k', 'ls': '-', 'lw': 2},
-#                     medianprops={'visible': False},
-#                     whiskerprops={'visible': False},
-#                     zorder=10,
-#                     x=subject_means.index,
-#                     y=subject_means.values,
-#                     showfliers=False,
-#                     showbox=False,
-#                     showcaps=False,
-#                     ax=ax)
-
-#         # # Overlay the subject means
-
-#         # Plot the overall mean from the mixed-effects model
-#         overall_mean = results.fe_params['Intercept']
-#         ci = results.conf_int().loc['Intercept']
-        
-#         plt.axhline(overall_mean, color="blue", linestyle="--", label=f"Overall Mean: {overall_mean:.2f}")
-#         plt.axhline(ci[0], color='red', linestyle='--')
-#         plt.axhline(ci[1], color='red', linestyle='--')
-
-#         plt.axhline(0, color='black')
-#         sns.despine()
-        
-#     return results
-    
-############################################################################################################
-
-# In Progress: 
-
-# TODO: Write a generalized class for time-resolved analyses that can be used for any input function like 
-# fit_permuted_model seen above. 
-
-# class TimeResolvedAnalysis:
-#     # This class is meant to be a general class for time-resolved analyses. 
-#     # It should take any function that can be applied to a single timeseries and 
-#     # perform this function over some sliding window.
-#     def __init__(self, data, function, win_len=100, slide_len=25):
-#         self.data = data
-#         self.win_len = win_len
-#         self.slide_len = slide_len
-#         self.results = None
-
-#     def function(self, data):
-#         """
-#         This function should take a single timeseries and return a result. 
-#         """
-#         pass
-
-#     def run(self):
-#         """
-#         This function will run the time-resolved analysis over the data provided in the class
-#         """
-#         slices = np.lib.stride_tricks.sliding_window_view(np.arange(self.data.shape[-1]), self.win_len)[::self.slide_len]
-#         midpoints = np.ceil(np.mean(slices, axis=1))
-#         results = []
-#         for ts in range(slices.shape[-1]):
-#             results.append(self.function(self.data[:, slices[ts]]))
-#         self.results = pd.DataFrame(results)
-#         self.results['ts'] = midpoints
-#         return self.results
-    
-#     def plot(self):
-#         """
-#         This function will plot the results of the time-resolved analysis
-#         """
-#         if self.results is None:
-#             self.run()
-#         features = [col for col in self.results.columns if col != 'ts']
-#         n_features = len(features)
-#         fig, axes = plt.subplots(n_features, 1, figsize=(3*n_features, 3*n_features), squeeze=False, dpi=300)
-
-#         for i, feature in enumerate(features):
-#             ax = axes[i, 0]
-
-#             # Plot original data (in red)
-#             sns.lineplot(x=self.results['ts'], y=self.results[feature], ax=ax, color='red', label='Original')
-
-#             ax.set_title(f'{feature} vs ts')
-#             ax.legend()
-
-#             # Despine the plot
-#             sns.despine(ax=ax)
-
-#         plt.tight_layout()
-#         plt.show()
-
-# class TimeResolvedRegression(TimeResolvedAnalysis):
-#     def __init__(self, data, regressors, win_len=100, slide_len=25, standardize=True):
-#         super().__init__(data, win_len, slide_len)
-#         self.regressors = regressors
-#         self.standardize = standardize
-
-#     def function(self, data):
-#         y, X = patsy.dmatrices(formula, regressors, return_type='dataframe')
-#         model = OLS(y, X).fit()
-#         return model.params

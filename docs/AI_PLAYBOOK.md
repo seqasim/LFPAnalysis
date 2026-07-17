@@ -184,7 +184,7 @@ print(set(elec["label"]) - set(raw.ch_names))  # labels in table but not in data
 print(set(raw.ch_names) - set(elec["label"]))  # channels without metadata
 ```
 
-For fuzzy matching issues, check whether `match_elec_names` would prompt interactively (avoid in CI).
+For fuzzy matching issues, `match_elec_names` defaults to `interactive=False` and raises `ValueError` on ambiguous ties (safe in CI).
 
 **Baseline window error**
 
@@ -232,7 +232,7 @@ For statistics permutations, note they are **not** seeded — set `np.random.see
 
 ### Interactive hang
 
-If execution blocks with no error, search for `input(` in the call stack — likely `match_elec_names` in `lfp_preprocess_utils.py`.
+If execution blocks with no error, search for `input(` in the call stack — only `match_elec_names(..., interactive=True)` still prompts.
 
 ---
 
@@ -419,7 +419,7 @@ Hosted documentation URL is referenced in `pyproject.toml` project URLs (GitHub 
 | Adding output columns without updating `schemas.py` | Breaks `ARTIFACT_EVENT_COLUMNS` / `BASELINE_SUMMARY_COLUMNS` contract |
 | Using `data/sample_ieeg.fif` in unit tests | Use `synthetic_raw` / `synthetic_epochs` fixtures |
 | Large binary test fixtures | Keep under `tests/data/`, stay small |
-| Calling `match_elec_names` in tests | May block on `input()` |
+| Calling `match_elec_names(..., interactive=True)` in tests | May block on `input()`; default path raises instead |
 | Top-level import of optional deps | Use `ensure_dependency` in workflow layer |
 | Forgetting `@pytest.mark.unit` or `integration` | Helps selective test runs |
 

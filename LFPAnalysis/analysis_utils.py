@@ -7,12 +7,11 @@ from functools import lru_cache
 from pathlib import Path
 import pandas as pd
 import mne
-import fooof
-from fooof import FOOOFGroup
 import os
-import pycatch22
+import warnings
 
 from .config import WORKING_DTYPE
+from .validation import ensure_dependency
 
 # NumPy dtype object resolved once at import (config stores the name string only).
 _WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
@@ -46,8 +45,12 @@ def _normalize_roi_label(value):
 
 
 def select_rois_picks(elec_data: pd.DataFrame, chan_name: str, manual_col: str = 'collapsed_manual'):
-    """Select ROI for specific channel.
-    
+    """Map one channel to a collapsed ROI using lab atlas columns.
+
+    Required / used columns (site-dependent): ``label``, ``NMM``, ``BN246``,
+    ``YBA_1``, and optionally ``collapsed_manual``. Lab-specific alias rules —
+    not a general atlas.
+
     Parameters
     ----------
     elec_data : pd.DataFrame
@@ -56,7 +59,7 @@ def select_rois_picks(elec_data: pd.DataFrame, chan_name: str, manual_col: str =
         Channel name.
     manual_col : str, optional
         Manual column name. Default is 'collapsed_manual'.
-    
+
     Returns
     -------
     str
@@ -312,9 +315,9 @@ def _find_segments_above_threshold(mask: np.ndarray, min_length_samples: float, 
     valid = lengths > min_length_samples
     return list(zip(starts[valid], stops[valid], lengths[valid] / sfreq))
 
-def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70, 200), smooth_win_s: float = 0.02, sd_upper_cutoff: float = 6, sd_lower_cutoff: float = 1):
-    """Detect fast burst events in HFA band.
-    
+def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70, 200), smooth_win_s: float = 0.02, sd_upper_cutoff: float = 6, sd_lower_cutoff: float = 1, n_jobs: int = 1):
+    """Detect fast burst events in HFA band (advanced / lightly maintained).
+
     Parameters
     ----------
     mne_data
@@ -329,25 +332,33 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
         Upper SD cutoff. Default is 6.
     sd_lower_cutoff : float, optional
         Lower SD cutoff. Default is 1.
-    
+    n_jobs : int, optional
+        Parallel jobs for filtering. Default is 1 (local-machine friendly).
+        Pass ``n_jobs=-1`` on a cluster.
+
     Returns
     -------
     dict
         Dictionary of burst events per channel.
     """
-
+    warnings.warn(
+        "`detect_fast_burst_evs` is lightly maintained and may move to "
+        "`LFPAnalysis._scratch_utils` in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     # set minimum burst duration to 3 cycles of the lower bound frequency
     min_burst_s = 3 / burst_frequency[0]
 
     # Step 1: band-pass filter the data
-    filtered_data = mne_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
+    filtered_data = mne_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=n_jobs)
 
     smooth_win_samples = max(1, round(smooth_win_s * mne_data.info['sfreq']))
     rolling_rms_array = _rolling_rms_last_axis(filtered_data._data, smooth_win_samples)
 
     # Step 2: band-pass filter the baseline data
-    filtered_baseline = baseline_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=-1)
+    filtered_baseline = baseline_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=n_jobs)
 
     rolling_rms_baseline = _rolling_rms_last_axis(filtered_baseline._data, smooth_win_samples)
 
@@ -390,32 +401,6 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
 
     return burst_samps_dict
 
-# def detect_ripple_evs(mne_data, min_ripple_length=0.038, max_ripple_length=0.5, 
-#                       smoothing_window_length=0.02, sd_upper_cutoff=9, sd_lower_cutoff=2.5):
-    
-#     """
-
-#     Parameters
-#     ----------   
-#     mne_data : re-referenced MNE object with neural data
-#     min_ripple_length : float
-#         Minimum length of ripple event in seconds
-#     max_ripple_length : float
-#         Maximum length of ripple event in seconds
-#     smoothing_window_length : float
-#         Length of window to smooth the RMS signal
-#     sd_upper_cutoff : float
-#         Upper cutoff for ripple detection
-#     sd_lower_cutoff : float
-#         Lower cutoff for ripple detection
-    
-#     Returns
-#     -------
-#     RPL_samps_dict : dict
-#         Dictionary containing the start and end samples for each ripple event
-#     RPL_sec_dict : dict
-#         Dictionary containing the start and end times for each ripple event
-  
     
 #     Foster et al., 
 #     1. band-pass filtered from 80 to 120 Hz (ripple band) using a 4th order FIR filter.
@@ -503,144 +488,25 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
 
 #     return RPL_samps_dict, RPL_sec_dict
 
-# def filter_ripples_spectral(RPL_sec_dict, evs, event, beh_ts, tfr_path, freqs):
-#     """
-
-#     Parameters
-#     ----------   
-#     RPL_sec_dict : dict
-#         Dictionary containing the start and end times for each ripple event
-#     evs : dict
-#         Dictionary containing the start and end times for each event of interest
-#     event : str
-#         Specific event of interest to look for ripples in
-#     beh_ts : list
-#         List of timestamps for each event of interest
-#     tfr_path : str
-#         Path to the TFR data computed for each event of interest
-#     freqs : np.array
-#         Array of frequencies for the TFR data
-    
-#     Returns
-#     -------
-#     allts : dict
-#         Dictionary containing the start and end times for each ripple event, binned into the epoched bins
-#     ripple_categories : dict
-#         Dictionary containing the ripple categories for each ripple event
-#     ripple_psds : dict
-#         Dictionary containing the PSDs for each ripple event
-    
-#     Just like with IEDs, assign the ripples in each dict to a behavioral event so that the TFRs computed for those events can be 
-#     used for the next step - ripple rejection based on spectral features 
-
-#     In addition to the amplitude and duration criteria the spectral features of each detected ripple event were examined
-    
 
 #     Here we follow up our ripple detection with steps to filter for ripple events with specific spectrotemporal characteristics: 
 
 
-#     5. calculate the frequency spectrum for each detected ripple event by averaging the normalized instantaneous amplitude between the onset and offset of the ripple event for the frequency range of 2–200 Hz.
-#     6. reject events with more than one peak in the ripple band
-#     8. reject events where the most prominent and highest peak was outside the ripple band and sharp wave band for a frequencies > 30 Hz
-#     9. reject events where ripple-peak width was greater than 3 standard deviations from the mean ripple-peak width calculated for a given electrode and recording session
-#     10. reject events where high frequency activity peaks exceed 80% of the ripple peak height
-
-#     """
-
-#     # Load the ripple events 
-
-#     # Load the TFRs corresponding to the ripple events 
-
-#     # Load TFR data, 
-#     # filepath = f'{base_dir}/projects/guLab/Salman/EphysAnalyses/{subj_id}/scratch/TFR'
-#     epoched_data = mne.time_frequency.read_tfrs(f'{tfr_path}/{event}-tfr.h5')[0]
-
-#     # Bin the ripple times into the epoched bins
-#     ev_starts = [x + epoched_data.times[0] for x in beh_ts]
-#     ev_ends = [x + epoched_data.times[-1] for x in beh_ts]
-#     dfs = []
-#     allts = {f'{x}': np.nan for x in RPL_sec_dict.keys()}
-#     for key in RPL_sec_dict.keys():
-        
-#         ripple_starts_sec = np.sort([x[0] for x in RPL_sec_dict[key]])
-#         ripple_ends_sec = np.sort([x[1] for x in RPL_sec_dict[key]])
-        
-#         time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
-
-#         # Initialize a dictionary to store the assigned timestamps for each time bin
-#         assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
-
-#         # Iterate through each timestamp and assign it to the appropriate time bin
-#         for ix, timestamp in enumerate(ripple_starts_sec):
-#             for bin_index, (start, end) in enumerate(time_bins):
-#                 if start <= timestamp <= end:
-#                     start_in_epoch = int((timestamp - start) * mne_data_reref.info['sfreq'])
-#                     end_in_epoch = int((ripple_ends_sec[ix] - start) * mne_data_reref.info['sfreq'])
-#                     assigned_timestamps[bin_index].append((start_in_epoch, end_in_epoch))
-#         allts[key] = assigned_timestamps
-
-#     # average amplitude between onset and offset of ripple timestamps
-   
-#     ripple_categories = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
-#     ripple_psds = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
-#     ripple_peak_widths = {f'{x}': {epoch: [] for epoch in range(epoched_data._data.shape[0])} for x in RPL_sec_dict.keys()}
-
-#     for chan_name in allts.keys():
-#         for epoch in allts[chan_name].keys(): 
-#             if allts[chan_name][epoch]: # if not empty
-#                 tfr = np.squeeze(epoched_data.copy().pick([chan_name])[0]._data)
-#                 for ix, ripple in enumerate(allts[chan_name][epoch]):
-#                     spectral_data = np.nanmean(tfr[:, ripple[0]:ripple[1]], axis=1)
-#                     peaks = scipy.signal.find_peaks(spectral_data)[0]
-#                     peak_frequencies = freqs[peaks]
-#                     peak_prominences = scipy.signal.peak_prominences(spectral_data, peaks)[0]
-#                     peak_widths = scipy.signal.peak_widths(spectral_data, peaks)[0]
-#                     highest_peak_frequency = peak_frequencies[np.argmax(peak_prominences)]
-#                     # reject events with more than one peak in peak_frequencies between 80-120 Hz 
-#                     if len(peak_frequencies[(peak_frequencies > 80) & (peak_frequencies < 120)]) > 1:
-#                         ripple_categories[chan_name][epoch].append('bad')
-#                     # reject events where most prominent peak was outside 80-120 Hz (but > 30 Hz)
-#                     elif ((highest_peak_frequency < 80) | (highest_peak_frequency > 120)) & (highest_peak_frequency > 30):
-#                         ripple_categories[chan_name][epoch].append('bad')
-#                     # reject events where HFA peaks exceed 80% of the ripple peak height 
-#                     elif np.max(spectral_data[(freqs > 120) & (freqs < 200)]) > 0.8 * np.max(spectral_data[(freqs > 80) & (freqs < 120)]):
-#                         ripple_categories[chan_name][epoch].append('bad')
-#                     else:
-#                         ripple_categories[chan_name][epoch].append('good')
-#                         ripple_psds[chan_name][epoch].append(spectral_data)
-#                     ripple_peak_widths[chan_name][epoch].append(peak_widths[(peak_frequencies>80) & (peak_frequencies<120)])
-        
-#         # average the spectral peaks for 'good' ripples to determine ehe mean ripple-peak width in 'spectral_data' for each electrode
-#         electrode_mean_peak_width = np.nanmean(sum(ripple_peak_widths[chan_name].values(), []))
-#         electrode_std_peak_width = np.nanstd(sum(ripple_peak_widths[chan_name].values(), []))
-#         # iterate through each ripple to reject events where ripple-peak width was > 3*std of the mean ripple-peak width for the electrode
-#         for epoch in allts[chan_name].keys():  
-#             if 'good' in ripple_categories[chan_name][epoch]:
-#                 good_ripple_ix = [i for i, e in enumerate(ripple_categories[chan_name][epoch]) if e == 'good']
-#                 for ix in good_ripple_ix:
-#                     ripple_width = ripple_peak_widths[chan_name][epoch][ix]
-#                     if ripple_width > electrode_mean_peak_width + 3*electrode_std_peak_width:
-#                         ripple_categories[chan_name][epoch][ix] = 'bad'
-
-#         # Optional TODO: 
-#             # calculate the number of ripples detected and ripple rejection rate for each electrode
-#             # then reject any electrode with a low ripple count (< 20 ripples detected per electrode per task) or high rejection rate (greater than 30% rejection rate)
-#         return allts, ripple_categories, ripple_psds
 
 def FOOOF_continuous(signal: np.ndarray):
-    """Compute FOOOF on continuous signal.
-    
-    Parameters
-    ----------
-    signal : np.ndarray
-        Continuous signal.
-    """
-    pass 
+    """Archived stub — continuous FOOOF was never implemented."""
+    from ._scratch_utils import FOOOF_continuous as _archived
+
+    return _archived(signal)
 
 
 def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
     """Compute FOOOF on epoched data.
-    
+
+    Prefer ``workflow.compute_spectral_features`` / ``build_spectral_pipeline_config``
+    for beginner workflows. Requires the ``fooof`` extra
+    (``pip install -e '.[analysis]'``).
+
     Parameters
     ----------
     epochs
@@ -650,15 +516,16 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
     tmax : float, optional
         End time in seconds. Default is 1.5.
     **kwargs
-        Additional FOOOFGroup arguments.
-    
+        Required FOOOFGroup keys: ``peak_width_limits``, ``min_peak_height``,
+        ``peak_threshold``, ``max_n_peaks``, ``freq_range``.
+
     Returns
     -------
     tuple
         Tuple containing (FOOOFGroup_res, pd.DataFrame).
     """
-
-    # bands = fooof.bands.Bands(band_dict)
+    fooof = ensure_dependency("fooof", install_hint="pip install -e '.[analysis]'")
+    from fooof import FOOOFGroup
 
     epo_spectrum = epochs.compute_psd(method='multitaper',
                                                 tmin=tmin,
@@ -670,6 +537,17 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
             
     # average across epochs
     psd_trial_avg = np.nanmean(psds, axis=0)
+
+    required = (
+        'peak_width_limits',
+        'min_peak_height',
+        'peak_threshold',
+        'max_n_peaks',
+        'freq_range',
+    )
+    missing = [k for k in required if k not in kwargs]
+    if missing:
+        raise ValueError(f"FOOOF_compute_epochs missing required kwargs: {missing}")
 
     # Initialize a FOOOFGroup object, with desired settings
     FOOOFGroup_res = FOOOFGroup(peak_width_limits=kwargs['peak_width_limits'], 
@@ -740,68 +618,6 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
 
     return FOOOFGroup_res, pd.concat(all_chan_dfs)
 
-
-# def FOOOF_compare_epochs(epochs_with_metadata, tmin=0, tmax=1.5, conditions=None, band_dict=None, 
-# file_path=None, plot=True, **kwargs):
-#     """
-#     Function for comparing conditions.
-#     """
-#     # Helper functions for computing and analyzing differences between power spectra. 
-
-#     t_settings = {'fontsize' : 24, 'fontweight' : 'bold'}
-#     # If the path doesn't exist, make it:
-#     if not os.path.exists(file_path): 
-#         os.makedirs(file_path)
-
-#     # def _compare_exp(fm1, fm2):
-#     #     """Compare exponent values."""
-
-#     #     exp1 = fm1.get_params('aperiodic_params', 'exponent')
-#     #     exp2 = fm2.get_params('aperiodic_params', 'exponent')
-
-#     #     return exp1 - exp2
-
-#     # def _compare_peak_pw(fm1, fm2, band_def):
-#     #     """Compare the power of detected peaks."""
-
-#     #     pw1 = fooof.analysis.get_band_peak_fm(fm1, band_def)[1]
-#     #     pw2 = fooof.analysis.get_band_peak_fm(fm2, band_def)[1]
-
-#     #     return pw1 - pw2
-
-#     # def _compare_band_pw(fm1, fm2, band_def):
-#     #     """Compare the power of frequency band ranges."""
-
-#     #     pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1.power_spectrum, band_def)[1])
-#     #     pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2.power_spectrum, band_def)[1])
-
-#     #     return pw1 - pw2
-
-#     # def _compare_band_pw_flat(fm1, fm2, band_def):
-#     #     """Compare the power of frequency band ranges."""
-
-#     #     pw1 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm1._spectrum_flat, band_def)[1])
-#     #     pw2 = np.mean(fooof.utils.trim_spectrum(fm1.freqs, fm2._spectrum_flat, band_def)[1])
-
-#     #     return pw1 - pw2
-
-#     # shade_cols = ['#e8dc35', '#46b870', '#1882d9', '#a218d9', '#e60026']
-#     # bands = fooof.bands.Bands(band_dict)
-#     all_chan_dfs = [] 
-
-#     fooof_groups_cond = {f'{x}': np.nan for x in conditions}
-
-#     all_cond_df = []
-#     for cond in conditions: 
-#         # check that this is an appropriate parsing (is it in the metadata?)
-#         try:
-#             epochs_with_metadata.metadata.query(cond)
-#         except pd.errors.UndefinedVariableError:
-#             raise KeyError(f'FAILED: the {cond} condition is missing from epoch.metadata')
-    
-#         FOOOFGroup_res, cond_df = FOOOF_compute_epochs(epochs_with_metadata[cond], tmin=0, tmax=1.5, **kwargs)
-
-#         fooof_groups_cond[cond] = FOOOFGroup_res
 
 
 #         cond_df['condition'] = cond
@@ -874,7 +690,7 @@ def FOOOF_compute_epochs(epochs, tmin: float = 0, tmax: float = 1.5, **kwargs):
 
 # We put all of our basic FOOOF usage into a slightly clunky function that is meant to be used for running the regression
 # over multiple channels in parallel using joblib/Dask/multiprocessing.Pool: 
-def compute_FOOOF_parallel(chan_name: str, MNE_object, subj_id: str, elec_df: pd.DataFrame, event_name: str, ev_dict: dict, band_dict: dict, conditions: list, do_plot: bool = False, save_path: str = '/sc/arion/projects/guLab/Salman/EphysAnalyses', do_save: bool = False, **kwargs):
+def compute_FOOOF_parallel(chan_name: str, MNE_object, subj_id: str, elec_df: pd.DataFrame, event_name: str, ev_dict: dict, band_dict: dict, conditions: list, do_plot: bool = False, save_path: str | None = None, do_save: bool = False, **kwargs):
     """Compute FOOOF for single channel in parallel.
     
     Parameters
@@ -898,21 +714,20 @@ def compute_FOOOF_parallel(chan_name: str, MNE_object, subj_id: str, elec_df: pd
     do_plot : bool, optional
         Whether to plot. Default is False.
     save_path : str, optional
-        Save path. Default is '/sc/arion/projects/guLab/Salman/EphysAnalyses'.
+        Root directory for optional CSV/plot outputs. Default is ``None``
+        (required when ``do_save=True``). Cluster paths are no longer hard-coded.
     do_save : bool, optional
         Whether to save. Default is False.
     **kwargs
         Additional FOOOF arguments.
-    
+
     Returns
     -------
     pd.DataFrame or None
         Results DataFrame if not saving.
     """
-
-    # First, compute FOOOF across all trials
-                
-    # ev_dict = {'feedback_start': [-0.5, 1.5]}
+    if do_save and not save_path:
+        raise ValueError("save_path is required when do_save=True")
 
     dfs = []
     # Can pick the epoch depending on the event being selected
@@ -968,36 +783,14 @@ def compute_FOOOF_parallel(chan_name: str, MNE_object, subj_id: str, elec_df: pd
 
 
 def sliding_FOOOF(signal: np.ndarray):
-    """Compute time-resolved FOOOF.
-    
-    Parameters
-    ----------
-    signal : np.ndarray
-        Signal array.
-    """
-    pass
+    """Archived stub — sliding FOOOF was never implemented."""
+    from ._scratch_utils import sliding_FOOOF as _archived
+
+    return _archived(signal)
 
 
 def hctsa_signal_features(signal: np.ndarray):
-    """Extract catch22 signal features.
-    
-    Parameters
-    ----------
-    signal : np.ndarray
-        Signal array.
-    
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with signal features.
-    """
+    """Archived catch22 wrapper — prefer calling ``pycatch22`` directly."""
+    from ._scratch_utils import hctsa_signal_features as _archived
 
-    signal_features = pycatch22.catch22_all(signal)
-
-    # Data organization
-    df = pd.DataFrame.from_dict(signal_features, orient='index')
-    df.columns = df.iloc[0]
-    df.reset_index(inplace=True, drop=True)
-    df = df.drop(labels=0, axis=0).reset_index(drop=True)
-
-    return df
+    return _archived(signal)

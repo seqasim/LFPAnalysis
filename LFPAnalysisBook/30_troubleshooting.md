@@ -40,6 +40,8 @@ If you see missing-module errors for `mne`, `fooof`, or `mne_connectivity`, inst
 
 If referencing fails, validate the electrode table first. Most label problems are metadata problems, not signal problems.
 
+`match_elec_names` no longer hangs in notebooks/CI by default: ambiguous Levenshtein ties raise `ValueError` listing candidates. Only pass `interactive=True` when you are at a human terminal and want a prompt.
+
 ## Reference method confusion
 
 Use `none` for first-load inspection, `bipolar` when you have ordered contacts, and `wm` when your lab already has a white-matter convention.

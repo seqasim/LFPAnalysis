@@ -5,11 +5,9 @@ import scipy.io as sio
 from pathlib import Path
 import statsmodels.api as sm
 from scipy.stats.distributions import chi2
-from mne_connectivity import phase_slope_index, spectral_connectivity_epochs, spectral_connectivity_time
 import mne
 from scipy.signal import hilbert
 from mne.filter import next_fast_len
-from IPython.display import clear_output
 from joblib import delayed, Parallel
 import os
 from typing import Union, Tuple, List, Optional, Dict, Any, Generator
@@ -19,8 +17,40 @@ import scipy.special
 import warnings
 import scipy as sp
 
-
 from matplotlib import pyplot as plt
+
+from .validation import ensure_dependency
+
+
+def _mne_connectivity():
+    return ensure_dependency(
+        "mne_connectivity",
+        install_hint="pip install -e '.[analysis]'",
+    )
+
+
+def _clear_output(*args, **kwargs):
+    try:
+        from IPython.display import clear_output
+    except ImportError:
+        return None
+    return clear_output(*args, **kwargs)
+
+
+def _ensure_connectivity_imports():
+    """Lazy-bind mne_connectivity entry points used by connectivity helpers."""
+    global phase_slope_index, spectral_connectivity_epochs, spectral_connectivity_time
+    if phase_slope_index is not None:
+        return
+    mc = _mne_connectivity()
+    phase_slope_index = mc.phase_slope_index
+    spectral_connectivity_epochs = mc.spectral_connectivity_epochs
+    spectral_connectivity_time = mc.spectral_connectivity_time
+
+
+phase_slope_index = None
+spectral_connectivity_epochs = None
+spectral_connectivity_time = None
 
 # Helper functions 
 
@@ -44,81 +74,17 @@ def find_nearest_value(array: np.ndarray, value: float) -> Tuple[float, int]:
     return array[idx], idx
 
 def getTimeFromFTmat(fname: str, var_name: str = 'data') -> np.ndarray:
-    """Get original timing from FieldTrip structure.
-    
-    Parameters
-    ----------
-    fname : str
-        Path to MATLAB file.
-    var_name : str, optional
-        Variable name. Default is 'data'.
-    
-    Returns
-    -------
-    np.ndarray
-        Time array.
-    """
-    # load Matlab/Fieldtrip data
-    mat = sio.loadmat(fname, squeeze_me=True, struct_as_record=False)
-    ft_data = mat[var_name]
-    # convert to mne
-    n_trial = len(ft_data.trial)
-    n_chans, n_time = ft_data.trial[0].shape
-    #data = np.zeros((n_trial, n_chans, n_time))
-    time = np.zeros((n_trial, n_time))
-    for trial in range(n_trial):
-        # data[trial, :, :] = ft_data.trial[trial]
-        # Note that this indexes time_orig in the adapted structure
-        time[trial, :] = ft_data.time_orig[trial]
-    return time
+    """Archived FieldTrip timing helper — prefer MNE ``Epochs.times``."""
+    from ._scratch_utils import getTimeFromFTmat as _archived
+
+    return _archived(fname, var_name=var_name)
+
 
 def get_project_root() -> Path:
-    """Get project root path.
-    
-    Returns
-    -------
-    Path
-        Project root path.
-    """
-    return Path(__file__)
-    
-# def swap_time_blocks(data, random_state=None):
+    """Archived helper (returned package path, not repo root)."""
+    from ._scratch_utils import get_project_root as _archived
 
-#     """Compute surrogates by swapping time blocks.
-#     This function cuts the timeseries at a random time point. Then, both time
-#     blocks are swapped.
-#     Parameters
-#     ----------
-#     data : array_like
-#         Array of shape (n_chan, ..., n_times).
-#     random_state : int | None
-#         Fix the random state of the machine for reproducible results.
-#     Returns
-#     -------
-#     surr : array_like
-#         Swapped timeseries to use to compute the distribution of
-#         permutations
-#     References
-#     ----------
-#     Source: https://www.sciencedirect.com/science/article/pii/S0959438814001640
-#     """
-    
-#     if random_state is None:
-#         random_state = int(np.random.randint(0, 10000, size=1))
-#     rnd = np.random.RandomState(random_state)
-    
-#     # get the minimum / maximum shift
-#     min_shift, max_shift = 1, None
-#     if not isinstance(max_shift, (int, float)):
-#         max_shift = data.shape[-1]
-#     # random cutting point along time axis
-#     cut_at = rnd.randint(min_shift, max_shift, (1,))
-#     # split amplitude across time into two parts
-#     surr = np.array_split(data, cut_at, axis=-1)
-#     # revered elements
-#     surr.reverse()
-    
-#     return np.concatenate(surr, axis=-1)
+    return _archived()
 
 def make_surrogate_data(
     data: Union[mne.Epochs, EpochsTFR], 
@@ -319,23 +285,10 @@ def _shuffle_within_epochs(
 
 
 def _swap_time_blocks(data: np.ndarray, cut_at: int) -> np.ndarray:
-    """Swap time blocks at cutpoint.
-    
-    Parameters
-    ----------
-    data : np.ndarray
-        1D data array (time series).
-    cut_at : int
-        Cut point index.
-    
-    Returns
-    -------
-    np.ndarray
-        Swapped data.
-    """
-    surr = np.array_split(data, [cut_at], axis=-1)
-    surr.reverse()
-    return np.concatenate(surr, axis=-1)
+    """Archived single-cut swap — prefer ``_swap_time_blocks_batch``."""
+    from ._scratch_utils import _swap_time_blocks as _archived
+
+    return _archived(data, cut_at)
 
 
 def make_surrogate_arrays(
@@ -686,7 +639,10 @@ def compute_te(
 
 def make_seed_target_df(elec_df: pd.DataFrame, epochs: mne.Epochs, source_roi: str, target_roi: str) -> pd.DataFrame:
     """Create seed-target DataFrame for connectivity.
-    
+
+    Required electrode columns: ``label``, ``hemisphere``, ``salman_region``
+    (lab-specific ROI labels from anatomy tables / ``select_rois_picks``).
+
     Parameters
     ----------
     elec_df : pd.DataFrame
@@ -694,10 +650,10 @@ def make_seed_target_df(elec_df: pd.DataFrame, epochs: mne.Epochs, source_roi: s
     epochs : mne.Epochs
         MNE Epochs object.
     source_roi : str
-        Source ROI name.
+        Source ROI name (matched against ``salman_region``).
     target_roi : str
-        Target ROI name.
-    
+        Target ROI name (matched against ``salman_region``).
+
     Returns
     -------
     pd.DataFrame
@@ -1267,29 +1223,6 @@ def gcmi_cc_sliding(
     
     return mi_values, window_centers
 
-
-# def compute_sliding_gcmi(mne_data, buf_ms, indices, window, slide, freqs, n_cycles, mode='cwt_morlet', fmin=None, fmax=None):
-
-#     """
-
-#     Run the sliding window gcmi
-
-#     """
-
-#     pre_buf = buf_ms * (mne_data.info['sfreq']/1000)
-#     post_buf = pre_buf + ((mne_data._data.shape[-1] - (2*buf_ms)) * (mne_data.info['sfreq']/1000)) + 1
-#     buf_mask = (window_centers>=pre_buf) & (window_centers<post_buf)
-
-#                 signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-#             signal0_amp = np.abs(signal0_hilbert)
-#             signal1_hilbert = hilbert(signal1_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
-#             signal1_amp = np.abs(signal1_hilbert)
-
-#             mode='cwt_morlet',
-#                                             fmin=band[0], fmax=band[1],
-#                                             cwt_freqs=freqs,
-#                                             cwt_n_cycles=n_cycles,
-#             power_data = 
 
 
 #     pwise = []
@@ -2038,6 +1971,7 @@ gc_n_lags: int = 5, buf_ms: int = 1000, avg_over_dim: str = 'time') -> np.ndarra
         Granger causality results.
     """
 
+    _ensure_connectivity_imports()
     indices_ab = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))  # A => B
     indices_ba = (np.array([np.unique(indices[1]).tolist()]), np.array([np.unique(indices[0]).tolist()]))  # B => A
     
@@ -2191,6 +2125,7 @@ gc_n_lags: int = 5, buf_ms: int = 1000) -> np.ndarray:
         Surrogate connectivity results.
     """
 
+    _ensure_connectivity_imports()
     n_pairs = len(indices[0])
     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
@@ -2327,6 +2262,7 @@ gc_n_lags: int = 5) -> np.ndarray:
         Surrogate connectivity results.
     """
 
+    _ensure_connectivity_imports()
     n_pairs = len(indices[0])
     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
 
@@ -2401,9 +2337,15 @@ gc_n_lags: int = 5) -> np.ndarray:
     return surr_conn
 
 
-def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, metric: Optional[str] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, buf_ms: int = 1000, avg_over_dim: str = 'time', surr_method: str = 'swap_epochs', n_surr: int = 500, parallelize: bool = False, band1: Optional[Tuple[float, float]] = None, gc_n_lags: int = 7, time_window: Optional[Tuple[float, float]] = None) -> np.ndarray:
-    """Compute connectivity metrics.
-    
+def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[Tuple[float, float]] = None, metric: Optional[str] = None, indices: Optional[Tuple[np.ndarray, np.ndarray]] = None, freqs: Optional[np.ndarray] = None, n_cycles: Optional[Union[float, np.ndarray]] = None, buf_ms: int = 1000, avg_over_dim: str = 'time', surr_method: str = 'swap_epochs', n_surr: int = 500, parallelize: bool = False, band1: Optional[Tuple[float, float]] = None, gc_n_lags: int = 7, time_window: Optional[Tuple[float, float]] = None, n_jobs: int = 1) -> np.ndarray:
+    """Compute connectivity metrics (advanced utility).
+
+    Return shapes vary by ``metric`` and ``avg_over_dim`` (``'time'`` vs
+    ``'epochs'``). Surrogate count defaults (``n_surr=500``) are heavy for
+    beginners — start smaller. Prefer ``make_surrogate_arrays`` when you only
+    need array surrogates. Requires ``mne-connectivity``
+    (``pip install -e '.[analysis]'``).
+
     Parameters
     ----------
     mne_data : mne.Epochs, optional
@@ -2438,14 +2380,17 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
         the buffer removed, then be further cropped to this time window before
         computing the connectivity metric. Default is None (use full epoch after
         buffer removal).
-    
+    n_jobs : int, optional
+        Parallel jobs when ``parallelize=True``. Default is 1; pass ``-1`` on a cluster.
+
     Returns
     -------
     np.ndarray
         Connectivity results.
     """
+    _ensure_connectivity_imports()
     if metric == 'gr_tc':
-        return (ValueError('Use the function compute_gc_tr'))
+        raise ValueError('Use the function compute_gc_tr')
 
     elif metric in ['granger', 'imcoh', 'cacoh']: 
         indices = (np.array([np.unique(indices[0]).tolist()]), np.array([np.unique(indices[1]).tolist()]))
@@ -2488,7 +2433,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
         #     zscored_pwise = (pwise - np.nanmean(surr_pwise, axis=0) / np.std(surr_pwise, axis=0))
 
         if metric == 'amp': 
-            return (ValueError('Cannot compute amplitude-amplitude coupling over epochs.'))
+            raise ValueError('Cannot compute amplitude-amplitude coupling over epochs.')
         if metric == 'psi': 
             pairwise_connectivity = np.squeeze(phase_slope_index(mne_data,
                                                                     indices=indices,
@@ -2581,7 +2526,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                     surrogate_result = compute_surr_connectivity_epochs(surr_mne[ns], indices, metric, band, freqs, n_cycles, gc_n_lags=gc_n_lags, buf_ms=buf_ms)
                     return surrogate_result
 
-                surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_epochs)(ns) for ns in range(n_surr))
+                surrogates = Parallel(n_jobs=n_jobs)(delayed(_process_surrogate_epochs)(ns) for ns in range(n_surr))
                 surr_struct = np.stack(surrogates, axis=-1)
             else: 
                 # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
@@ -2673,7 +2618,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                             surr_conn = surr_conn[:, buf_rs:-buf_re]
 
                     surr_struct[:, :, ns] = surr_conn
-                    clear_output(wait=True)
+                    _clear_output(wait=True)
 
             surr_mean = np.nanmean(surr_struct, axis=-1)
             surr_std = np.nanstd(surr_struct, axis=-1)
@@ -2684,7 +2629,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
             # pairwise_connectivity = z_struct[:, :, -1] # extract the real data
     elif avg_over_dim == 'time':    
         if metric == 'psi': 
-            return (ValueError('Cannot compute psi over time.'))
+            raise ValueError('Cannot compute psi over time.')
         
         elif metric == 'gcmi':
             
@@ -2733,7 +2678,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                         surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
                     surr_struct[:, :, ns] = surr_conn
-                    clear_output(wait=True)
+                    _clear_output(wait=True)
 
                 surr_mean = np.nanmean(surr_struct, axis=-1)
                 surr_std = np.nanstd(surr_struct, axis=-1)
@@ -2807,7 +2752,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                         surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
                     surr_struct[:, :, ns] = surr_conn
-                    clear_output(wait=True)
+                    _clear_output(wait=True)
 
                 surr_mean = np.nanmean(surr_struct, axis=-1)
                 surr_std = np.nanstd(surr_struct, axis=-1)
@@ -2901,7 +2846,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                         surrogate_result = compute_surr_connectivity_time(surr_mne[ns], indices, metric, band, freqs, n_cycles, buf_ms, gc_n_lags=gc_n_lags, rng_seed=ns)
                         return surrogate_result
 
-                    surrogates = Parallel(n_jobs=-1)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
+                    surrogates = Parallel(n_jobs=n_jobs)(delayed(_process_surrogate_time)(ns) for ns in range(n_surr))
                     surr_struct = np.stack(surrogates, axis=-1)
                 else:
                     # data = np.swapaxes(mne_data.get_data(copy=False), 0, 1) # swap so now it's chan, events, times 
@@ -2944,7 +2889,7 @@ def compute_connectivity(mne_data: Optional[mne.Epochs] = None, band: Optional[T
                             surr_conn = surr_conn.reshape((surr_conn.shape[0], n_pairs))
 
                         surr_struct[:, :, ns] = surr_conn
-                        clear_output(wait=True)
+                        _clear_output(wait=True)
 
                 surr_mean = np.nanmean(surr_struct, axis=-1)
                 surr_std = np.nanstd(surr_struct, axis=-1)
@@ -4028,8 +3973,8 @@ def eBOSC_wrapper(cfg_eBOSC: dict, data: pd.DataFrame) -> Tuple[dict, dict]:
     return eBOSC, cfg_eBOSC
 
 
-def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str, elec_df: pd.DataFrame, event_name: str, ev_dict: dict, conditions: List[str], 
-                           do_plot: bool = False, save_path: str = '/sc/arion/projects/guLab/Salman/EphysAnalyses', 
+def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str, elec_df: pd.DataFrame, event_name: str, ev_dict: dict, conditions: List[str],
+                           do_plot: bool = False, save_path: str | None = None,
                            do_save: bool = False, mean_across_time: bool = False, mean_across_freqs: bool = False, both_dfs: bool = True, **kwargs) -> None:
     """Parallelize eBOSC computation over many channels simultaneously.
     
@@ -4055,7 +4000,8 @@ def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str,
     do_plot : bool, optional
         Whether to plot. Default is False.
     save_path : str, optional
-        Path to save results. Default is '/sc/arion/projects/guLab/Salman/EphysAnalyses'.
+        Root directory for optional CSV outputs. Default is ``None``
+        (required when ``do_save=True``). Cluster paths are no longer hard-coded.
     do_save : bool, optional
         Whether to save results. Default is False.
     mean_across_time : bool, optional
@@ -4071,9 +4017,12 @@ def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str,
     -------
     None
     """
-
-    if not os.path.exists(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs'):
-        os.makedirs(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs')
+    if do_save and not save_path:
+        raise ValueError("save_path is required when do_save=True")
+    if do_save:
+        out_dir = f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/dfs'
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
 
     data_df = MNE_object.copy().pick_channels([chan_name]).to_data_frame(time_format=None)
 
@@ -4099,7 +4048,7 @@ def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str,
     eBOSC['detected']['fband'] = eBOSC['detected'].frequency.apply(lambda x: 'theta' if x<10 else 'alpha' if (x>=10) & (x<14) else 'beta' if (x>=14) & (x<30) else 'slowgamma' if (x>=30) & (x<55) else 'hfa')
 
     # # get rid of all the annoying line messages
-    # clear_output(wait=True)
+    # _clear_output(wait=True)
 
     # Dataframe for saving
     if both_dfs:
@@ -4146,81 +4095,3 @@ def compute_eBOSC_parallel(chan_name: str, MNE_object: mne.Epochs, subj_id: str,
 #             # cur_multiindex.get_level_values('frequency').unique()
 
             
-# #                 ax.vlines(250, 0, len(cfg_eBOSC['F']), 'white')
-#             im = ax[ix].imshow(detected_avg, aspect = 'auto', interpolation='bicubic', cmap='rocket', vmin=0, vmax=.4)
-
-#             [x0, x1] = ax[ix].get_xlim()
-#             [y0, y1] = ax[ix].get_ylim()
-#             xticks_loc = np.linspace(0,750, 4)
-#             # [t for t in ax.get_xticks() if t>=x0 and t<=x1]
-#             yticks_loc = [t for t in ax[ix].get_yticks() if t>=y1 and t<=y0]
-#             x_label_list = np.round(cur_time[np.int_(xticks_loc)],1).tolist()
-#             y_label_list = np.round(cur_freq[np.int_(yticks_loc)],1).tolist()
-#             ax[ix].set_xticks(xticks_loc)
-#             ax[ix].set_xticklabels(x_label_list)
-#             ax[ix].set_yticks(yticks_loc)
-#             ax[ix].set_yticklabels(y_label_list)
-#             ax[ix].invert_yaxis()
-#             ax[ix].set_xlabel('Time [s]')
-#             ax[ix].set_ylabel('Frequency [Hz]') 
-#             ax[ix].set_title(f'{cond}')
-#             fig.colorbar(im, ax=ax[ix])
-#         plt.suptitle('Avg. detected rhythms across trials', fontsize=12)
-#         plt.tight_layout()
-#         plt.savefig(f'{save_path}/{subj_id}/scratch/eBOSC/{event_name}/plots/{chan_name}_eBOSC.pdf', dpi=100)
-#         plt.close()
-
-# # USAGE example from: https://github.com/jkosciessa/eBOSC_py/blob/main/examples/eBOSC_example_empirical.ipynb
-# pn = dict()
-# pn['root']  = os.path.join(os.getcwd(),'..')
-# pn['examplefile'] = os.path.join(pn['root'],'data','1160_rest_EEG_Rlm_Fhl_rdSeg_Art_EC.csv')
-# pn['outfile'] = os.path.join(pn['root'],'data','example_out.npy')
-
-# cfg_eBOSC = dict()
-# cfg_eBOSC['F'] = 2 ** np.arange(1,6,.125)   # frequency sampling
-# cfg_eBOSC['wavenumber'] = 6                 # wavelet parameter (time-frequency tradeoff)
-# cfg_eBOSC['fsample'] = 500                  # current sampling frequency of EEG data
-# cfg_eBOSC['pad.tfr_s'] = 1                  # padding following wavelet transform to avoid edge artifacts in seconds (bi-lateral)
-# cfg_eBOSC['pad.detection_s'] = .5           # padding following rhythm detection in seconds (bi-lateral); 'shoulder' for BOSC eBOSC.detected matrix to account for duration threshold
-# cfg_eBOSC['pad.background_s'] = 1           # padding of segments for BG (only avoiding edge artifacts)
-
-# cfg_eBOSC['threshold.excludePeak'] = np.array([[8,15]])   # lower and upper bound of frequencies to be excluded during background fit (Hz) (previously: LowFreqExcludeBG HighFreqExcludeBG)
-# cfg_eBOSC['threshold.duration'] = np.kron(np.ones((1,len(cfg_eBOSC['F']))),3) # vector of duration thresholds at each frequency (previously: ncyc)
-# cfg_eBOSC['threshold.percentile'] = .95    # percentile of background fit for power threshold
-
-# cfg_eBOSC['postproc.use'] = 'yes'           # Post-processing of rhythmic eBOSC.episodes, i.e., wavelet 'deconvolution' (default = 'no')
-# cfg_eBOSC['postproc.method'] = 'FWHM'       # Deconvolution method (default = 'MaxBias', FWHM: 'FWHM')
-# cfg_eBOSC['postproc.edgeOnly'] = 'yes'      # Deconvolution only at on- and offsets of eBOSC.episodes? (default = 'yes')
-# cfg_eBOSC['postproc.effSignal'] = 'PT'      # Power deconvolution on whole signal or signal above power threshold
-
-# cfg_eBOSC['channel'] = ['Oz']            # select posterior channels (default: all)
-# cfg_eBOSC['trial'] = []                  # select trials (default: all, indicate in natural trial number (not zero-starting))
-# cfg_eBOSC['trial_background'] = []       # select trials for background (default: all, indicate in natural trial
-
-# # Either concatenate all epochs or use with continuous data: 
-# [eBOSC, cfg] = eBOSC_wrapper(cfg_eBOSC, data)
-
-# # Plot: 
-# detected_avg = eBOSC['detected'].mean(level=['frequency', 'time'])
-# detected_avg = detected_avg.pivot_table(index=['frequency'], columns='time')
-# cur_multiindex = eBOSC['detected'].index
-# cur_time = cur_multiindex.get_level_values('time').unique()
-# cur_freq = cur_multiindex.get_level_values('frequency').unique()
-
-# fig, ax = plt.subplots(nrows=1, ncols=1)
-# im = ax.imshow(detected_avg, aspect = 'auto')
-# [x0, x1] = ax.get_xlim()
-# [y0, y1] = ax.get_ylim()
-# xticks_loc = [t for t in ax.get_xticks() if t>=x0 and t<=x1]
-# yticks_loc = [t for t in ax.get_yticks() if t>=y1 and t<=y0]
-# x_label_list = np.round(cur_time[np.int_(xticks_loc)],1).tolist()
-# y_label_list = np.round(cur_freq[np.int_(yticks_loc)],1).tolist()
-# ax.set_xticks(xticks_loc)
-# ax.set_xticklabels(x_label_list)
-# ax.set_yticks(yticks_loc)
-# ax.set_yticklabels(y_label_list)
-# plt.colorbar(im, label='Proportion detected across trials')
-# plt.xlabel('Time [s]')
-# plt.ylabel('Frequency [Hz]')
-# plt.title('Avg. detected rhythms across trials', fontsize=12)
-# plt.show()

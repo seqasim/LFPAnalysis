@@ -19,6 +19,19 @@ from .config import WORKING_DTYPE
 
 _WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
 
+# Shared tissue-label vocab used by wm_ref / bipolar_ref / rename_elec_df_reref.
+_WHITE_MATTER_LABELS = ('wm', 'white', 'whitematter', 'white matter')
+_GRAY_MATTER_LABELS = ('gm', 'gray', 'graymatter', 'gray matter')
+_OUT_OF_BRAIN_LABELS = ('oob', 'out of brain')
+
+
+def _manual_column_key(elec_data: pd.DataFrame):
+    """Return the first column whose name contains 'manual', or None."""
+    manual_mask = elec_data.keys().str.lower().str.contains('manual')
+    if not np.any(manual_mask):
+        return None
+    return elec_data.keys()[manual_mask][0]
+
 
 def _nan_mask_tfr_events(power_data, event_times_by_channel, ch_names, sfreq, n_times, pad_s=0.1):
     """NaN-out TFR windows around per-channel event times without nested Python loops.
@@ -92,7 +105,7 @@ def mean_baseline_time(data, baseline, mode='zscore'):
     Baselines time-series data (i.e the iEEG signal) using a mean baseline period. This function is meant to mimic the MNE baseline function 
     when the specific baseline period might change across trials, as MNE doesn't allow baseline period to vary. 
 
-    Note: Your probably won't use this much!! 
+    Prefer the stable ``workflow.baseline_lfp`` API for new code.
 
     Parameters
     ----------
@@ -257,43 +270,6 @@ def baseline_trialwise_TFR(data=None, baseline_mne=None, mode: str = 'zscore', i
         baseline_corrected = _apply_baseline_mode(data, mean, std, mode)
 
     return baseline_corrected
-
-# def baseline_trialwise_TFR_OLD(data=None, baseline_mne=None, mode='zscore', 
-#                             trialwise=True, baseline_only=False, 
-#                             ev_axis=0, elec_axis=1, freq_axis=2, time_axis=3): 
-    
-#     """
-#     Meant to mimic the mne baseline
-#     for TFR but when the specific baseline period might change across trials. 
-
-#     This presumes you're using trial-level data (check dimensions)
-    
-#     Parameters
-#     ----------
-#     data : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-#         The original time-frequency data.
-#     baseline_mne : mne.epochs.Epochs or np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-#         The baseline data. If `trialwise` is True, this should contain baseline data for each trial.
-#     mode : str, optional
-#         The type of baseline correction to apply. Valid options are 'mean', 'ratio', 'logratio', 'percent', 'zscore', and 'zlogratio'. Default is 'zscore'.
-#     trialwise : bool, optional
-#         Whether to baseline each trial separately. Default is True.
-#     baseline_only : bool, optional
-#         Whether to only use the baseline data for correction. Default is False. But depends on 'trialwise'.
-#     ev_axis : int, optional
-#         The axis corresponding to the event dimension. Default is 0.
-#     elec_axis : int, optional
-#         The axis corresponding to the electrode dimension. Default is 1.
-#     freq_axis : int, optional
-#         The axis corresponding to the frequency dimension. Default is 2.
-#     time_axis : int, optional
-#         The axis corresponding to the time dimension. Default is 3.
-
-#     Returns
-#     -------
-#     baseline_corrected : np.ndarray, shape (n_trials, n_channels, n_freqs, n_times)
-#         The baseline-corrected time-frequency data.
-#     """
 
 
 #     if (baseline_only==False) & (data is not None):
@@ -508,25 +484,26 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         oob_elec_ix_auto = []
         false_negatives = [] 
         # account for different labeling strategies in manual column
-        white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
-        gray_matter_labels = ['gm', 'gray', 'graymatter', 'gray matter']
-        out_of_brain_labels = ['oob', 'out of brain']
-        manual_col = elec_data.keys().str.lower().str.contains('manual')
-        if np.any(manual_col):
-            manual_key = elec_data.keys()[elec_data.keys().str.lower().str.contains('manual')][0]
-            wm_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
-            oob_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in out_of_brain_labels]
-            false_negatives += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in gray_matter_labels]
-        else:
+        manual_key = _manual_column_key(elec_data)
+        if manual_key is None:
             raise IndexError('No Manual Column!')
-    
-        # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-        #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
-        wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
-        oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
-
-        # # Correct for false negatives in the autodetection that are corrected by manual examination
-        # wm_elec_ix_auto = [x for x in wm_elec_ix_auto if x not in false_negatives]
+        wm_elec_ix_manual += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _WHITE_MATTER_LABELS and elec_data['label'].str.lower()[ind] not in bad_channels
+        ]
+        oob_elec_ix_manual += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _OUT_OF_BRAIN_LABELS
+        ]
+        false_negatives += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _GRAY_MATTER_LABELS
+        ]
+        wm_elec_ix_auto += [
+            ind for ind, data in elec_data['gm'].str.lower().items()
+            if data == 'white' and pd.isnull(elec_data[manual_key][ind])
+        ]
+        oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data == 'unknown']
         oob_elec_ix_auto = [x for x in oob_elec_ix_auto if x not in false_negatives]
 
         # consolidate manual and auto detection 
@@ -673,78 +650,18 @@ def wm_ref(mne_data=None, elec_path=None, bad_channels=None, unmatched_seeg=None
         # Also collect the wm electrodes that are not used for referencing and drop them later
         drop_wm_channels = [x for x in elec_data.loc[wm_elec_ix, 'label'].str.lower() if x not in cathode_list]
 
-        return anode_list, cathode_list, drop_wm_channels
+        return anode_list, cathode_list, drop_wm_channels, None
 
 
 def laplacian_ref(mne_data, elec_path: str, bad_channels: list, unmatched_seeg=None, site=None):
-    """Create laplacian reference.
-    
-    Parameters
-    ----------
-    mne_data
-        MNE Raw object.
-    elec_path : str
-        Path to electrode localization file.
-    bad_channels : list
-        List of bad channels.
-    unmatched_seeg : list, optional
-        List of unmatched sEEG channels.
-    site : str, optional
-        Site name.
-    
-    Returns
-    -------
-    tuple
-        Tuple containing (anode_list, cathode_list).
+    """Archived stub — Laplacian referencing is not implemented.
+
+    Prefer ``ref_mne(..., method='wm'|'bipolar')`` or ``workflow.preprocess_lfp``.
     """
+    from ._scratch_utils import laplacian_ref as _archived
 
-    # TODO: for someone clever. Note that you have to bypass the mne reference script because that specific a single reference for each electrode.
+    return _archived(mne_data, elec_path, bad_channels, unmatched_seeg=unmatched_seeg, site=site)
 
-    # elec_data = load_elec(elec_path)
-    # elec_data['bundle'] = np.nan
-    # elec_data['bundle'] = elec_data.apply(lambda x: ''.join(i for i in x.label if not i.isdigit()), axis=1)
-
-
-    # # helper function to perform sort for bipolar electrodes:
-    # def sort_strings(strings):
-    #     # Create a regular expression pattern to extract the number at the end of each string
-    #     pattern = re.compile(r'\d+$')
-
-    #     # Sort the strings using a custom key function
-    #     sorted_strings = sorted(strings, key=lambda x: int(pattern.search(x).group()), reverse=False)
-
-    #     return sorted_strings
-
-    # cathode_list = [] 
-    # anode_list = [] 
-
-    # if site=='MSSM':
-
-    #     for bundle in elec_data.bundle.unique():
-    #         if bundle[0] == 'u':
-    #             print('this is a microwire, pass')
-    #             continue         
-    #         # Isolate the electrodes in each bundle 
-    #         bundle_df = elec_data[elec_data.bundle==bundle].sort_values(by='z', ignore_index=True)
-    #         all_elecs = bundle_df.label.tolist()
-    #         # Sort them by number 
-    #         all_elecs = sort_strings(all_elecs)
-    #         # make sure these are not bad channels 
-    #         all_elecs = [x for x in all_elecs if x not in bad_channels]
-    #         # Set the cathodes and anodes 
-    #         for i, elec in enumerate(all_elecs):
-    #             # Set the bipolar conditions
-    #             if i == 0:
-    #                 cathode_list.append(elec)
-    #                 anode_list.append((all_elecs[i+1])
-    #             elif i == len(all_elecs) - 1:
-    #                 cathode_list.append(elec)
-    #                 anode_list.append((all_elecs[i-1])  
-    #             # Set the laplace conditions 
-    #             # else:
-    #             # TODO: add laplace conditions here
-
-    # return anode_list, cathode_list
 
 def bipolar_ref(elec_path: str, bad_channels: list, unmatched_seeg=None, site: str = 'MSSM'):
     """Create bipolar reference.
@@ -791,28 +708,30 @@ def bipolar_ref(elec_path: str, bad_channels: list, unmatched_seeg=None, site: s
     oob_elec_ix_manual = [] 
     oob_elec_ix_auto = []
     false_negatives = [] 
-    # account for different labeling strategies in manual column
-    white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
-    gray_matter_labels = ['gm', 'gray', 'graymatter', 'gray matter']
-    out_of_brain_labels = ['oob', 'out of brain']
-    manual_col = elec_data.keys().str.lower().str.contains('manual')
-    if np.any(manual_col):
-        manual_key = elec_data.keys()[elec_data.keys().str.lower().str.contains('manual')][0]
-        wm_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in white_matter_labels and elec_data['label'].str.lower()[ind] not in bad_channels]
-        oob_elec_ix_manual += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in out_of_brain_labels]
-        false_negatives += [ind for ind, data in elec_data[manual_key].str.lower().items() if data in gray_matter_labels]
+    manual_key = _manual_column_key(elec_data)
+    if manual_key is not None:
+        wm_elec_ix_manual += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _WHITE_MATTER_LABELS and elec_data['label'].str.lower()[ind] not in bad_channels
+        ]
+        oob_elec_ix_manual += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _OUT_OF_BRAIN_LABELS
+        ]
+        false_negatives += [
+            ind for ind, data in elec_data[manual_key].str.lower().items()
+            if data in _GRAY_MATTER_LABELS
+        ]
     else:
         warnings.warn('Warning...........No Manual Column!')
 
-    # else: # this means we haven't doublechecked the electrode locations manually but trust the automatic locations
-    #     print('Beware - no manual examination for electrode locations, could include wm or out-of-brain electrodes')
-    
-    if site == 'MSSM':
-        oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='unknown']
-        wm_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data=='white' and pd.isnull(elec_data[manual_key][ind])]
+    if site == 'MSSM' and manual_key is not None:
+        oob_elec_ix_auto += [ind for ind, data in elec_data['gm'].str.lower().items() if data == 'unknown']
+        wm_elec_ix_auto += [
+            ind for ind, data in elec_data['gm'].str.lower().items()
+            if data == 'white' and pd.isnull(elec_data[manual_key][ind])
+        ]
 
-    # # Correct for false negatives in the autodetection that are corrected by manual examination
-    # wm_elec_ix_auto = [x for x in wm_elec_ix_auto if x not in false_negatives]
     oob_elec_ix_auto = [x for x in oob_elec_ix_auto if x not in false_negatives]
 
     # consolidate manual and auto detection 
@@ -904,18 +823,30 @@ def bipolar_ref(elec_path: str, bad_channels: list, unmatched_seeg=None, site: s
     return anode_list, cathode_list, drop_wm_channels, oob_channels
 
 
-def match_elec_names(mne_names: list, loc_names, method: str = 'levenshtein'):
+def match_elec_names(
+    mne_names: list,
+    loc_names,
+    method: str = 'levenshtein',
+    *,
+    interactive: bool = False,
+):
     """Match MNE channel names to localization names.
-    
+
+    When Levenshtein scores tie, the default non-interactive path raises
+    ``ValueError`` listing candidates (safe for CI/agents). Set
+    ``interactive=True`` only in a human terminal session to prompt with ``input()``.
+
     Parameters
     ----------
     mne_names : list
         List of MNE channel names.
     loc_names
-        Localization names.
+        Localization names (pandas Series-like with ``.str``).
     method : str, optional
         Matching method. Default is 'levenshtein'.
-    
+    interactive : bool, optional
+        If True, prompt on ambiguous ties. Default is False.
+
     Returns
     -------
     tuple
@@ -955,19 +886,22 @@ def match_elec_names(mne_names: list, loc_names, method: str = 'levenshtein'):
             lev_df = pd.DataFrame(sorted(all_lev_ratios, key=lambda x: x[1]), columns=['name', 'lev_score'])
             max_lev = lev_df.loc[lev_df['lev_score']==lev_df['lev_score'].max()]
             if max_lev.shape[0] > 1:
-                # change all non-leading l's to 'i's and 
-                print(max_lev)       
-                match_name = input(f'We have too many possible matches for {elec}! Select one manually from these candidates:')
+                candidates = max_lev['name'].tolist()
+                if not interactive:
+                    raise ValueError(
+                        f"Ambiguous electrode match for '{elec}' among {candidates}. "
+                        "Rename channels to match localization labels, or call "
+                        "match_elec_names(..., interactive=True) in an interactive session."
+                    )
+                print(max_lev)
+                match_name = input(
+                    f'We have too many possible matches for {elec}! '
+                    f'Select one manually from these candidates:'
+                )
                 match = [x for x in all_lev_ratios if x[0]==match_name][0]
             else: 
                 match = sorted(all_lev_ratios, key=lambda x: x[1])[-1] # Get the tuples back sorted by highest lev ratio, and pick the first tuple
                 match_name = match[0] # Get the actual matched name back 
-            # # Make sure the string length matches 
-            # ix = -1
-            # while len(elec) != len(match_name):
-            #     ix -= 1
-            #     match = sorted(all_lev_ratios, key=lambda x: x[1])[ix]
-            #     match_name = match[0]
             # Make sure this wasn't incorrectly matched to a similar named channel on the same probe with a different NUMBER
             ix = -1
             while int(list(filter(str.isdigit, elec))[0])  != int(list(filter(str.isdigit, match_name))[0]): 
@@ -979,7 +913,11 @@ def match_elec_names(mne_names: list, loc_names, method: str = 'levenshtein'):
                         print('Could not find a match for this electrode. It is likely that the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
                         break
                     else:
-                        return IndexError('Could not find a match for this electrode, and its not because the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
+                        raise IndexError(
+                            'Could not find a match for this electrode, and its not because '
+                            'the number of electrodes in the mne file does not match the '
+                            'number of electrodes in the localization file.'
+                        ) from None
                 match_name = match[0]
             # Make sure we aren't replacing a legit channel name: 
             ix = -1
@@ -992,7 +930,11 @@ def match_elec_names(mne_names: list, loc_names, method: str = 'levenshtein'):
                         print('Could not find a match for this electrode. It is likely that the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
                         break
                     else:
-                        return IndexError('Could not find a match for this electrode, and its not because the number of electrodes in the mne file does not match the number of electrodes in the localization file.')
+                        raise IndexError(
+                            'Could not find a match for this electrode, and its not because '
+                            'the number of electrodes in the mne file does not match the '
+                            'number of electrodes in the localization file.'
+                        ) from None
                 match_name = match[0]
             if match[1] < cutoff: 
                 print(f"Could not find a match for {elec}.")
@@ -1128,7 +1070,9 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
     Returns
     -------
     dict
-        Dictionary of IED times per channel.
+        Continuous Raw: ``{channel: ndarray of peak times in seconds}``.
+        Epochs: nested ``{channel: {epoch_index: ndarray of sample indices}}``.
+        Same function name, incompatible shapes — check ``isinstance(mne_data, mne.Epochs)``.
     """
 
     # What type of data is this? Continuous or epoched? 
@@ -1242,30 +1186,6 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
 
     # NOTE: THIS IS TOTAL OVERKILL. Someone can feel free to overhaul this and use it if the IED detection above does not work well. 
 
-#     Here I am going to try and write a better IED detection function that doesn't miss as many as the last one. 
-
-#     https://link.springer.com/article/10.1007/s10548-014-0379-1#Sec2
-
-#     1. Each channel was zero-phase filtered in 10–60 Hz band using combination of high-pass and low-pass 8th order type II Chebyshev digital filters (with stop-band ripple).
-#     2.  Instant envelope of each filtered channel was calculated using absolute value of Hilbert transform
-#     3. The algorithm estimates the statistical distribution of the envelope and identifies a threshold value, which enables discrimination of spikes from background activity.
-#     4. The signal envelope was analysed using a moving window with a segment width of 5 s and 80 % overlap between consecutive segments. 
-#     5. The statistical distribution of the envelope was calculated for each segment and approximated with a log-normal fit
-#     6. Therefore, mode and median of the log-normal distribution was used to define a threshold that discriminates segments with spikes from the segments with background activity
-#     7. mode = np.exp(mu - std**2), median = np.exp(mu) 
-#     8. threshold = 3.65 * [mode + median] (from .m code) 
-#     """
-
-#     # What type of data is this? Continuous or epoched? 
-#     if type(mne_data) == mne.epochs.Epochs:
-#         data_type = 'epoch'
-#         n_times = mne_data._data.shape[-1]
-#     elif type(mne_data) in [mne.io.fiff.raw.Raw, mne.io.edf.edf.RawEDF]: 
-#         data_type = 'continuous'
-#         n_times = mne_data._data.shape[1]
-#     else: 
-#         data_type = 'continuous'
-#         n_times = mne_data._data.shape[1]  
         
 
 #     signal = mne_data.copy()._data
@@ -1312,128 +1232,6 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
         
 #     index = np.arange(0, signal_length - winsize + 1, step)
 
-
-#     # Estimation of segment's distribution using MLE
-#     phat = []
-#     for k in range(len(index)):
-#         segment = envelope[index[k]:index[k] + winsize]
-#         segment = segment[segment > 0]  # Remove non-positive values
-#         phat.append([np.mean(np.log(segment)), np.std(np.log(segment))])
-
-#     phat = np.array(phat)
-
-#     # Filtering phat using filtfilt
-#     r = len(envelope) / len(index)
-#     n_average = winsize / fs
-
-#     if round(n_average * fs / r) > 1:
-#         phat = np.array([np.convolve(row, np.ones(int(round(n_average * fs / r))) / int(round(n_average * fs / r)), mode='same') for row in phat])
-
-#     # Interpolation of thresholds value to threshold curve
-#     phat_int = np.zeros((len(envelope), 2))
-#     if len(phat) > 1:
-#         phat_int[:, 0] = interp1d(index + round(winsize / 2), phat[:, 0], kind='slinear', fill_value='extrapolate')(np.arange(index[0] + round(winsize / 2), index[-1] + round(winsize / 2) + 1))
-#         phat_int[:, 1] = interp1d(index + round(winsize / 2), phat[:, 1], kind='slinear', fill_value='extrapolate')(np.arange(index[0] + round(winsize / 2), index[-1] + round(winsize / 2) + 1))
-#     else:
-#         phat_int = np.tile(phat, (len(envelope), 1))
-
-#     lognormal_mode = np.exp(phat_int[:, 0] - phat_int[:, 1] ** 2)
-#     lognormal_median = np.exp(phat_int[:, 0])
-#     lognormal_mean = np.exp(phat_int[:, 0] + (phat_int[:, 1] ** 2) / 2)
-
-#     prah_int = k1 * (lognormal_mode + lognormal_median) - k3 * (lognormal_mean - lognormal_mode)
-#     if not (k2 == k1):
-#         prah_int_low = k2 * (lognormal_mode + lognormal_median) - k3 * (lognormal_mean - lognormal_mode)
-#     else:
-#         prah_int_low = prah_int
-
-#     # CDF and PDF of lognormal distribution
-#     envelope_cdf = 0.5 + 0.5 * erf((np.log(envelope) - phat_int[:, 0]) / np.sqrt(2 * phat_int[:, 1] ** 2))
-#     envelope_pdf = (np.exp(-0.5 * ((np.log(envelope) - phat_int[:, 0]) / phat_int[:, 1]) ** 2) / (envelope * phat_int[:, 1] * np.sqrt(2 * np.pi)))
-
-#     # # Detection of obvious and ambiguous spike
-
-#     def local_maxima_detection(envelope, prah_int, fs, polyspike_union_time, ti_switch, d_decim):
-#         marker1 = np.zeros_like(envelope)
-#         marker1[envelope > prah_int] = 1
-        
-#         point = []
-#         point.append(np.where(np.diff(np.concatenate(([0], marker1))) > 0)[0])  # start crossing
-#         point.append(np.where(np.diff(np.concatenate((marker1, [0]))) < 0)[0])  # end crossing
-        
-#         if ti_switch == 2:
-#             envelope = np.abs(d_decim)
-        
-#         marker1 = np.zeros_like(envelope, dtype=bool)
-#         for k in range(len(point[0])):
-#             seg = envelope[point[0][k]:point[1][k] + 1]
-#             if len(seg) > 2:
-#                 seg_s = np.diff(seg)
-#                 seg_s = np.where(np.diff(np.concatenate(([0], np.sign(seg_s)))) < 0)[0]  # positions of local maxima in the section
-#                 marker1[point[0][k] + seg_s] = True
-#             elif len(seg) <= 2:
-#                 s_max = np.argmax(seg)
-#                 marker1[point[0][k] + s_max] = True
-        
-#         pointer = np.where(marker1)[0]
-#         state_previous = False
-#         start = 0
-#         for k in range(len(pointer)):
-#             end = min(len(marker1) - 1, pointer[k] + int(polyspike_union_time * fs))
-#             seg = marker1[pointer[k] + 1:end]
-#             if state_previous:
-#                 if np.any(seg):
-#                     state_previous = True
-#                 else:
-#                     state_previous = False
-#                     marker1[start:pointer[k] + 1] = True
-#             else:
-#                 if np.any(seg):
-#                     state_previous = True
-#                     start = pointer[k]
-        
-#         point = []
-#         point.append(np.where(np.diff(np.concatenate(([0], marker1))) > 0)[0])  # start
-#         point.append(np.where(np.diff(np.concatenate((marker1, [0]))) < 0)[0])  # end
-        
-#         for k in range(len(point[0])):
-#             if point[1][k] - point[0][k] > 1:
-#                 local_max = pointer[(pointer >= point[0][k]) & (pointer <= point[1][k])]
-#                 marker1[point[0][k]:point[1][k] + 1] = False
-#                 local_max_val = envelope[local_max]
-#                 local_max_poz = np.where(np.diff(np.sign(np.diff(np.concatenate(([0], local_max_val, [0]))))) > 0)[0]
-#                 marker1[local_max[local_max_poz]] = True
-        
-#         return marker1
-
-#     def detection_union(marker1, envelope, union_samples):
-#         union_samples = int(np.ceil(union_samples))
-#         if union_samples % 2 == 0:
-#             union_samples += 1
-#         MASK = np.ones(union_samples)
-#         marker1_dilated = convolve(marker1.astype(float), MASK, mode='same') > 0  # dilatation
-#         marker1_eroded = ~convolve(~marker1_dilated.astype(float), MASK, mode='same').astype(bool)  # erosion
-        
-#         marker2 = np.zeros_like(marker1)
-#         point = []
-#         point.append(np.where(np.diff(np.concatenate(([0], marker1_eroded))) > 0)[0])  # start
-#         point.append(np.where(np.diff(np.concatenate((marker1_eroded, [0]))) < 0)[0])  # end
-        
-#         for i in range(len(point[0])):
-#             maxp = np.argmax(envelope[point[0][i]:point[1][i] + 1])
-#             marker2[point[0][i] + maxp] = 1
-        
-#         return marker2
-
-#     markers_high = local_maxima_detection(envelope, prah_int, fs, polyspike_union_time, ti_switch, d_decim)
-#     markers_high = detection_union(markers_high, envelope, polyspike_union_time * fs)
-
-#     markers_low = local_maxima_detection(envelope, prah_int_low, fs, polyspike_union_time, ti_switch, d_decim)
-#     markers_low = detection_union(markers_low, envelope, polyspike_union_time * fs)
-
-#     return markers_low, markers_high
-
-# Below are code that condense the Jupyter notebooks for pre-processing into individual functions. 
 
 def load_elec(elec_path=None, site: str = 'MSSM'):
     """Load electrode data from file.
@@ -1559,54 +1357,21 @@ def load_elec(elec_path=None, site: str = 'MSSM'):
     return elec_data
 
 def make_mne_scalp(load_path=None, overwrite: bool = True, return_data: bool = False):
-    """Create MNE object from scalp data.
-    
-    Parameters
-    ----------
-    load_path : str, optional
-        Path to neural data.
-    overwrite : bool, optional
-        Whether to overwrite existing data. Default is True.
-    return_data : bool, optional
-        Whether to return data. Default is False.
-    
-    Returns
-    -------
-    mne object or None
-        MNE object if return_data is True.
-    """
+    """Archived scalp-EDF loader — prefer ``workflow.load_lfp`` / ``make_mne`` for iEEG."""
+    from ._scratch_utils import make_mne_scalp as _archived
 
-    edf_file = glob(f'{load_path}/*.edf')[0]
-    mne_data = mne.io.read_raw_edf(edf_file, preload=True)
-
-    # Regex for detecting 10–20/10–10 electrode names
-    pattern = re.compile(
-        r'^(?:[FTCPOM][pz\d]?|AF\d?|FC\d?|CP\d?|PO\d?|TP\d?|FT\d?|OZ|Fp\d?)$',
-        re.IGNORECASE
-    )
-
-    def is_scalp_eeg_channel(name):
-        # Remove hyphenated bipolar labels and trim
-        base = re.split('[- ]', name)[0]
-        return bool(pattern.match(base))
-
-    scalp_channels = [ch for ch in mne_data.ch_names if is_scalp_eeg_channel(ch)]
-
-    # restrict to scalp EEG channels
-    if not scalp_channels:
-        raise ValueError("No scalp EEG channels found in the data. Please check the channel names or the data format.")
-    else:
-        mne_data.pick_channels(scalp_channels)
-
-    mne_data.info['line_freq'] = 60
-    # Notch out 60 Hz noise and harmonics
-    mne_data.notch_filter(freqs=(60, 120, 180, 240))
-
-    return mne_data if return_data else mne_data.save(f'{load_path}/scalp_raw.fif', overwrite=overwrite)
+    return _archived(load_path=load_path, overwrite=overwrite, return_data=return_data)
 
 
 def make_mne(load_path=None, elec_path=None, format: str = 'edf', site: str = 'MSSM', resample_sr: int = 500, overwrite: bool = True, return_data: bool = False, include_micros: bool = False, eeg_names=None, resp_names=None, ekg_names=None, sync_name=None, sync_type: str = 'photodiode', seeg_names=None, drop_names=None, seeg_only: bool = True, check_bad: bool = False):
     """Create MNE object from data and electrode files.
+
+    Notes
+    -----
+    Side effects: by default (``return_data=False``) writes ``{load_path}/lfp_data.fif``
+    and returns ``None``. Set ``return_data=True`` to get the MNE object in memory.
+    Site ``'MSSM'`` vs ``'UI'`` selects electrode-table schemas — see ``load_elec``.
+    Prefer the stable ``workflow.load_lfp`` path for new code.
     
     Parameters
     ----------
@@ -1970,7 +1735,7 @@ def ref_mne(mne_data=None, elec_path=None, method: str = 'wm', site: str = 'MSSM
 
 def _bin_channelwise_times_into_behav_evs(channel_dict_seconds: dict, ev_starts: list, ev_ends: list):
     """Bin channelwise times into behavioral events.
-    
+
     Parameters
     ----------
     channel_dict_seconds : dict
@@ -1979,43 +1744,45 @@ def _bin_channelwise_times_into_behav_evs(channel_dict_seconds: dict, ev_starts:
         Event start times.
     ev_ends : list
         Event end times.
-    
+
     Returns
     -------
     pd.DataFrame
         DataFrame with binned timestamps.
     """
-    allts = {f'{x}': np.nan for x in channel_dict_seconds.keys()}
-    for key in channel_dict_seconds.keys():
-        timestamps = channel_dict_seconds[key]
-        time_bins = [(a,b) for (a,b) in zip(ev_starts, ev_ends)]
+    n_bins = len(ev_starts)
+    starts = np.asarray(ev_starts, dtype=float)
+    ends = np.asarray(ev_ends, dtype=float)
+    event_metadata = pd.DataFrame(
+        columns=list(channel_dict_seconds.keys()),
+        index=np.arange(n_bins),
+    )
+    for ch, timestamps in channel_dict_seconds.items():
+        ts = np.asarray(timestamps, dtype=float)
+        if ts.size == 0:
+            continue
+        # For each timestamp, find the rightmost start <= ts, then check end bound.
+        order = np.argsort(ts)
+        ts_sorted = ts[order]
+        idx = np.searchsorted(starts, ts_sorted, side="right") - 1
+        assigned = {bin_index: [] for bin_index in range(n_bins)}
+        for t, bin_index in zip(ts_sorted, idx):
+            if bin_index >= 0 and t <= ends[bin_index]:
+                assigned[bin_index].append(float(t - starts[bin_index]))
+        for ev, val in assigned.items():
+            if val:
+                event_metadata.at[ev, ch] = val if len(val) > 1 else val
+    return event_metadata.where(pd.notna(event_metadata), None)
 
-        # Initialize a dictionary to store the assigned timestamps for each time bin
-        assigned_timestamps = {bin_index: [] for bin_index in range(len(time_bins))}
-
-        # Iterate through each timestamp and assign it to the appropriate time bin
-        for timestamp in timestamps:
-            for bin_index, (start, end) in enumerate(time_bins):
-                if start <= timestamp <= end:
-                    assigned_timestamps[bin_index].append(timestamp - start)
-                    break
-        allts[key] = assigned_timestamps
-    # Turn the dictionary into a metadata dataframe 
-    event_metadata = pd.DataFrame(columns=list(channel_dict_seconds.keys()), index=np.arange(len(time_bins)))
-    for ch in list(channel_dict_seconds.keys()):
-        for ev, val in allts[ch].items():
-            if len(val) > 1:    
-                event_metadata[ch].loc[ev] = val
-            else:
-                # if ~np.isnan(val): 
-                event_metadata[ch].loc[ev] = val
-    # Replace all nan with Nones 
-    event_metadata.where(pd.notna(event_metadata), None)
-    return event_metadata
 
 def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_times=None, ev_start_s: float = 0, ev_end_s: float = 1.5, buf_s: float = 1, downsamp_factor=None, IED_args=None, baseline=None, detrend=None):
-    """Create epochs from continuous data.
-    
+    """Create epochs from continuous data (legacy path).
+
+    Always runs IED + misc artifact detection and writes
+    ``{behav_name}_IED_df.csv`` / ``{behav_name}_artifact_df.csv`` next to
+    ``load_path``. Prefer ``workflow.make_epochs`` when you do not want those
+    side effects.
+
     Parameters
     ----------
     load_path : str, optional
@@ -2029,7 +1796,7 @@ def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_
     behav_times : dict, optional
         Behavioral times dictionary.
     ev_start_s : float, optional
-        Event start time. Default is 0.
+        Event start time (tmin offset). Default is 0.
     ev_end_s : float, optional
         Event end time. Default is 1.5.
     buf_s : float, optional
@@ -2037,12 +1804,13 @@ def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_
     downsamp_factor : float, optional
         Downsampling factor.
     IED_args : dict, optional
-        IED detection arguments.
+        IED detection arguments. Defaults to
+        ``{'peak_thresh': 5, 'closeness_thresh': 0.25, 'width_thresh': 0.2}``.
     baseline : dict, optional
         Baseline times dictionary.
     detrend : int, optional
         Detrend order.
-    
+
     Returns
     -------
     mne.Epochs
@@ -2052,13 +1820,30 @@ def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_
     # Load the data 
     mne_data_reref = mne.io.read_raw_fif(load_path, preload=True)
 
-    IED_sec_dict = lfp_preprocess_utils.detect_IEDs(mne_data_reref, 
-                                            peak_thresh=IED_args['peak_thresh'], 
-                                            closeness_thresh=IED_args['closeness_thresh'], 
-                                            width_thresh=IED_args['width_thresh'])
+    if IED_args is None:
+        IED_args = {
+            'peak_thresh': 5,
+            'closeness_thresh': 0.25,
+            'width_thresh': 0.2,
+        }
+    missing = [k for k in ('peak_thresh', 'closeness_thresh', 'width_thresh') if k not in IED_args]
+    if missing:
+        raise ValueError(
+            f"IED_args is missing required keys: {missing}. "
+            "Provide peak_thresh, closeness_thresh, and width_thresh."
+        )
 
-    artifact_sec_dict = lfp_preprocess_utils.detect_misc_artifacts(mne_data_reref, 
-                                            peak_thresh=IED_args['peak_thresh'])                                        
+    IED_sec_dict = detect_IEDs(
+        mne_data_reref,
+        peak_thresh=IED_args['peak_thresh'],
+        closeness_thresh=IED_args['closeness_thresh'],
+        width_thresh=IED_args['width_thresh'],
+    )
+
+    artifact_sec_dict = detect_misc_artifacts(
+        mne_data_reref,
+        peak_thresh=IED_args['peak_thresh'],
+    )
 
     # all behavioral times of interest 
     beh_ts = [(float(x)*slope + offset) if x != 'None' else np.nan for x in behav_times]
@@ -2159,73 +1944,9 @@ def make_epochs(load_path=None, slope=None, offset=None, behav_name=None, behav_
 
     return ev_epochs
 
-# def get_bad_epochs_by_chan(epochs):
-#     """
-#     Some of the time, we will want to simply identify all the bad epochs (IED, 60Hz) on a given channel to exclude from analysis.
-#     If for some reason you need to split this by category of bad channel, rewrite.
-#     """
-     
-#     good_epochs = {f'{x}': np.nan for x in epochs.ch_names}
-#     bad_epochs = {f'{x}': np.nan for x in epochs.ch_names}
-
-#     for ch_ix, ch_name in enumerate(epochs.ch_names):
-#         ch_data = epochs._data[:, ch_ix:ch_ix+1, :]
-#         bad_epochs[ch_name] = np.where(epochs.metadata[epochs.ch_names[ch_ix]].notnull())[0]
-#         good_epochs[ch_name] = np.delete(np.arange(ch_data.shape[0]), bad_epochs[ch_name])
-
-#     return good_epochs, bad_epochs
-
-# def get_bad_epochs_annot(epochs): 
-#     """
-#     We might want to extract the annotations for the bad epochs so we can make mne objects out of just them
-#     """
-
-#     onset_60Hz = [] 
-#     duration_60Hz = [] 
-#     descriptions_60Hz = [] 
-#     ch_names_60Hz = []
-
-#     onset_IED = [] 
-#     duration_IED = [] 
-#     descriptions_IED = [] 
-#     ch_names_IED = []
-
-#     # Make bad events.
-#     for ch_ix, ch_name in enumerate(epochs.ch_names):
-#         # find categories of bad events
-#         bad_events_60Hz = np.where(epochs.metadata[ch_name]=='noise')[0]
-#         nbad_60Hz = len(bad_events_60Hz)
-#         if nbad_60Hz > 0:
-#             onset_60Hz+=behav_times[bad_events_60Hz].values.tolist()
-#             duration_60Hz+=np.zeros_like(bad_events_60Hz).tolist()
-#             descriptions_60Hz+=['bad_events_60Hz'] * nbad_60Hz
-#             ch_names_60Hz+=[[ch_name] for x in range(nbad_60Hz)]
-
-#         bad_events_IED = np.where(epochs.metadata[ch_name].apply(lambda x: isinstance(x, list)))[0]
-#         nbad_IED = len(bad_events_IED)
-#         if nbad_IED > 0:
-#             onset_IED+=behav_times[bad_events_IED].values.tolist()
-#             duration_IED+=np.zeros_like(bad_events_IED).tolist()
-#             descriptions_IED+=['bad_events_IED'] * nbad_IED
-#             ch_names_IED+=[[ch_name] for x in range(nbad_IED)]
-
-#     # merge all events and remake the epochs: 
-#     bad_onsets =  onset_60Hz + onset_IED
-#     bad_duration = duration_60Hz + duration_IED
-#     bad_descriptions =  descriptions_60Hz + descriptions_IED
-#     bad_ch_names = ch_names_60Hz + ch_names_IED
-
-#     # Make mne annotations based on these descriptions
-#     revised_annot = mne.Annotations(onset=bad_onsets,
-#                             duration=bad_duration,
-#                             description=bad_descriptions,
-#                             ch_names=bad_ch_names)
-
-#     return revised_annot
-
 def rename_elec_df_reref(reref_labels: list, elec_path: str, site: str = 'MSSM'):
-    """Rename electrode DataFrame after re-referencing.
-    
+    """Rename electrode DataFrame after re-referencing (lightly maintained).
+
     Parameters
     ----------
     reref_labels : list
@@ -2234,12 +1955,18 @@ def rename_elec_df_reref(reref_labels: list, elec_path: str, site: str = 'MSSM')
         Path to electrode file.
     site : str, optional
         Site name. Default is 'MSSM'.
-    
+
     Returns
     -------
     pd.DataFrame
         Renamed electrode DataFrame.
     """
+    warnings.warn(
+        "`rename_elec_df_reref` is lightly maintained and may move to "
+        "`LFPAnalysis._scratch_utils` in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     elec_data = load_elec(elec_path, site=site)
     
     
@@ -2258,21 +1985,22 @@ def rename_elec_df_reref(reref_labels: list, elec_path: str, site: str = 'MSSM')
     # get the white matter electrodes 
     wm_elec_ix_auto = []
     wm_elec_ix_manual = [] 
-    # account for different labeling strategies in manual column
-    white_matter_labels = ['wm', 'white', 'whitematter', 'white matter']
-    manual_col = anode_df.keys().str.lower().str.contains('manual')
-    if np.any(manual_col):
-        manual_key = anode_df.keys()[anode_df.keys().str.lower().str.contains('manual')][0]
+    manual_key = _manual_column_key(anode_df)
+    if manual_key is not None:
         if anode_df[manual_key].dropna().shape[0] == 0:
-            # there are no white matter channels 
             return anode_df
-        else:
-            wm_elec_ix_manual += [ind for ind, data in anode_df[manual_key].str.lower().items() if data in white_matter_labels]
+        wm_elec_ix_manual += [
+            ind for ind, data in anode_df[manual_key].str.lower().items()
+            if data in _WHITE_MATTER_LABELS
+        ]
     else:
         warnings.warn('Warning...........No Manual Column!')
 
-    if site == 'MSSM':
-        wm_elec_ix_auto += [ind for ind, data in anode_df['gm'].str.lower().items() if data=='white' and pd.isnull(anode_df[manual_key][ind])]
+    if site == 'MSSM' and manual_key is not None:
+        wm_elec_ix_auto += [
+            ind for ind, data in anode_df['gm'].str.lower().items()
+            if data == 'white' and pd.isnull(anode_df[manual_key][ind])
+        ]
 
     # consolidate manual and auto detection 
     wm_elec_ix = np.unique(wm_elec_ix_manual + wm_elec_ix_auto)
@@ -2541,8 +2269,10 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
                                         output: str = 'return', 
                                         tfr_method: str = 'morlet',
                                         decim: int = 1,
-                                        n_jobs: int = -1):
-    """Compute and baseline TFR for continuous RAW data.
+                                        n_jobs: int = 1):
+    """Compute and baseline TFR for continuous RAW data (lightly maintained).
+
+    Prefer epoched ``compute_and_baseline_tfr`` / future stable TFR API for new work.
     
     Parameters
     ----------
@@ -2567,14 +2297,20 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
     decim : int, optional
         Decimation factor for time dimension. Default is 1 (no decimation).
     n_jobs : int, optional
-        Number of parallel jobs. Default is -1 (use all cores).
-    
+        Number of parallel jobs. Default is 1 (local-machine friendly).
+
     Returns
     -------
     dict or None
         Dictionary with 'power' (np.ndarray), 'times' (np.ndarray), 'freqs' (np.ndarray), 
         'ch_names' (list), and 'sfreq' (float) if output is 'return' or 'both'.
     """
+    warnings.warn(
+        "`compute_and_baseline_tfr_continuous` is lightly maintained; prefer "
+        "epoched `compute_and_baseline_tfr` / future stable TFR API.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     import mne
     from mne.time_frequency import tfr_array_morlet
     
@@ -2676,23 +2412,18 @@ def compute_and_baseline_tfr_continuous(raw: 'mne.io.Raw', baseline_tmin: float,
         
         while large_z_flag and iteration < max_iter:
             print(f'baseline z-score iteration # {iteration}')
-            
-            # Recompute baseline from cleaned baseline period
+            # Recompute z from cleaned baseline stats only (avoid full helper re-entry).
             baseline_power_clean = temp_power[:, :, baseline_mask]
-            
-            baseline_corrected_power = baseline_continuous_TFR(data=temp_power, 
-                                                                baseline_data=baseline_power_clean, 
-                                                                mode='zscore',
-                                                                elec_axis=0, freq_axis=1, time_axis=2)
-            
+            m_ = np.nanmean(baseline_power_clean, axis=2, keepdims=True)
+            std_ = np.nanstd(baseline_power_clean, axis=2, keepdims=True)
+            baseline_corrected_power = (temp_power - m_) / std_
+
             large_z_mask = np.where(np.abs(baseline_corrected_power) > absurdity_threshold)
             if large_z_mask[0].shape[0] == 0:
-                # No more large z-scores
                 large_z_flag = False
             else:
-                # NaN out extreme values in the power data
                 temp_power[large_z_mask] = np.nan
-            
+
             iteration += 1
     
     # ==========================================

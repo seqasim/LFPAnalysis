@@ -7,15 +7,17 @@ import warnings
 # Might be nice to synergize with https://github.com/alexrockhill/pd-parser to see if there's some improvements to be made
 
 def get_behav_ts(logfile):
-    """Extract behavioral timestamps from logfile.
-    
+    """Archived stub — extract behavioral timestamps yourself, then sync.
+
     Parameters
     ----------
     logfile
         Logfile to extract timestamps from.
     """
-    pass
-    
+    from ._scratch_utils import get_behav_ts as _archived
+
+    return _archived(logfile)
+
 
 def moving_average(a, n=11) :
     """
@@ -48,14 +50,6 @@ def _normalized_sliding_windows(data, window_size: int, step_size: int = 1) -> n
     centered = windows - windows.mean(axis=1, keepdims=True)
     norms = np.linalg.norm(centered, axis=1, keepdims=True)
     return np.divide(centered, norms, out=np.zeros_like(centered), where=norms > 0)
-
-# def fastCorr(x, y):
-#     # faster version of corr
-#     # # THIS SHIT RETURNS > 1 SOMETIMES??? CHECK ZE MATH
-
-#     c = np.cov(x, y)
-#     r = c[0, 0] / (np.std(x) * np.std(y))
-#     return r
 
 def get_neural_ts_photodiode(mne_sync, smoothSize: int = 11, height: float = 0.5):
     """Extract neural timestamps from photodiode signal.

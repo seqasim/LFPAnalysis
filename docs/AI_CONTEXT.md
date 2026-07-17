@@ -345,15 +345,16 @@ The package does **not** perform electrode localization; it consumes existing ta
 
 ### Incomplete / stub surfaces
 
-These are publicly importable but incomplete — may `pass` or return `None` silently:
+Soft-archived in `LFPAnalysis._scratch_utils`; original names still import with
+`DeprecationWarning` and stubs raise `NotImplementedError`:
 
 | Symbol | Status |
 |--------|--------|
 | `laplacian` reference | Registry entry; stable API raises `ConfigurationError` |
-| `analysis_utils.FOOOF_continuous`, `sliding_FOOOF` | `pass` stubs |
-| `sync_utils.get_behav_ts` | `pass` stub |
-| `nlx_utils.merge_multiple_ncs_files` | Incomplete |
-| `iowa_utils.rename_mne_channels` | Incomplete body |
+| `analysis_utils.FOOOF_continuous`, `sliding_FOOOF` | Archived stubs |
+| `sync_utils.get_behav_ts` | Archived stub |
+| `nlx_utils.merge_multiple_ncs_files` | Archived stub |
+| `iowa_utils.rename_mne_channels` | Archived incomplete helper |
 
 ### Optional dependencies
 
@@ -395,7 +396,7 @@ Utility modules export every non-underscore name implicitly. There is no formal 
 
 ### Automation hazards
 
-- **`match_elec_names` interactive prompt** — on ambiguous Levenshtein ties, calls `input()` and will hang CI/agents. Avoid in non-interactive contexts.
+- **`match_elec_names` ambiguous ties** — default `interactive=False` raises `ValueError` (CI-safe). Only `interactive=True` prompts with `input()`.
 - **Non-reproducible statistics** — `statistics_utils` permutations are not seeded; do not assume run-to-run stability.
 
 ### Dependency errors

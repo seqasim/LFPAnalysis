@@ -342,17 +342,30 @@ def load_ncs(file_path: str, load_time: bool = True, rescale_data: bool = True, 
 
 def load_nev(file_path: str):
     """Load Neuralynx .nev event file.
-    
+
+    Pair with ``sync_utils.get_neural_ts_ttl`` for TTL synchronization.
+    This helper is lightly used outside the package; prefer documenting the
+    load-then-sync recipe in notebooks.
+
     Parameters
     ----------
     file_path : str
         Path to .nev file.
-    
+
     Returns
     -------
     dict
         Dictionary containing event data and metadata.
     """
+    import warnings
+
+    warnings.warn(
+        "`load_nev` is an advanced Neuralynx helper; pair with "
+        "`sync_utils.get_neural_ts_ttl` for sync. Recipe docs are preferred "
+        "over discovering this by name alone.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Load the given file as a Neuralynx .nev event file and extract the contents
     file_path = os.path.abspath(file_path)
     with open(file_path, 'rb') as fid:
@@ -449,21 +462,7 @@ def parse_subject_nlx_data(ncs_files, eeg_names=None, resp_names=None, ekg_names
 
 
 def merge_multiple_ncs_files(ncs_files):
-    """Merge multiple NCS files.
-    
-    Parameters
-    ----------
-    ncs_files : list
-        List of NCS file paths to merge.
-    """
+    """Archived stub — multi-file NCS merge was never finished."""
+    from ._scratch_utils import merge_multiple_ncs_files as _archived
 
-    merged_ncs_dict = {}
-
-    path_dir_ncs = os.path.split(ncs_files[0])[0]
-    chan_name = os.path.split(ncs_files[0])[-1][:-4]
-    
-    # Make a filepath for this  
-    merged_ncs_dict['file_path'] = f'{path_dir_ncs}/{chan_name}_merged.ncs'
-
-
-    pass
+    return _archived(ncs_files)

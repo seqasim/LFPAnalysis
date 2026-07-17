@@ -66,6 +66,9 @@ Inspect each handoff, not just the final output:
 - `lfp_preprocess_utils` baseline helpers rely on broadcasting instead of materializing repeated arrays, so you can pass their outputs directly to downstream NumPy-based utilities.
 - `oscillation_utils` surrogate helpers keep deterministic behavior through `rng_seed`.
 - `analysis_utils` ROI lookups cache the packaged atlas table instead of re-reading it on every call.
+- Incomplete stubs (`FOOOF_continuous`, `get_behav_ts`, `laplacian_ref`, …) are soft-archived: importing the old name still works but raises `NotImplementedError` (or warns) and points you at the supported helper.
+- Parallel util defaults prefer `n_jobs=1` on local machines; pass `n_jobs=-1` explicitly on a cluster.
+- Connectivity seed/target helpers expect electrode columns `label`, `hemisphere`, and `salman_region`.
 
 ## Common mistakes
 

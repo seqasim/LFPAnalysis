@@ -2,10 +2,12 @@
 
 ## Still advanced or legacy-oriented
 
-- full time-frequency orchestration
+- full time-frequency orchestration (planned for a future stable-API promotion)
+- behavioral sync helpers (`sync_utils.synchronize_data*`) — book-taught but not yet in `run_pipeline`
 - connectivity orchestration across the many legacy options
 - reserved-but-incomplete stable entries such as `laplacian`
 - notebook-specific side effects such as writing intermediate artifact CSVs to disk
+- soft-archived stubs under `LFPAnalysis._scratch_utils` (still importable from original modules with deprecation warnings)
 
 ## How to choose responsibly
 

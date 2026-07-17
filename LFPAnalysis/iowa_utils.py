@@ -101,34 +101,9 @@ def extract_names_elec_table(elec_table_path: str):
 
     return seeg_names
 
-# def rename_mne_channels(mne_data, connect_table_path):
-#     """ 
-#     """ 
-
-#     connect_table = pd.read_csv(connect_table_path)
-
-#     mask = pd.notna(connect_table['Contact Location']) & connect_table['Contact Location'].str.startswith(('Left', 'Right'))
-#     seeg_table = connect_table[mask].dropna()
-
-
-#     mapping_name = {f'{x}': np.nan for x in mne_data.ch_names}
-
-#     for code in seeg_table.Code.unique():
-#         relevant_rows = seeg_table[seeg_table.Code==code]['NLX-LFPx channel']
-#         starts = relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[0]).astype(int).values
-#         ends = (relevant_rows[relevant_rows.str.contains(':')].apply(lambda x: x.split(':')[1]).astype(int) + 1).values
-#         channel_count = 1
-#         for a,b in zip(starts, ends): 
-#             channels = np.arange(a,b)
-#             for channel in channels:
-#                 mapping_name[f'lfpx{channel}'] = f'{code}_{channel_count}'
-#                 channel_count += 1
-
-#     return mapping_name
-
 def rename_mne_channels(mne_data, location_table_path: str):
-    """Rename MNE channels based on location table.
-    
+    """Archived incomplete helper — prefer extract_names_connect_table + manual rename.
+
     Parameters
     ----------
     mne_data
@@ -136,5 +111,7 @@ def rename_mne_channels(mne_data, location_table_path: str):
     location_table_path : str
         Path to the location table CSV file.
     """
-    location_table = pd.read_csv(location_table_path)
-    
+    from ._scratch_utils import rename_mne_channels as _archived
+
+    return _archived(mne_data, location_table_path)
+
