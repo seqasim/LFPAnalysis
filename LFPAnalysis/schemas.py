@@ -32,6 +32,23 @@ BASELINE_SUMMARY_COLUMNS: tuple[str, ...] = (
     "baseline_mean",
     "baseline_std",
 )
+SYNC_SUMMARY_COLUMNS: tuple[str, ...] = (
+    "source",
+    "slope",
+    "offset",
+    "n_behav_pulses",
+    "n_neural_pulses",
+    "r_value",
+)
+TFR_METADATA_COLUMNS: tuple[str, ...] = (
+    "method",
+    "baseline_mode",
+    "n_freqs",
+    "freq_min",
+    "freq_max",
+    "n_cycles",
+    "decim",
+)
 
 
 def empty_event_table() -> pd.DataFrame:
@@ -42,6 +59,76 @@ def empty_event_table() -> pd.DataFrame:
 def empty_baseline_summary() -> pd.DataFrame:
     """Create an empty baseline summary table with the standard schema."""
     return pd.DataFrame(columns=BASELINE_SUMMARY_COLUMNS)
+
+
+def empty_sync_summary() -> pd.DataFrame:
+    """Create an empty sync summary table with the standard schema."""
+    return pd.DataFrame(columns=SYNC_SUMMARY_COLUMNS)
+
+
+def empty_tfr_metadata() -> pd.DataFrame:
+    """Create an empty TFR metadata table with the standard schema."""
+    return pd.DataFrame(columns=TFR_METADATA_COLUMNS)
+
+
+def build_sync_summary(
+    *,
+    source: str,
+    slope: float | None,
+    offset: float | None,
+    n_behav_pulses: int = 0,
+    n_neural_pulses: int = 0,
+    r_value: float | None = None,
+) -> pd.DataFrame:
+    """Create a one-row sync provenance table for the prep handoff."""
+    return pd.DataFrame(
+        [
+            {
+                "source": source,
+                "slope": slope,
+                "offset": offset,
+                "n_behav_pulses": int(n_behav_pulses),
+                "n_neural_pulses": int(n_neural_pulses),
+                "r_value": r_value,
+            }
+        ],
+        columns=SYNC_SUMMARY_COLUMNS,
+    )
+
+
+def build_tfr_metadata(
+    *,
+    method: str,
+    baseline_mode: str,
+    freqs: Sequence[float] | np.ndarray,
+    n_cycles: float | Sequence[float] | np.ndarray,
+    decim: int = 1,
+) -> pd.DataFrame:
+    """Create a one-row TFR metadata table for analysis outputs."""
+    freq_arr = np.asarray(freqs, dtype=float)
+    if freq_arr.size == 0:
+        fmin = fmax = float("nan")
+    else:
+        fmin = float(freq_arr.min())
+        fmax = float(freq_arr.max())
+    if np.isscalar(n_cycles):
+        n_cycles_value: float | str = float(n_cycles)
+    else:
+        n_cycles_value = "array"
+    return pd.DataFrame(
+        [
+            {
+                "method": method,
+                "baseline_mode": baseline_mode,
+                "n_freqs": int(freq_arr.size),
+                "freq_min": fmin,
+                "freq_max": fmax,
+                "n_cycles": n_cycles_value,
+                "decim": int(decim),
+            }
+        ],
+        columns=TFR_METADATA_COLUMNS,
+    )
 
 
 def build_event_table(

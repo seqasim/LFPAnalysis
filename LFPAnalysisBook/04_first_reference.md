@@ -61,7 +61,7 @@ Compare `result.raw.ch_names` (22 monopolar) with `result.referenced.ch_names` (
 ## Common mistakes
 
 - Choosing `wm` or `bipolar` without a valid electrode table
-- Assuming `laplacian` is ready in the stable path (it is reserved, not implemented)
+- Assuming `laplacian` is available in the stable path (it is not registered; use bipolar/wm or advanced utilities)
 - Forgetting to record which reference was used in your analysis notes
 - Passing `sample_labels.xlsx` to `load_electrode_metadata` without renaming `NMMlabel`
 
@@ -71,6 +71,6 @@ The old repo called `ref_mne` directly. The stable path wraps the same decision 
 
 ## Not yet supported in the stable path
 
-`laplacian` remains reserved and should be treated as unavailable in the stable beginner-facing API.
+`laplacian` is intentionally omitted from the stable reference registry until implemented.
 
 Next step: {doc}`04b_first_synchronization`

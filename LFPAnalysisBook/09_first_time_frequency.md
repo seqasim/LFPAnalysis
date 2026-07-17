@@ -57,6 +57,6 @@ The worked notebook plots TFR heatmaps and the reward-minus-loss difference.
 
 ## Old-to-new translation note
 
-TFR remains an advanced workflow. Use the stable API for preparation, then `epochs.compute_tfr` or `lfp_preprocess_utils.compute_and_baseline_tfr` for full legacy pipelines.
+Beginner Morlet TFR is available on the analysis spine via `TfrConfig` / `run_analysis`. For full legacy orchestration, use `epochs.compute_tfr` or `lfp_preprocess_utils.compute_and_baseline_tfr`.
 
 Next step: {doc}`10_first_connectivity_and_surrogates`

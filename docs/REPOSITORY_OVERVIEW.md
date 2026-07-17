@@ -102,29 +102,35 @@ violates them will fight the grain of the repository.
 
 ---
 
-## 3. Architecture: the three layers
+## 3. Architecture: dual spine + three layers
 
 Public exports are defined in [`LFPAnalysis/__init__.py`](../LFPAnalysis/__init__.py). Everything
 in `__all__` there is the stable surface; utility modules are imported by path, not re-exported.
 
+**Prep vs analysis:** Sync, electrode-table consumption, referencing, and continuous artifact
+detection belong in prep (`run_prep` → `PrepResult.epochs`). Analysis starts from MNE Epochs
+(`run_analysis`) so prep backends can change without rewriting science code.
+`run_pipeline` is a tutorial convenience that runs prep then analysis.
+
 ```
                 ┌─────────────────────────────────────────────┐
-   user  ─────► │  Stable Workflow API  (typed, tested, ~80%   │
-                │  coverage gate)                              │
-                │  __init__ · config · builders · workflow ·   │
-                │  results · schemas · validation · exceptions │
+   user  ─────► │  Stable dual spine (typed, tested)           │
+                │  Prep: run_prep / PrepConfig → Epochs        │
+                │  Analysis: run_analysis / AnalysisConfig     │
+                │  Tutorial: run_pipeline = prep then analysis │
+                │  __init__ · config · builders · prep ·       │
+                │  workflow · results · schemas · validation   │
                 └───────────────┬─────────────────────────────┘
                                 │ delegates to
                 ┌───────────────▼─────────────────────────────┐
    old code ──► │  Legacy Shims  (legacy.py)                   │
-                │  DeprecationWarning + bridge to stable/utils │
+                │  DeprecationWarning + route to stable/utils │
                 └───────────────┬─────────────────────────────┘
                                 │ calls
                 ┌───────────────▼─────────────────────────────┐
-  advanced ───► │  Advanced Utilities (large, analysis-heavy)  │
-                │  lfp_preprocess_utils · oscillation_utils ·  │
-                │  analysis_utils · statistics_utils ·         │
-                │  sync_utils · nlx_utils · iowa_utils         │
+  advanced ───► │  Advanced escape hatch                       │
+                │  LFPAnalysis.advanced (+ *_utils modules)    │
+                │  connectivity · stats · ROI · site I/O       │
                 └───────────────┬─────────────────────────────┘
                                 │ built on
                     MNE-Python, fooof, mne_connectivity, tensorpac, statsmodels, …
@@ -134,19 +140,21 @@ in `__all__` there is the stable surface; utility modules are imported by path, 
 
 Small, typed, and CI-gated (the coverage gate targets `workflow`, `builders`, `legacy`).
 
-| Module | Lines | Role |
-|--------|------:|------|
-| `__init__.py` | 71 | Declares the stable public surface (`__all__`). |
-| `config.py` | 116 | `@dataclass(slots=True)` config objects + `Literal` type aliases + `WORKING_DTYPE`. |
-| `builders.py` | 151 | `build_basic_/event_locked_/spectral_pipeline_config` convenience constructors. |
-| `workflow.py` | 448 | Staged functions + method registries + `run_pipeline` orchestrator. |
-| `results.py` | 23 | `PipelineResult` dataclass. |
-| `schemas.py` | 96 | Column contracts + DataFrame builders (`build_event_table`, `build_baseline_summary`). |
-| `validation.py` | 72 | `ensure_supported`, `ensure_dependency`, `resolve_existing_path`, column validation. |
-| `exceptions.py` | 17 | `LFPAnalysisError` hierarchy. |
+| Module | Role |
+|--------|------|
+| `__init__.py` | Declares the stable public surface (`__all__`). |
+| `config.py` | Config dataclasses + `Literal` aliases + `WORKING_DTYPE`. |
+| `builders.py` | Prep/analysis/pipeline convenience constructors. |
+| `prep.py` | Prep spine: load → ref → artifacts → sync → electrodes → Epochs. |
+| `workflow.py` | Analysis stages + `run_analysis` + tutorial `run_pipeline`. |
+| `results.py` | `PrepResult`, `AnalysisResult`, `PipelineResult`. |
+| `schemas.py` | Column contracts + DataFrame builders. |
+| `validation.py` | `ensure_supported`, path/column helpers. |
+| `exceptions.py` | `LFPAnalysisError` hierarchy. |
 
 **Config dataclasses** (`config.py`): `LoadConfig`, `ReferenceConfig`, `ArtifactConfig`,
-`BaselineConfig`, `EpochConfig`, `SpectralConfig`, and the composing `PipelineConfig`.
+`SyncConfig`, `ElectrodeConfig`, `BaselineConfig`, `EpochConfig`, `SpectralConfig`,
+`TfrConfig`, composing `PrepConfig` / `AnalysisConfig`, and flat `PipelineConfig` for tutorials.
 String-valued fields are constrained by `Literal` aliases (`ArtifactMethod`, `BaselineMode`,
 `ReferenceMethod`, `SpectralMethod`, `InputFormat`).
 
@@ -154,38 +162,39 @@ String-valued fields are constrained by `Literal` aliases (`ArtifactMethod`, `Ba
 `ensure_supported`:
 
 ```python
-REFERENCE_METHODS = {"none", "bipolar", "wm", "laplacian"}
+REFERENCE_METHODS = {"none", "bipolar", "wm"}
 ARTIFACT_METHODS  = {"none", "misc", "ied", "custom"}
 BASELINE_METHODS  = {"none", "mean", "ratio", "percent", "zscore",
                      "logratio", "zlogratio", "trialwise", "continuous"}
 SPECTRAL_METHODS  = {"none", "psd", "fooof"}
 ```
 
-Note `laplacian` is registered but intentionally raises `ConfigurationError` (not implemented).
+`laplacian` is not a registered reference method (unimplemented; was a false-support trap).
 Artifact detection uses an internal dispatch dict `_ARTIFACT_REGISTRY` (`none`/`misc`/`ied`),
 plus a `custom` branch that accepts a caller-supplied detector callable.
 
-**`run_pipeline` stages** (single orchestrator, order is an invariant):
+**`run_pipeline` stages** (tutorial wrapper = prep then analysis):
 
 1. `load_lfp` → MNE `Raw` or `Epochs`
 2. `preprocess_lfp` → re-referenced `Raw`
 3. `detect_artifacts` → `dict[str, DataFrame]` (on referenced *continuous* data, before epoching)
-4. `make_epochs` → optional `Epochs` (from referenced raw, not yet baselined)
-5. `baseline_lfp` → applied to epochs if present, else to referenced raw
-6. `compute_spectral_features` → optional PSD/FOOOF dict
-7. returns `PipelineResult`
+4. optional sync + electrode handoff (`run_prep`)
+5. `make_epochs` → optional `Epochs` (from referenced raw, not yet baselined)
+6. `baseline_lfp` → applied to epochs if present, else to referenced raw
+7. `compute_spectral_features` / optional TFR → analysis dicts
+8. returns `PipelineResult`
 
 `PipelineResult` fields: `raw`, `referenced`, `epochs`, `artifact_tables`, `baseline_summary`,
-`spectral`, `metadata`. To save RAM, when epoching is enabled the superseded `raw`/`referenced`
-are set to `None`.
+`spectral`, `tfr`, `sync`, `electrode_df`, `metadata`. To save RAM, when epoching is enabled the
+superseded `raw`/`referenced` are set to `None`.
 
-### Layer B — Legacy shims (`legacy.py`, 169 lines)
+### Layer B — Legacy shims (`legacy.py`)
 
 Bridges the four most common old entry points — `make_mne`, `ref_mne`, `make_epochs`,
 `compute_and_baseline_tfr`. Each emits a `DeprecationWarning` via `_warn(old_call, new_call, note)`
-and then either routes to the stable path (for side-effect-free cases) or delegates to the full
-legacy implementation in `lfp_preprocess_utils`. `compute_and_baseline_tfr` always delegates
-because the stable layer has no TFR replacement yet.
+and then either routes to the stable path or delegates to `lfp_preprocess_utils`. Prefer
+`run_analysis(..., tfr=...)` for new Morlet TFR; the full legacy TFR orchestrator remains available
+via shims / utilities until 2.0 parity is complete.
 
 ### Layer C — Advanced utilities
 
@@ -504,25 +513,26 @@ with a pointer to the supported API.
 
 | Symbol | Status |
 |--------|--------|
-| `laplacian` reference | In `REFERENCE_METHODS` registry; stable API raises `ConfigurationError`. Utility `laplacian_ref` is archived. |
+| `laplacian` reference | Omitted from `REFERENCE_METHODS` / `ReferenceMethod` (false-support trap removed). Utility `laplacian_ref` is archived. |
 | `analysis_utils.FOOOF_continuous`, `sliding_FOOOF` | Archived stubs → `NotImplementedError`. Prefer `FOOOF_compute_epochs` / spectral workflow. |
 | `sync_utils.get_behav_ts` | Archived stub → `NotImplementedError`. |
 | `nlx_utils.merge_multiple_ncs_files` | Archived stub → `NotImplementedError`. |
 | `iowa_utils.rename_mne_channels` | Archived incomplete helper → `NotImplementedError`. |
 | `lfp_preprocess_utils.match_elec_names` | Default `interactive=False` raises `ValueError` on ambiguous Levenshtein ties (CI/agent safe). Pass `interactive=True` only in a human terminal. |
 
-### Planned stable-API promotions (not implemented yet)
+### Dual-spine promotions (landed on `feature/dual-spine-replatform`; more planned for 2.0)
 
-1. **TFR** — `compute_and_baseline_tfr` remains utility/legacy-only; no typed `run_pipeline` stage yet.
-2. **Sync** — `synchronize_data` / `synchronize_data_robust` are book-taught but outside `run_pipeline`.
+1. **Sync** — typed via `SyncConfig` / `run_prep` (prep spine only).
+2. **TFR** — typed via `TfrConfig` / `run_analysis` (Morlet beginner path); full legacy orchestrator parity still planned.
+3. **Advanced package** — `LFPAnalysis.advanced` lazy exports; mega-module split still planned for 2.0.
 
 ---
 
 ## 14. Common pitfalls (condensed)
 
 - Importing utility modules before trying the stable API — leads to wrong assumptions about defaults.
-- Assuming legacy shims imply stable-API parity — TFR/connectivity are still utility-only.
-- Using `laplacian` reference (raises), or running FOOOF on continuous raw via the stable API.
+- Assuming legacy shims imply full stable-API parity — connectivity and full TFR orchestration remain advanced.
+- Using `laplacian` reference (not registered), or running FOOOF on continuous raw via the stable API.
 - Passing `build_spectral_pipeline_config` a TFR/connectivity method (raises `ConfigurationError`).
 - Channel-label mismatches: referencing failures are usually electrode-table problems, not signal
   problems — validate `label` against MNE `ch_names`.

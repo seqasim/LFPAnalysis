@@ -11,6 +11,7 @@ import pandas as pd
 from . import nlx_utils
 from .config import (
     WORKING_DTYPE,
+    AnalysisConfig,
     ArtifactConfig,
     BaselineConfig,
     EpochConfig,
@@ -18,13 +19,17 @@ from .config import (
     PipelineConfig,
     ReferenceConfig,
     SpectralConfig,
+    TfrConfig,
+    analysis_config_from_pipeline,
+    prep_config_from_pipeline,
 )
 from .exceptions import ConfigurationError, MissingDependencyError
-from .results import PipelineResult
+from .results import AnalysisResult, PipelineResult
 from .schemas import (
     ELECTRODE_REQUIRED_COLUMNS,
     build_baseline_summary,
     build_event_table,
+    build_tfr_metadata,
     empty_baseline_summary,
     empty_event_table,
 )
@@ -37,7 +42,7 @@ from .validation import (
 )
 
 
-REFERENCE_METHODS = {"none", "bipolar", "wm", "laplacian"}
+REFERENCE_METHODS = {"none", "bipolar", "wm"}
 ARTIFACT_METHODS = {"none", "misc", "ied", "custom"}
 BASELINE_METHODS = {
     "none",
@@ -51,6 +56,7 @@ BASELINE_METHODS = {
     "continuous",
 }
 SPECTRAL_METHODS = {"none", "psd", "fooof"}
+TFR_METHODS = {"none", "morlet"}
 _WORKING_DTYPE = np.dtype(WORKING_DTYPE).type
 
 
@@ -194,9 +200,7 @@ def preprocess_lfp(data, config: ReferenceConfig):
             site=config.site,
         )
         return _downcast_mne_data(referenced)
-    raise ConfigurationError(
-        "The 'laplacian' registry entry is reserved, but the legacy laplacian implementation is not yet complete."
-    )
+    raise ConfigurationError(f"Unsupported reference method '{config.method}'.")
 
 
 def _artifact_none(data, config: ArtifactConfig) -> pd.DataFrame:
@@ -366,7 +370,12 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
 
     _ensure_preloaded(data)
     if config.method == "psd":
-        spectrum = data.compute_psd(fmin=config.fmin, fmax=config.fmax, n_fft=config.n_fft)
+        psd_kwargs: dict[str, Any] = {"fmin": config.fmin, "fmax": config.fmax}
+        # Epochs default to multitaper (no n_fft); only pass n_fft for welch-style calls.
+        if config.n_fft is not None:
+            psd_kwargs["method"] = "welch"
+            psd_kwargs["n_fft"] = config.n_fft
+        spectrum = data.compute_psd(**psd_kwargs)
         return {"method": "psd", "spectrum": spectrum}
 
     if not hasattr(data, "compute_psd"):
@@ -393,56 +402,149 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
     )
 
 
-def run_pipeline(config: PipelineConfig) -> PipelineResult:
-    """Run the stable end-to-end workflow and return structured outputs.
+def compute_tfr_features(data, config: TfrConfig) -> dict[str, Any]:
+    """Compute optional TFR features on epoched data (analysis spine)."""
+    ensure_supported(config.method, field_name="tfr.method", supported=TFR_METHODS)
+    if not config.enabled or config.method == "none":
+        return {}
 
-    To limit peak RAM on local machines, superseded continuous stages are dropped
-    from the result when epoching is enabled (``raw`` / ``referenced`` become
-    ``None``). When referencing produces a new object, the original ``raw`` is
-    also dropped.
+    mne = _require_mne()
+    if not isinstance(data, mne.BaseEpochs):
+        raise ConfigurationError("TFR in the analysis spine currently requires MNE Epochs.")
+    if config.freqs is None:
+        raise ConfigurationError("tfr.freqs is required when TFR is enabled.")
+
+    _ensure_preloaded(data)
+    freqs = np.asarray(config.freqs, dtype=float)
+    power = data.compute_tfr(
+        method="morlet",
+        freqs=freqs,
+        n_cycles=config.n_cycles,
+        decim=config.decim,
+        n_jobs=config.n_jobs,
+        average=False,
+        return_itc=False,
+        verbose=False,
+    )
+    if config.apply_baseline and config.baseline_mode not in {"none", None}:
+        # EpochsTFR baseline expects a (tmin, tmax) window; use full epoch pre-zero when present.
+        times = np.asarray(power.times, dtype=float)
+        if times.size and times[0] < 0:
+            baseline_window = (float(times[0]), 0.0)
+        else:
+            baseline_window = None
+        if baseline_window is not None:
+            mode = config.baseline_mode
+            if mode in {"trialwise", "continuous"}:
+                mode = "zscore"
+            power.apply_baseline(baseline=baseline_window, mode=mode, verbose=False)
+
+    meta = build_tfr_metadata(
+        method="morlet",
+        baseline_mode=config.baseline_mode if config.apply_baseline else "none",
+        freqs=freqs,
+        n_cycles=config.n_cycles,
+        decim=config.decim,
+    )
+    return {"method": "morlet", "power": power, "metadata": meta}
+
+
+def run_analysis(epochs, config: AnalysisConfig) -> AnalysisResult:
+    """Run the analysis spine starting from MNE Epochs (or continuous fallback).
+
+    Does not perform sync or electrode localization — those belong in :func:`run_prep`.
     """
-    raw = load_lfp(config.load)
-    referenced = preprocess_lfp(raw, config.reference)
-    keep_raw = referenced is raw
+    if epochs is None:
+        raise ConfigurationError(
+            "run_analysis requires Epochs (or continuous data). Run prep first, "
+            "or pass your own MNE Epochs."
+        )
 
-    artifact_tables = detect_artifacts(referenced, config.artifact)
-    epochs = make_epochs(referenced, config.epoch)
+    baselined, baseline_summary = baseline_lfp(epochs, config.baseline)
+    spectral = compute_spectral_features(baselined, config.spectral)
+    tfr = compute_tfr_features(baselined, config.tfr)
+    metadata = {
+        "spine": "analysis",
+        "baseline_mode": config.baseline.mode,
+        "spectral_method": config.spectral.method,
+        "tfr_method": config.tfr.method,
+        "working_dtype": str(WORKING_DTYPE),
+    }
+    return AnalysisResult(
+        epochs=baselined,
+        baseline_summary=baseline_summary,
+        spectral=spectral,
+        tfr=tfr,
+        metadata=metadata,
+    )
 
-    target = epochs if epochs is not None else referenced
-    baselined_target, baseline_summary = baseline_lfp(target, config.baseline)
-    if epochs is not None:
-        epochs = baselined_target
+
+def run_pipeline(config: PipelineConfig) -> PipelineResult:
+    """Tutorial convenience: run prep then analysis and compose :class:`PipelineResult`.
+
+    Prefer :func:`LFPAnalysis.prep.run_prep` + :func:`run_analysis` when you want
+    a swappable prep backend. Superseded continuous stages are dropped when
+    epoching is enabled (``raw`` / ``referenced`` become ``None``).
+    """
+    from .prep import run_prep
+
+    prep = run_prep(prep_config_from_pipeline(config))
+    analysis_cfg = analysis_config_from_pipeline(config)
+    analysis_input = prep.epochs if prep.epochs is not None else prep.referenced
+    needs_analysis = (
+        analysis_cfg.baseline.enabled
+        or analysis_cfg.spectral.enabled
+        or analysis_cfg.tfr.enabled
+    )
+
+    if needs_analysis:
+        if analysis_input is None:
+            raise ConfigurationError(
+                "Analysis stages are enabled but prep produced neither Epochs nor continuous data."
+            )
+        analysis = run_analysis(analysis_input, analysis_cfg)
+        if prep.epochs is not None:
+            raw_out = None
+            referenced_out = None
+            epochs_out = analysis.epochs
+        else:
+            raw_out = prep.raw
+            referenced_out = analysis.epochs
+            epochs_out = None
+        baseline_summary = analysis.baseline_summary
+        spectral = analysis.spectral
+        tfr = analysis.tfr
+        analysis_meta = analysis.metadata
     else:
-        referenced = baselined_target
-
-    spectral = compute_spectral_features(baselined_target, config.spectral)
-
-    if epochs is not None:
-        # Continuous arrays are superseded by the epoched working copy.
-        raw_out = None
-        referenced_out = None
-        del raw, referenced
-    else:
-        raw_out = raw if keep_raw else None
-        referenced_out = referenced
-        if not keep_raw:
-            del raw
+        raw_out = prep.raw
+        referenced_out = prep.referenced
+        epochs_out = prep.epochs
+        baseline_summary = empty_baseline_summary()
+        spectral = {}
+        tfr = {}
+        analysis_meta = {"spine": "analysis", "skipped": True}
 
     metadata = {
+        **prep.metadata,
+        **analysis_meta,
         "input_format": config.load.file_format,
         "reference_method": config.reference.method,
         "artifact_methods": list(config.artifact.methods),
         "baseline_mode": config.baseline.mode,
         "spectral_method": config.spectral.method,
+        "tfr_method": config.tfr.method,
         "working_dtype": str(WORKING_DTYPE),
         "preload": bool(config.load.preload),
     }
     return PipelineResult(
         raw=raw_out,
         referenced=referenced_out,
-        epochs=epochs,
-        artifact_tables=artifact_tables,
+        epochs=epochs_out,
+        artifact_tables=prep.artifact_tables,
         baseline_summary=baseline_summary,
         spectral=spectral,
+        tfr=tfr,
+        electrode_df=prep.electrode_df,
+        sync=prep.sync,
         metadata=metadata,
     )

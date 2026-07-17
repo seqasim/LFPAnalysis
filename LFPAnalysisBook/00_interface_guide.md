@@ -1,6 +1,6 @@
 # Which Interface Should I Use?
 
-## stable beginner-facing API
+## stable beginner-facing API (prep spine → Epochs handoff → analysis spine)
 
 ### What this step is for
 
@@ -23,18 +23,26 @@ Use it when you want a guided path, clear defaults, and documentation that match
 ```python
 from pathlib import Path
 from LFPAnalysis import build_basic_pipeline_config, run_pipeline
+from LFPAnalysis import build_prep_config, run_prep, build_analysis_config, run_analysis
 
+# Tutorial convenience (prep then analysis):
 config = build_basic_pipeline_config(Path("../data/sample_ieeg.fif"), file_format="mne")
 result = run_pipeline(config)
+
+# Explicit dual spine (preferred when prep may change later):
+prep = run_prep(build_prep_config(Path("../data/sample_ieeg.fif"), file_format="mne"))
+# analysis = run_analysis(prep.epochs, build_analysis_config(...))  # when you have Epochs
 ```
 
 ### How to inspect the result
 
-Start by checking `result.raw`, `result.referenced`, and `result.metadata`.
+For `run_pipeline`, start with `result.raw`, `result.referenced`, `result.epochs`, and `result.metadata`.
+For `run_prep`, the handoff is `prep.epochs` plus `prep.sync` / `prep.electrode_df` / `prep.artifact_tables`.
 
 ### Common mistakes
 
 - importing advanced utilities before trying the stable API
+- putting sync or electrode localization into analysis — those belong in prep
 - using the config dataclasses directly when a builder would do
 - assuming the stable API already covers every old notebook workflow
 
@@ -48,7 +56,7 @@ Use `LFPAnalysis.legacy` when you need a gentle bridge from old notebook code. T
 
 ## advanced legacy utilities
 
-Use the advanced modules only when the stable API or compatibility layer does not yet cover your workflow, especially for time-frequency, connectivity, and time-resolved statistics.
+Use `LFPAnalysis.advanced` (or the utility modules) only when the stable prep/analysis spines do not yet cover your workflow, especially for connectivity and time-resolved statistics after you already have Epochs.
 
 Read {doc}`11_advanced_utility_interoperability` before chaining utility modules directly. It documents the shared naming, warning, baseline, and surrogate conventions that now span the utility layer.
 

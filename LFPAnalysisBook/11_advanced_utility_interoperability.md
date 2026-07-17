@@ -2,7 +2,7 @@
 
 ## What this step is for
 
-This chapter explains how the advanced utility modules fit together once you leave the stable pipeline surface. The goal is not to replace `run_pipeline`. The goal is to make the lower-level utility stack predictable when you need direct control.
+This chapter explains how the advanced utility modules fit together once you leave the stable prep/analysis spines. Prefer `run_prep` → Epochs handoff → `run_analysis` for typed workflows; use `LFPAnalysis.advanced` (and the modules below) when you need direct control. The goal is not to replace those spines — it is to keep the lower-level stack predictable and swappable.
 
 ## When you should use it
 

@@ -2,10 +2,10 @@
 
 ## Still advanced or legacy-oriented
 
-- full time-frequency orchestration (planned for a future stable-API promotion)
-- behavioral sync helpers (`sync_utils.synchronize_data*`) — book-taught but not yet in `run_pipeline`
+- full legacy TFR orchestration (`compute_and_baseline_tfr`); beginner Morlet TFR is available via `TfrConfig` / `run_analysis`
+- low-level behavioral sync helpers (`sync_utils.synchronize_data*`) — typed prep uses `SyncConfig` / `run_prep` instead
 - connectivity orchestration across the many legacy options
-- reserved-but-incomplete stable entries such as `laplacian`
+- unimplemented reference methods such as `laplacian` (omitted from the stable registry)
 - notebook-specific side effects such as writing intermediate artifact CSVs to disk
 - soft-archived stubs under `LFPAnalysis._scratch_utils` (still importable from original modules with deprecation warnings)
 
