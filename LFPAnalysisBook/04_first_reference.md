@@ -34,7 +34,8 @@ config = build_basic_pipeline_config(
     electrode_path=Path("../data/sample_labels.xlsx"),  # legacy load_elec handles NMMlabel
 )
 result = run_pipeline(config)
-print(f"Monopolar: {len(result.raw.ch_names)} ch → Bipolar: {len(result.referenced.ch_names)} ch")
+# After bipolar re-reference, prep drops the superseded monopolar Raw to save RAM.
+print(f"Bipolar: {len(result.referenced.ch_names)} ch")
 ```
 
 White-matter referencing (`wm`) additionally requires a `manual` column; the sample table uses `Manual Examination` instead—another rename you would need for `wm`.
@@ -56,12 +57,13 @@ result = run_pipeline(config)
 
 ## How to inspect the result
 
-Compare `result.raw.ch_names` (22 monopolar) with `result.referenced.ch_names` (15 bipolar pairs like `racas1-racas2`). Load `sample_ieeg_bp.fif` separately and confirm channel names match.
+Inspect `result.referenced.ch_names` (15 bipolar pairs like `racas1-racas2`). After a true re-reference, `result.raw` is intentionally `None` (the superseded monopolar object is dropped to save RAM). Load `sample_ieeg_bp.fif` separately and confirm channel names match. The worked notebook ({doc}`worked-examples/04_first_preprocessing_run`) plots one bipolar channel.
 
 ## Common mistakes
 
 - Choosing `wm` or `bipolar` without a valid electrode table
 - Assuming `laplacian` is available in the stable path (it is not registered; use bipolar/wm or advanced utilities)
+- Expecting `result.raw` to remain available after bipolar/wm re-reference (prep drops it)
 - Forgetting to record which reference was used in your analysis notes
 - Passing `sample_labels.xlsx` to `load_electrode_metadata` without renaming `NMMlabel`
 

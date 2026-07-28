@@ -24,6 +24,7 @@ from LFPAnalysis import (
     run_pipeline,
 )
 from LFPAnalysis.exceptions import ConfigurationError
+from LFPAnalysis.schemas import ARTIFACT_EVENT_COLUMNS
 from LFPAnalysis.workflow import (
     _downcast_mne_data,
     _ensure_preloaded,
@@ -137,6 +138,37 @@ def test_baseline_lfp_raw_path(synthetic_raw):
 def test_preprocess_lfp_none_returns_identity(synthetic_raw):
     out = preprocess_lfp(synthetic_raw, ReferenceConfig(method="none"))
     assert out is synthetic_raw
+
+
+@pytest.mark.integration
+def test_detect_artifacts_ied_accepts_float32_raw(synthetic_raw):
+    """MNE filtering requires float64; IED detection must upcast then restore float32 storage."""
+    synthetic_raw._data = np.asarray(synthetic_raw.get_data(), dtype=np.float32)
+    assert synthetic_raw._data.dtype == np.float32
+    tables = detect_artifacts(synthetic_raw, ArtifactConfig(methods=["ied"]))
+    assert "ied" in tables
+    assert list(tables["ied"].columns) == list(ARTIFACT_EVENT_COLUMNS) or len(tables["ied"].columns) >= 1
+    assert synthetic_raw._data.dtype == np.float32
+
+
+@pytest.mark.unit
+def test_filter_mne_object_upcasts_then_restores_working_dtype(synthetic_raw):
+    from LFPAnalysis.mne_compat import filter_mne_object
+
+    synthetic_raw._data = np.asarray(synthetic_raw.get_data(), dtype=np.float32)
+    filtered = filter_mne_object(synthetic_raw, 1.0, 40.0, verbose=False)
+    assert filtered._data.dtype.name == "float32"
+    assert synthetic_raw._data.dtype.name == "float32"
+
+
+@pytest.mark.unit
+def test_filter_array_upcasts_then_restores_working_dtype():
+    from LFPAnalysis.mne_compat import filter_array
+
+    data = np.random.randn(2, 2000).astype(np.float32)
+    filtered = filter_array(data, 200.0, l_freq=1.0, h_freq=40.0, verbose=False)
+    assert filtered.dtype.name == "float32"
+    assert filtered.shape == data.shape
 
 
 @pytest.mark.integration

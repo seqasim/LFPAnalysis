@@ -59,7 +59,7 @@ ax.legend()
 fig.tight_layout()
 ```
 
-Worked-example 09 plots the same idea for a single channel via repeated `permutation_regression_zscore` calls.
+Worked-example {doc}`worked-examples/10b_first_stats_run` plots the same idea for a single channel via repeated `permutation_regression_zscore` calls.
 
 ### 3. Connectivity matrix heatmap
 

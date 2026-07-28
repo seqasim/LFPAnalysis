@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOK = ROOT / "LFPAnalysisBook"
 ADVANCED_UTILITY_CHAPTER = BOOK / "11_advanced_utility_interoperability.md"
+NOTEBOOK_MAP = yaml.safe_load((BOOK / "notebook_map.yml").read_text())
 
 BEGINNER_CHAPTERS = [
     BOOK / "03_first_load.md",
@@ -29,6 +32,36 @@ MIGRATION_CHAPTERS = [
     BOOK / "24_translate_connectivity_workflow.md",
     BOOK / "25_legacy_only_surfaces.md",
 ]
+
+PLOT_MARKERS = ("plt.", "imshow", "semilogy", "hist(", ".plot(", "axvspan", "colorbar")
+DEBUG_PATTERNS = (
+    "agent log",
+    "debug-",
+    "/Users/",
+    "C:\\Users\\",
+)
+
+
+def _notebook_source(path: Path) -> str:
+    notebook = json.loads(path.read_text())
+    chunks: list[str] = []
+    for cell in notebook["cells"]:
+        chunks.append("".join(cell.get("source", [])))
+    return "\n".join(chunks)
+
+
+def _notebook_markdown(path: Path) -> str:
+    notebook = json.loads(path.read_text())
+    return "\n".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "markdown"
+    )
+
+
+def _notebook_code(path: Path) -> str:
+    notebook = json.loads(path.read_text())
+    return "\n".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "code"
+    )
 
 
 @pytest.mark.unit
@@ -65,6 +98,8 @@ def test_interface_guide_names_all_public_surfaces():
     assert "compatibility/legacy shims" in text
     assert "advanced legacy utilities" in text
     assert "11_advanced_utility_interoperability" in text
+    assert "build_analysis_config" in text
+    assert "build_spectral_pipeline_config" in text
 
 
 @pytest.mark.unit
@@ -84,29 +119,106 @@ def test_advanced_utility_chapter_names_the_shared_module_stack():
 
 
 @pytest.mark.unit
-def test_worked_notebooks_reference_advanced_utility_guidance():
+def test_notebook_map_files_exist_and_have_goal_next_step():
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        chapter = BOOK / entry["chapter"]
+        notebook = BOOK / entry["notebook"]
+        assert chapter.exists(), f"missing chapter {chapter.name}"
+        assert notebook.exists(), f"missing notebook for {chapter.name}: {notebook}"
+        markdown = _notebook_markdown(notebook)
+        assert "## Goal" in markdown, f"{notebook.name} missing ## Goal"
+        assert "## Next step" in markdown or "## Next Step" in markdown, f"{notebook.name} missing Next step"
+
+
+@pytest.mark.unit
+def test_toc_lists_every_mapped_worked_example():
+    toc = (BOOK / "_toc.yml").read_text()
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        stem = Path(entry["notebook"]).with_suffix("").as_posix()
+        assert stem in toc, f"_toc.yml missing {stem}"
+
+
+@pytest.mark.unit
+def test_chapters_promising_worked_notebooks_own_one():
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        chapter_text = (BOOK / entry["chapter"]).read_text()
+        if "worked notebook" in chapter_text.lower():
+            # Chapter should name or {doc}-link its notebook stem somewhere, or at least
+            # sit under a TOC section that owns the notebook (checked separately).
+            assert (BOOK / entry["notebook"]).exists()
+
+
+@pytest.mark.unit
+def test_worked_notebooks_use_notebook_relative_data_paths():
+    prefix = NOTEBOOK_MAP["api_contracts"]["notebook_data_prefix"]
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        code = _notebook_code(BOOK / entry["notebook"])
+        if "data/" not in code and "sample_" not in code:
+            continue
+        bad = re.findall(r"""Path\(['\"](\.\./data/[^'\"]+)['\"]\)""", code)
+        for path in bad:
+            assert path.startswith(prefix), f"{entry['notebook']} uses {path}; expected {prefix}..."
+
+
+@pytest.mark.unit
+def test_chapter_code_blocks_use_chapter_relative_data_paths():
+    prefix = NOTEBOOK_MAP["api_contracts"]["chapter_data_prefix"]
+    for path in BEGINNER_CHAPTERS:
+        text = path.read_text()
+        bad = re.findall(r"""Path\(['\"](\.\./\.\./data/[^'\"]+)['\"]\)""", text)
+        assert not bad, f"{path.name} uses notebook-depth paths in prose: {bad}"
+        hits = re.findall(r"""Path\(['\"](\.\./data/[^'\"]+)['\"]\)""", text)
+        for hit in hits:
+            assert hit.startswith(prefix)
+
+
+@pytest.mark.unit
+def test_worked_notebooks_contain_required_symbols_and_plots():
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        source = _notebook_source(BOOK / entry["notebook"])
+        for symbol in entry.get("required_symbols", []):
+            assert symbol in source, f"{entry['notebook']} missing required symbol {symbol}"
+        if entry.get("required_plot"):
+            assert any(marker in source for marker in PLOT_MARKERS), (
+                f"{entry['notebook']} promised a plot but has no plotting markers"
+            )
+
+
+@pytest.mark.unit
+def test_worked_notebooks_have_no_debug_or_absolute_user_paths():
+    for entry in NOTEBOOK_MAP["worked_examples"]:
+        source = _notebook_source(BOOK / entry["notebook"])
+        for pattern in DEBUG_PATTERNS:
+            assert pattern not in source, f"{entry['notebook']} contains forbidden pattern {pattern!r}"
+
+
+@pytest.mark.unit
+def test_worked_notebooks_reference_advanced_utility_when_needed():
     notebook_paths = [
-        BOOK / "worked-examples" / "04_first_psd_and_fooof_run.ipynb",
-        BOOK / "worked-examples" / "06_first_connectivity_run.ipynb",
-        BOOK / "worked-examples" / "07_migrating_condensed_notebook.ipynb",
+        BOOK / "worked-examples" / "08_first_psd_and_fooof_run.ipynb",
+        BOOK / "worked-examples" / "10_first_connectivity_run.ipynb",
+        BOOK / "worked-examples" / "22_migrating_condensed_notebook.ipynb",
     ]
     for path in notebook_paths:
-        notebook = json.loads(path.read_text())
-        markdown = "\n".join(
-            "".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "markdown"
-        )
+        markdown = _notebook_markdown(path)
         assert "11_advanced_utility_interoperability" in markdown
 
 
 @pytest.mark.unit
-def test_worked_notebooks_exist_for_beginner_and_migration_paths():
-    beginner = BOOK / "worked-examples" / "01_first_import_and_load.ipynb"
-    migration = BOOK / "worked-examples" / "07_migrating_condensed_notebook.ipynb"
-    for path in [beginner, migration]:
-        notebook = json.loads(path.read_text())
-        assert notebook["cells"]
-        markdown = "\n".join(
-            "".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "markdown"
-        )
-        assert "## Goal" in markdown
-        assert "## Next step" in markdown or "## Next Step" in markdown
+def test_baseline_chapter_uses_analysis_spine_not_spectral_builder():
+    text = (BOOK / "06_first_baseline.md").read_text()
+    assert "build_analysis_config" in text
+    assert "run_analysis" in text
+    # Minimal example code fence should not call the spectral builder.
+    example = text.split("## Minimal example", 1)[1]
+    fence = example.split("```python", 1)[1].split("```", 1)[0]
+    assert "build_analysis_config" in fence
+    assert "run_analysis" in fence
+    assert "build_spectral_pipeline_config" not in fence
+
+
+@pytest.mark.unit
+def test_saving_chapter_lists_full_pipeline_result_fields():
+    text = (BOOK / "15_saving_and_organizing_results.md").read_text()
+    for field_name in ("tfr", "electrode_df", "sync"):
+        assert field_name in text, f"15_saving_and_organizing_results.md missing {field_name}"

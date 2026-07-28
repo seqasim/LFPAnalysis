@@ -7,7 +7,7 @@
 | `make_mne(...)` | `load_lfp(...)` or `build_basic_pipeline_config(...)` + `run_pipeline(...)` | Use `LFPAnalysis.legacy.make_mne` if you need a bridge |
 | `ref_mne(...)` | `preprocess_lfp(...)` or `ReferenceConfig(...)` inside `run_pipeline(...)` | Stable path for `none`, `wm`, and `bipolar` |
 | `make_epochs(...)` | `make_epochs(raw, EpochConfig(...))` or `build_event_locked_pipeline_config(...)` | Stable path covers the no-side-effects case |
-| `compute_and_baseline_tfr(...)` | advanced utilities + migration guide | Still legacy-oriented |
+| `compute_and_baseline_tfr(...)` | `build_analysis_config(..., tfr_method="morlet")` + `run_analysis` for beginner Morlet; advanced/legacy for full orchestration | Beginner Morlet is stable; full legacy options remain advanced |
 | `compute_connectivity(...)` | advanced utilities + migration guide | Still advanced, not fully wrapped |
 
 ## Side-by-side example
@@ -29,14 +29,16 @@ epochs = lfp_preprocess_utils.make_epochs(
 #### New workflow
 
 ```python
+import pandas as pd
 from pathlib import Path
 from LFPAnalysis import build_event_locked_pipeline_config, run_pipeline
 
+beh = pd.read_csv(Path("../data/sample_beh.csv"))
 config = build_event_locked_pipeline_config(
-    Path("../data/sample_ieeg_continuous_rest.fif"),
+    Path("../data/sample_ieeg_bp.fif"),
     file_format="mne",
     event_name="feedback_start",
-    event_times=[5.0, 10.0, 15.0],
+    event_times=beh["feedback_start"].tolist(),
     tmin=-0.5,
     tmax=1.5,
 )

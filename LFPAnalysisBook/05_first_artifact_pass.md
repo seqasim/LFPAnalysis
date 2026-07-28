@@ -38,7 +38,7 @@ Compare with the sidecar files `feedback_start_artifact_df.csv` (pre-binned by t
 - Row count per detector
 - Which channels are flagged most often
 - Whether timestamps cluster in one recording segment
-- The worked notebook plots flagged time ranges on a short raw segment
+- The worked notebook ({doc}`worked-examples/05_first_artifact_pass`) plots flagged time ranges on a short raw segment
 
 ## Common mistakes
 

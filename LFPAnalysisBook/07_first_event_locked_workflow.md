@@ -44,7 +44,7 @@ loss_epochs = result.epochs[result.epochs.metadata["reward"] == 0]
 print(f"Reward trials: {len(reward_epochs)}, Loss trials: {len(loss_epochs)}")
 ```
 
-The worked notebook plots the evoked average for reward vs no-reward on one ACC channel.
+The worked notebook ({doc}`worked-examples/07_first_epoching_run`) plots the evoked average for reward vs no-reward on one ACC channel.
 
 ## How to inspect the result
 

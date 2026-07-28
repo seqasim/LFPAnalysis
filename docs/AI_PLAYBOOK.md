@@ -303,8 +303,8 @@ pytest -m optional_dep
 |---------|---------|---------|
 | `lint` | `ruff check .` + `ruff format --check .` | Style |
 | `tests` | pytest excluding notebook/slow, 80% cov | Main test gate |
-| `docs` | `jupyter-book build LFPAnalysisBook` | Book builds cleanly |
-| `notebooks` | pytest-nbmake on smoke-tests + 2 worked examples | Notebook execution |
+| `docs` | `jupyter-book build --html --ci` in `LFPAnalysisBook/` | Book builds cleanly |
+| `notebooks` | pytest-nbmake on all smoke-tests + all mapped worked examples | Notebook execution |
 
 ### CI (`.github/workflows/ci.yml`)
 
@@ -568,7 +568,7 @@ print(epochs)
 The stable API does not yet include TFR. After loading and epoching via stable API or legacy:
 
 ```python
-# Conceptual — see LFPAnalysisBook/09_first_time_frequency.md and worked-examples/05_first_tfr_run.ipynb
+# Conceptual — see LFPAnalysisBook/09_first_time_frequency.md and worked-examples/09_first_tfr_run.ipynb
 from LFPAnalysis import legacy
 
 with warnings.catch_warnings():

@@ -261,8 +261,8 @@ LFPAnalysis/                    # Repository root
 │   ├── 00–11_*.md              # Beginner track
 │   ├── 20–25_*.md              # Migration from old repo
 │   ├── 30_troubleshooting.md
-│   ├── smoke-tests/            # CI notebook smoke tests (7 notebooks)
-│   └── worked-examples/        # Tutorial notebooks (7 notebooks)
+│   ├── smoke-tests/            # CI notebook smoke tests (8 notebooks)
+│   └── worked-examples/        # Tutorial notebooks (13 chapter-aligned notebooks)
 ├── tests/                      # Pytest suite + tests/data/
 ├── data/                       # Sample FIF/CSV/XLSX for docs and smoke tests
 ├── scripts/                    # Non-canonical exploratory notebooks

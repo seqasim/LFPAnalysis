@@ -352,13 +352,17 @@ def detect_fast_burst_evs(mne_data, baseline_data, burst_frequency: tuple = (70,
     min_burst_s = 3 / burst_frequency[0]
 
     # Step 1: band-pass filter the data
-    filtered_data = mne_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=n_jobs)
+    from .mne_compat import filter_mne_object
+
+    filtered_data = filter_mne_object(mne_data, burst_frequency[0], burst_frequency[1], n_jobs=n_jobs)
 
     smooth_win_samples = max(1, round(smooth_win_s * mne_data.info['sfreq']))
     rolling_rms_array = _rolling_rms_last_axis(filtered_data._data, smooth_win_samples)
 
     # Step 2: band-pass filter the baseline data
-    filtered_baseline = baseline_data.copy().filter(burst_frequency[0], burst_frequency[1], n_jobs=n_jobs)
+    filtered_baseline = filter_mne_object(
+        baseline_data, burst_frequency[0], burst_frequency[1], n_jobs=n_jobs
+    )
 
     rolling_rms_baseline = _rolling_rms_last_axis(filtered_baseline._data, smooth_win_samples)
 

@@ -308,7 +308,8 @@ LFPAnalysis/                    # repo root
 │   ├── 20–26_*.md              # migration-from-old-repo track + resources
 │   ├── 30_troubleshooting.md
 │   ├── smoke-tests/            # 8 deterministic CI notebooks
-│   ├── worked-examples/        # 11 tutorial notebooks
+│   ├── worked-examples/        # 13 chapter-aligned tutorial notebooks
+│   ├── notebook_map.yml        # canonical chapter ↔ notebook mapping
 │   ├── _config.yml, _toc.yml   # Jupyter Book config + table of contents
 │   ├── references.bib, logo.png, requirements.txt, intro.md
 ├── tests/                      # pytest suite + tests/data/ (§8)
@@ -351,14 +352,16 @@ Two notebook collections back the prose:
 
 - **`smoke-tests/`** (8 notebooks): deterministic, bounded, run fully in CI via nbmake. They validate
   imports, sample-data loading, and one small example per workflow area.
-- **`worked-examples/`** (11 notebooks): richer tutorials. Only a subset is executed in CI (see
-  `noxfile.py notebooks`): `01`, `07`, `08`, `09`.
+- **`worked-examples/`** (13 notebooks): chapter-aligned tutorials. Filenames match chapter numbers
+  (see `LFPAnalysisBook/notebook_map.yml`). The `noxfile.py notebooks` session executes all smoke
+  tests plus every mapped worked example.
 
-**Important for refactors:** `tests/test_docs_content.py` asserts chapter *structure* — e.g. beginner
-chapters share a teaching structure, migration chapters contain old+new code examples, the interface
-guide names all public surfaces, and the advanced-utility chapter names the shared module stack. If
-you rename a public symbol, add a chapter, or restructure headings, this test will likely fail until
-the book is updated. `scripts/_build_book_notebooks.py` programmatically generates book notebooks.
+**Important for refactors:** `tests/test_docs_content.py` asserts chapter *structure* and the
+notebook map — e.g. beginner chapters share a teaching structure, migration chapters contain
+old+new code examples, TOC entries exist for every mapped notebook, chapter code uses `../data/`,
+and notebooks use `../../data/`. If you rename a public symbol, add a chapter, or restructure
+headings, this test will likely fail until the book is updated. `scripts/_build_book_notebooks.py`
+programmatically generates book notebooks.
 
 ---
 
@@ -420,8 +423,8 @@ minimal electrode table for validation tests.
 |---------|--------------|
 | `lint` | `ruff check .` + `ruff format --check .` |
 | `tests` | installs `.[dev]`, runs pytest excluding `notebook`/`slow`, coverage on `workflow`/`builders`/`legacy`, `--cov-fail-under=80` |
-| `docs` | `jupyter-book build LFPAnalysisBook` |
-| `notebooks` | nbmake on all `smoke-tests/` + worked examples `01`, `07`, `08`, `09` (timeout 1200s) |
+| `docs` | `jupyter-book build --html --ci` from `LFPAnalysisBook/` (MyST / JB2) |
+| `notebooks` | nbmake on all `smoke-tests/` + all mapped worked examples (timeout 1200s) |
 
 ### CI (`.github/workflows/ci.yml`, on push/PR to main/master)
 

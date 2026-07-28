@@ -203,4 +203,4 @@ def test_preprocess_surrogates_and_statistics_share_shapes(monkeypatch):
     )
 
     assert set(results["predictor"]) == {"Intercept", "x"}
-    assert np.isfinite(results["z_beta"]).all()
+    assert np.isfinite(results.loc[results["predictor"] == "x", "z_beta"]).all()

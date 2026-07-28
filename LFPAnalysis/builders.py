@@ -42,10 +42,11 @@ def build_prep_config(
     artifact_methods: Iterable[str] | None = None,
     resample_sfreq: float | None = None,
     include_micros: bool = False,
+    preload: bool = False,
     event_name: str | None = None,
     event_times: list[float] | None = None,
     tmin: float = -0.5,
-    tmax: float = 1.0,
+    tmax: float = 1.5,
     slope: float = 1.0,
     offset: float = 0.0,
     buffer_s: float = 0.0,
@@ -58,6 +59,7 @@ def build_prep_config(
         load=LoadConfig(
             path=path,
             file_format=file_format,
+            preload=preload,
             resample_sfreq=resample_sfreq,
             include_micros=include_micros,
         ),
@@ -134,10 +136,11 @@ def build_tutorial_pipeline_config(
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
     artifact_methods: Iterable[str] | None = None,
+    preload: bool = False,
     event_name: str | None = None,
     event_times: list[float] | None = None,
     tmin: float = -0.5,
-    tmax: float = 1.0,
+    tmax: float = 1.5,
     slope: float = 1.0,
     offset: float = 0.0,
     baseline_mode: str = "zscore",
@@ -153,6 +156,7 @@ def build_tutorial_pipeline_config(
         reference_method=reference_method,
         electrode_path=electrode_path,
         artifact_methods=artifact_methods,
+        preload=preload,
         event_name=event_name,
         event_times=event_times,
         tmin=tmin,
@@ -189,12 +193,14 @@ def build_basic_pipeline_config(
     artifact_methods: Iterable[str] | None = None,
     resample_sfreq: float | None = None,
     include_micros: bool = False,
+    preload: bool = False,
 ) -> PipelineConfig:
     """Build the simplest valid pipeline configuration for first-time users."""
     return PipelineConfig(
         load=LoadConfig(
             path=path,
             file_format=file_format,
+            preload=preload,
             resample_sfreq=resample_sfreq,
             include_micros=include_micros,
         ),
@@ -215,17 +221,18 @@ def build_event_locked_pipeline_config(
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
     artifact_methods: Iterable[str] | None = None,
+    preload: bool = False,
     baseline_mode: str = "zscore",
     baseline_window: tuple[float, float] = (-0.5, 0.0),
     tmin: float = -0.5,
-    tmax: float = 1.0,
+    tmax: float = 1.5,
     slope: float = 1.0,
     offset: float = 0.0,
     metadata: dict | None = None,
 ) -> PipelineConfig:
     """Build a beginner-friendly event-locked pipeline configuration."""
     return PipelineConfig(
-        load=LoadConfig(path=path, file_format=file_format),
+        load=LoadConfig(path=path, file_format=file_format, preload=preload),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["misc"])),
         baseline=BaselineConfig(mode=baseline_mode, enabled=True, baseline_window=baseline_window),
@@ -252,12 +259,13 @@ def build_spectral_pipeline_config(
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
     artifact_methods: Iterable[str] | None = None,
+    preload: bool = False,
     baseline_mode: str = "none",
     baseline_window: tuple[float, float] | None = None,
     event_name: str | None = None,
     event_times: list[float] | None = None,
     tmin: float = -0.5,
-    tmax: float = 1.0,
+    tmax: float = 1.5,
     fmin: float = 1.0,
     fmax: float = 150.0,
     fooof_range: tuple[float, float] = (1.0, 40.0),
@@ -266,6 +274,9 @@ def build_spectral_pipeline_config(
 
     This helper intentionally supports the stable workflow surface only. For
     connectivity, continue with ``LFPAnalysis.advanced`` after prep/analysis.
+
+    For baseline-only teaching on existing Epochs, prefer ``build_analysis_config``
+    + ``run_analysis`` instead of this helper (which always enables spectral).
     """
     epoch_enabled = bool(event_name and event_times)
     if spectral_method not in {"psd", "fooof"}:
@@ -277,7 +288,7 @@ def build_spectral_pipeline_config(
     if baseline_mode != "none" and effective_baseline_window is None:
         effective_baseline_window = (-0.5, 0.0) if epoch_enabled else None
     return PipelineConfig(
-        load=LoadConfig(path=path, file_format=file_format),
+        load=LoadConfig(path=path, file_format=file_format, preload=preload),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["misc"])),
         baseline=BaselineConfig(

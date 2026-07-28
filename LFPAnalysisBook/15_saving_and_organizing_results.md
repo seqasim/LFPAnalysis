@@ -17,7 +17,7 @@ Use this whenever you leave the interactive case study and start accumulating pe
 
 ### In-memory pipeline container
 
-`PipelineResult` (`LFPAnalysis.results`) holds `raw`, `referenced`, `epochs`, `artifact_tables`, `baseline_summary`, `spectral`, and `metadata`. It does **not** write to disk. Persist anything you need explicitly (e.g. `epochs.save(...)`, `DataFrame.to_csv` / `to_parquet`).
+`PipelineResult` (`LFPAnalysis.results`) holds `raw`, `referenced`, `epochs`, `artifact_tables`, `baseline_summary`, `spectral`, `tfr`, `electrode_df`, `sync`, and `metadata`. It does **not** write to disk. Persist anything you need explicitly (e.g. `epochs.save(...)`, `DataFrame.to_csv` / `to_parquet`).
 
 ### TFR helpers
 

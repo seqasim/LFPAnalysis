@@ -1075,29 +1075,28 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
         Same function name, incompatible shapes — check ``isinstance(mne_data, mne.Epochs)``.
     """
 
-    # What type of data is this? Continuous or epoched? 
-    if type(mne_data) == mne.epochs.Epochs:
-        data_type = 'epoch'
+    # What type of data is this? Continuous or epoched?
+    # Avoid mne.BaseEpochs / mne.io.fiff lookups — they break under MNE lazy imports.
+    if hasattr(mne_data, "events") and hasattr(mne_data, "times"):
+        data_type = "epoch"
         n_times = mne_data._data.shape[-1]
-    elif type(mne_data) == mne.io.fiff.raw.Raw: 
-        # , mne.io.edf.edf.RawEDF - probably should never include EDF data directly here. 
-        data_type = 'continuous'
-        n_times = mne_data._data.shape[1]
-    else: 
-        data_type = 'continuous'
-        n_times = mne_data._data.shape[1]       
-
+    else:
+        data_type = "continuous"
+        n_times = mne_data._data.shape[-1]
     sr = mne_data.info['sfreq']
     min_width = width_thresh * sr
     across_chan_threshold_samps = closeness_thresh * sr # This sets a threshold for detecting cross-channel IEDs 
 
-    # filter data in beta-gamma band
-    filtered_data = mne_data.copy().filter(25, 80, n_jobs=-1)
+    # filter data in beta-gamma band (MNE requires float64; restore after Hilbert)
+    from .mne_compat import downcast_mne_data, filter_mne_object
+
+    filtered_data = filter_mne_object(mne_data, 25, 80, n_jobs=1, restore_working_dtype=False)
 
     n_fft = next_fast_len(n_times)
 
     # Hilbert bandpass amplitude 
-    filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=-1)
+    filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=1)
+    downcast_mne_data(filtered_data)
 
     # Rectify: 
     filtered_data._data[filtered_data._data<0] = 0

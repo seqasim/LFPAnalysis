@@ -1,0 +1,77 @@
+# Jupyter Book 2 / MyST site config.
+# Chapter ↔ notebook mapping for tests remains in notebook_map.yml and _toc.yml.
+version: 1
+project:
+  id: lfpanalysis-book
+  title: LFPAnalysis Book
+  authors:
+    - name: Salman E. Qasim
+  toc:
+    - file: intro.md
+    - file: 00_interface_guide.md
+    - file: 01_installation.md
+    - file: 02_data_model.md
+    - file: 03_first_load.md
+      children:
+        - file: worked-examples/03_first_import_and_load.ipynb
+        - file: smoke-tests/01_install_and_import.ipynb
+        - file: smoke-tests/02_load_sample_data.ipynb
+    - file: 04_first_reference.md
+      children:
+        - file: worked-examples/04_first_preprocessing_run.ipynb
+        - file: smoke-tests/03_reference_and_artifacts.ipynb
+    - file: 04b_first_synchronization.md
+      children:
+        - file: worked-examples/04b_first_synchronization_run.ipynb
+        - file: smoke-tests/08_synchronization.ipynb
+    - file: 05_first_artifact_pass.md
+      children:
+        - file: worked-examples/05_first_artifact_pass.ipynb
+    - file: 06_first_baseline.md
+      children:
+        - file: worked-examples/06_first_baseline_run.ipynb
+    - file: 07_first_event_locked_workflow.md
+      children:
+        - file: worked-examples/07_first_epoching_run.ipynb
+        - file: smoke-tests/04_baselining_and_epoching.ipynb
+    - file: 08_first_psd_and_fooof.md
+      children:
+        - file: worked-examples/08_first_psd_and_fooof_run.ipynb
+        - file: smoke-tests/05_psd_and_fooof.ipynb
+    - file: 09_first_time_frequency.md
+      children:
+        - file: worked-examples/09_first_tfr_run.ipynb
+        - file: smoke-tests/06_time_frequency.ipynb
+    - file: 10_first_connectivity_and_surrogates.md
+      children:
+        - file: worked-examples/10_first_connectivity_run.ipynb
+        - file: smoke-tests/07_connectivity_and_surrogates.ipynb
+    - file: 10b_first_time_resolved_stats.md
+      children:
+        - file: worked-examples/10b_first_stats_run.ipynb
+    - file: 11_advanced_utility_interoperability.md
+    - file: 12_anatomy_and_roi_assignment.md
+    - file: 13_assembling_analysis_dataframes.md
+      children:
+        - file: worked-examples/13_assembling_dataframes.ipynb
+    - file: 14_group_level_statistics.md
+      children:
+        - file: worked-examples/14_group_statistics.ipynb
+    - file: 15_saving_and_organizing_results.md
+    - file: 16_plotting_recipes.md
+    - file: 20_old_repo_mental_model.md
+    - file: 21_legacy_function_mapping.md
+    - file: 22_translate_condensed_notebook.md
+      children:
+        - file: worked-examples/22_migrating_condensed_notebook.ipynb
+    - file: 23_translate_tfr_workflow.md
+    - file: 24_translate_connectivity_workflow.md
+    - file: 25_legacy_only_surfaces.md
+    - file: 26_resources_and_references.md
+    - file: 30_troubleshooting.md
+site:
+  template: book-theme
+  options:
+    logo_text: LFPAnalysis
+  nav: []
+  actions: []

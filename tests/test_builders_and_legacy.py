@@ -34,6 +34,36 @@ def test_build_event_locked_pipeline_config_enables_epoch_and_baseline():
     assert config.epoch.enabled is True
     assert config.baseline.enabled is True
     assert config.epoch.event_name == "demo"
+    assert config.epoch.tmin == -0.5
+    assert config.epoch.tmax == 1.5
+    assert config.load.preload is False
+
+
+@pytest.mark.unit
+def test_builder_tmax_matches_epoch_config_default():
+    from LFPAnalysis.config import EpochConfig
+    from LFPAnalysis import build_prep_config, build_spectral_pipeline_config
+
+    event_locked = build_event_locked_pipeline_config(
+        "data/sample_ieeg_bp.fif", event_name="demo", event_times=[1.0]
+    )
+    prep = build_prep_config("data/sample_ieeg_bp.fif", event_name="demo", event_times=[1.0])
+    spectral = build_spectral_pipeline_config(
+        "data/sample_ieeg_bp.fif", event_name="demo", event_times=[1.0]
+    )
+    assert event_locked.epoch.tmax == EpochConfig().tmax == 1.5
+    assert prep.epoch.tmax == 1.5
+    assert spectral.epoch.tmax == 1.5
+
+
+@pytest.mark.unit
+def test_builders_expose_preload():
+    config = build_basic_pipeline_config("data/sample_ieeg.fif", preload=True)
+    assert config.load.preload is True
+    event_locked = build_event_locked_pipeline_config(
+        "data/sample_ieeg_bp.fif", event_name="demo", event_times=[1.0], preload=True
+    )
+    assert event_locked.load.preload is True
 
 
 @pytest.mark.unit

@@ -38,7 +38,7 @@ Optional: `dataframe_assembly` as `02b_assemble_analysis_df.ipynb` when building
 | Notebook | `00_preprocess_to_epochs.ipynb` |
 | When | stage is raw or referenced continuous |
 | API | Stable: `build_*_pipeline_config`, `run_pipeline` / staged `load_lfp` → `preprocess_lfp` → `detect_artifacts` → `make_epochs` |
-| Sources | `LFPAnalysisBook/03_first_load.md` … `07_first_event_locked_workflow.md`; `worked-examples/01`–`03` |
+| Sources | `LFPAnalysisBook/03_first_load.md` … `07_first_event_locked_workflow.md`; `worked-examples/03`–`07` |
 
 Scaffold: LoadConfig/paths, reference method, artifact methods, event times from behavior, save epochs path placeholder.
 
@@ -48,8 +48,8 @@ Scaffold: LoadConfig/paths, reference method, artifact methods, event times from
 |-------|-------|
 | Notebook | `01_baselined_tfr.ipynb` |
 | When | User wants Morlet (or similar) TFR and/or condition contrasts |
-| API | Load epochs via `load_lfp` or `mne.read_epochs`; TFR via `epochs.compute_tfr` and/or `lfp_preprocess_utils.compute_and_baseline_tfr` (utility — not in `run_pipeline`) |
-| Sources | `LFPAnalysisBook/09_first_time_frequency.md`, `LFPAnalysisBook/worked-examples/05_first_tfr_run.ipynb`, `LFPAnalysisBook/23_translate_tfr_workflow.md` |
+| API | Load epochs via `load_lfp` or `mne.read_epochs`; beginner Morlet via `build_analysis_config(..., tfr_method="morlet")` + `run_analysis`; advanced: `epochs.compute_tfr` / `lfp_preprocess_utils.compute_and_baseline_tfr` |
+| Sources | `LFPAnalysisBook/09_first_time_frequency.md`, `LFPAnalysisBook/worked-examples/09_first_tfr_run.ipynb`, `LFPAnalysisBook/23_translate_tfr_workflow.md` |
 
 Scaffold: attach behavior metadata, pick channel(s), frequency grid, optional condition-split TFR, plot difference map, optional save of TFR.
 
@@ -71,7 +71,7 @@ Scaffold: band edges (e.g. beta 13–30), channel pick, time-averaged power per 
 | Notebook | `03_time_averaged_regression.ipynb` |
 | When | Regress trial-level (time-averaged) power against behavior |
 | API | `LFPAnalysis.statistics_utils.permutation_regression_zscore` |
-| Sources | `LFPAnalysisBook/10b_first_time_resolved_stats.md`, `LFPAnalysisBook/worked-examples/09_first_stats_run.ipynb`, `LFPAnalysisBook/14_group_level_statistics.md` |
+| Sources | `LFPAnalysisBook/10b_first_time_resolved_stats.md`, `LFPAnalysisBook/worked-examples/10b_first_stats_run.ipynb`, `LFPAnalysisBook/14_group_level_statistics.md` |
 
 Scaffold: build `model_df` with `power` + regressors; formula e.g. `power ~ rpe`; set `np.random.seed` before permutations; note permutation count for dry-run vs publication.
 
@@ -82,7 +82,7 @@ Scaffold: build `model_df` with `power` + regressors; formula e.g. `power ~ rpe`
 | Notebook | `04_time_resolved_regression.ipynb` |
 | When | Effects across time (`ts`) — per-electrode loops or multi-subject MLM |
 | API | Loop `permutation_regression_zscore` over time for single-subject; `statistics_utils.time_resolved_mlm` for multi-subject long dataframes |
-| Sources | `LFPAnalysisBook/14_group_level_statistics.md`, `LFPAnalysisBook/worked-examples/11_group_statistics.ipynb`, `LFPAnalysisBook/13_assembling_analysis_dataframes.md` |
+| Sources | `LFPAnalysisBook/14_group_level_statistics.md`, `LFPAnalysisBook/worked-examples/14_group_statistics.ipynb`, `LFPAnalysisBook/13_assembling_analysis_dataframes.md` |
 
 Scaffold: require long dataframe columns `participant`, `unique_label`, `trial`, `ts`, `tfr` (or `y`), regressors; single-subject path uses electrode-wise permutation OLS over time; document that MLM needs multiple participants.
 
@@ -93,7 +93,7 @@ Scaffold: require long dataframe columns `participant`, `unique_label`, `trial`,
 | Notebook | `01_psd_fooof.ipynb` |
 | When | PSD and/or FOOOF parameterization |
 | API | Stable spectral config via pipeline when appropriate; else analysis utilities / book patterns |
-| Sources | `LFPAnalysisBook/08_first_psd_and_fooof.md`, `LFPAnalysisBook/worked-examples/04_first_psd_and_fooof_run.ipynb` |
+| Sources | `LFPAnalysisBook/08_first_psd_and_fooof.md`, `LFPAnalysisBook/worked-examples/08_first_psd_and_fooof_run.ipynb` |
 
 ### `dataframe_assembly`
 
@@ -102,7 +102,7 @@ Scaffold: require long dataframe columns `participant`, `unique_label`, `trial`,
 | Notebook | `02_assemble_analysis_df.ipynb` (or `02b_…` if band_power is `02_`) |
 | When | Building tidy long tables for stats across channels/subjects |
 | API | pandas + epoch metadata + electrode ROI join; column conventions for `statistics_utils` |
-| Sources | `LFPAnalysisBook/13_assembling_analysis_dataframes.md`, `LFPAnalysisBook/worked-examples/10_assembling_dataframes.ipynb` |
+| Sources | `LFPAnalysisBook/13_assembling_analysis_dataframes.md`, `LFPAnalysisBook/worked-examples/13_assembling_dataframes.ipynb` |
 
 Required columns for downstream stats: `participant`, `unique_label`, `trial`, `ts` (if time-resolved), neural `y` (`tfr` or `power`), regressors.
 
@@ -113,7 +113,7 @@ Required columns for downstream stats: `participant`, `unique_label`, `trial`, `
 | Notebook | `01_connectivity.ipynb` |
 | When | Connectivity and surrogate baselines |
 | API | `oscillation_utils` connectivity helpers + `make_surrogate_data` |
-| Sources | `LFPAnalysisBook/10_first_connectivity_and_surrogates.md`, `LFPAnalysisBook/worked-examples/06_first_connectivity_run.ipynb` |
+| Sources | `LFPAnalysisBook/10_first_connectivity_and_surrogates.md`, `LFPAnalysisBook/worked-examples/10_first_connectivity_run.ipynb` |
 
 ---
 

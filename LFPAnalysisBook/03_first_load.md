@@ -20,7 +20,7 @@ from LFPAnalysis import WORKING_DTYPE, build_basic_pipeline_config, run_pipeline
 
 config = build_basic_pipeline_config(Path("../data/sample_ieeg.fif"), file_format="mne")
 # Defaults favor local machines: preload=False (lazy/disk-backed) and float32 arrays.
-# Pass LoadConfig(..., preload=True) if you need the full array in RAM immediately.
+# Pass preload=True to the builder (or LoadConfig(..., preload=True)) when helpers need RAM.
 result = run_pipeline(config)
 
 print(f"Sampling rate: {result.raw.info['sfreq']} Hz")

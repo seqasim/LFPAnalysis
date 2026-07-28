@@ -1,0 +1,87 @@
+# Canonical chapter ↔ notebook mapping (source of truth for TOC + tests).
+# Worked-example filenames are chapter-aligned so prefixes match the teaching order.
+
+worked_examples:
+  - chapter: 03_first_load.md
+    notebook: worked-examples/03_first_import_and_load.ipynb
+    required_symbols: [build_basic_pipeline_config, run_pipeline]
+    required_plot: true
+  - chapter: 04_first_reference.md
+    notebook: worked-examples/04_first_preprocessing_run.ipynb
+    required_symbols: [build_basic_pipeline_config, run_pipeline]
+    required_plot: true
+  - chapter: 04b_first_synchronization.md
+    notebook: worked-examples/04b_first_synchronization_run.ipynb
+    required_symbols: [sync_utils]
+    required_plot: true
+  - chapter: 05_first_artifact_pass.md
+    notebook: worked-examples/05_first_artifact_pass.ipynb
+    required_symbols: [build_basic_pipeline_config, run_pipeline]
+    required_plot: true
+  - chapter: 06_first_baseline.md
+    notebook: worked-examples/06_first_baseline_run.ipynb
+    required_symbols: [build_analysis_config, run_analysis]
+    required_plot: true
+  - chapter: 07_first_event_locked_workflow.md
+    notebook: worked-examples/07_first_epoching_run.ipynb
+    required_symbols: [build_event_locked_pipeline_config, run_pipeline]
+    required_plot: true
+  - chapter: 08_first_psd_and_fooof.md
+    notebook: worked-examples/08_first_psd_and_fooof_run.ipynb
+    required_symbols: [build_analysis_config, run_analysis]
+    required_plot: true
+  - chapter: 09_first_time_frequency.md
+    notebook: worked-examples/09_first_tfr_run.ipynb
+    required_symbols: [build_analysis_config, run_analysis]
+    required_plot: true
+  - chapter: 10_first_connectivity_and_surrogates.md
+    notebook: worked-examples/10_first_connectivity_run.ipynb
+    required_symbols: [spectral_connectivity_epochs, make_surrogate_arrays]
+    required_plot: true
+  - chapter: 10b_first_time_resolved_stats.md
+    notebook: worked-examples/10b_first_stats_run.ipynb
+    required_symbols: [permutation_regression_zscore]
+    required_plot: true
+  - chapter: 13_assembling_analysis_dataframes.md
+    notebook: worked-examples/13_assembling_dataframes.ipynb
+    required_symbols: []
+    required_plot: false
+  - chapter: 14_group_level_statistics.md
+    notebook: worked-examples/14_group_statistics.ipynb
+    required_symbols: [permutation_regression_zscore]
+    required_plot: false
+  - chapter: 22_translate_condensed_notebook.md
+    notebook: worked-examples/22_migrating_condensed_notebook.ipynb
+    required_symbols: [build_basic_pipeline_config, legacy]
+    required_plot: false
+
+smoke_tests:
+  - chapter: 03_first_load.md
+    notebooks:
+      - smoke-tests/01_install_and_import.ipynb
+      - smoke-tests/02_load_sample_data.ipynb
+  - chapter: 04_first_reference.md
+    notebooks:
+      - smoke-tests/03_reference_and_artifacts.ipynb
+  - chapter: 04b_first_synchronization.md
+    notebooks:
+      - smoke-tests/08_synchronization.ipynb
+  - chapter: 07_first_event_locked_workflow.md
+    notebooks:
+      - smoke-tests/04_baselining_and_epoching.ipynb
+  - chapter: 08_first_psd_and_fooof.md
+    notebooks:
+      - smoke-tests/05_psd_and_fooof.ipynb
+  - chapter: 09_first_time_frequency.md
+    notebooks:
+      - smoke-tests/06_time_frequency.ipynb
+  - chapter: 10_first_connectivity_and_surrogates.md
+    notebooks:
+      - smoke-tests/07_connectivity_and_surrogates.ipynb
+
+# Defaults the book and builders must share.
+api_contracts:
+  epoch_tmax: 1.5
+  epoch_tmin: -0.5
+  chapter_data_prefix: ../data/
+  notebook_data_prefix: ../../data/

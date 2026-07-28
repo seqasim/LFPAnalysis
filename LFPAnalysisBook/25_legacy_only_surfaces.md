@@ -26,10 +26,19 @@ lfp_preprocess_utils.compute_and_baseline_tfr(...)
 #### New workflow
 
 ```python
+import numpy as np
+from LFPAnalysis import build_analysis_config, run_analysis
+
+# Beginner Morlet on existing Epochs:
+result = run_analysis(
+    epochs,
+    build_analysis_config(tfr_method="morlet", tfr_freqs=np.arange(4, 30, 4).tolist()),
+)
+
+# Full legacy orchestration when you need the old helper surface:
 from LFPAnalysis import legacy
 legacy.compute_and_baseline_tfr(...)
 ```
-
 ## Why this is explicit now
 
 The refactored repo aims to reduce ambiguity. It is better to label a workflow as advanced or compatibility-only than to imply that the stable API already covers it.

@@ -14,14 +14,18 @@ pwise = oscillation_utils.compute_connectivity(
 ### New workflow
 
 ```python
+import pandas as pd
 from pathlib import Path
 from LFPAnalysis import build_event_locked_pipeline_config, run_pipeline
 
+beh = pd.read_csv(Path("../data/sample_beh.csv"))
 config = build_event_locked_pipeline_config(
-    Path("../data/sample_ieeg_continuous_rest.fif"),
+    Path("../data/sample_ieeg_bp.fif"),
     file_format="mne",
-    event_name="demo",
-    event_times=[5.0, 10.0, 15.0],
+    event_name="feedback_start",
+    event_times=beh["feedback_start"].tolist(),
+    tmin=-0.5,
+    tmax=1.5,
 )
 result = run_pipeline(config)
 epochs = result.epochs

@@ -19,25 +19,33 @@ Use this after epoching with behavioral metadata (chapter 07) or load the pre-bu
 ```python
 import pandas as pd
 from pathlib import Path
-from LFPAnalysis import load_lfp
+from LFPAnalysis import build_analysis_config, load_lfp, run_analysis
 from LFPAnalysis.config import LoadConfig
 
 beh = pd.read_csv(Path("../data/sample_beh.csv"))
-epochs = load_lfp(LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True))
+epochs = load_lfp(
+    LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True)
+)
 epochs.metadata = beh[["reward", "rpe"]]
 chan = "racas1-racas2"
-reward_psd = epochs["reward == 1"].copy().pick([chan]).compute_psd(fmin=1, fmax=80)
-loss_psd = epochs["reward == 0"].copy().pick([chan]).compute_psd(fmin=1, fmax=80)
-print(reward_psd.get_data().shape)
+reward = run_analysis(
+    epochs["reward == 1"].copy().pick([chan]),
+    build_analysis_config(spectral_method="psd", fmin=1.0, fmax=80.0),
+)
+loss = run_analysis(
+    epochs["reward == 0"].copy().pick([chan]),
+    build_analysis_config(spectral_method="psd", fmin=1.0, fmax=80.0),
+)
+print(reward.spectral["spectrum"].get_data().shape)
 ```
 
-The worked notebook plots reward vs loss PSD for one channel and runs FOOOF via `analysis_utils`.
+For a single end-to-end spectral pipeline on a file path (without a reward contrast), use `build_spectral_pipeline_config` + `run_pipeline`. The worked notebook ({doc}`worked-examples/08_first_psd_and_fooof_run`) plots reward vs loss PSD and runs FOOOF through the same analysis spine.
 
 ## How to inspect the result
 
-- PSD frequency range and channel count
+- PSD frequency range and channel count via `result.spectral["spectrum"]`
 - Visual comparison of reward vs no-reward spectra (not just shape prints)
-- FOOOF table columns: `frequency`, `PSD_raw`, `PSD_corrected`, `PSD_exp`
+- FOOOF table (`result.spectral["table"]`) columns include `frequency`, `PSD_raw`, `PSD_corrected`, `PSD_exp`, plus peak/channel helpers
 
 ## Common mistakes
 
@@ -48,6 +56,6 @@ The worked notebook plots reward vs loss PSD for one channel and runs FOOOF via 
 
 ## Old-to-new translation note
 
-Old notebooks jumped directly into PSD/FOOOF functions. The refactored path encourages a valid `PipelineResult` first, then advanced utilities where needed.
+Old notebooks jumped directly into PSD/FOOOF functions. The refactored path encourages `build_analysis_config` / `run_analysis` (or `build_spectral_pipeline_config` / `run_pipeline`) so results live in a typed container first.
 
 Next step: {doc}`09_first_time_frequency`

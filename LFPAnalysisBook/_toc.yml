@@ -6,53 +6,57 @@ chapters:
   - file: 02_data_model
   - file: 03_first_load
     sections:
-      - file: worked-examples/01_first_import_and_load
+      - file: worked-examples/03_first_import_and_load
       - file: smoke-tests/01_install_and_import
       - file: smoke-tests/02_load_sample_data
   - file: 04_first_reference
     sections:
-      - file: worked-examples/02_first_preprocessing_run
+      - file: worked-examples/04_first_preprocessing_run
       - file: smoke-tests/03_reference_and_artifacts
   - file: 04b_first_synchronization
     sections:
-      - file: worked-examples/08_first_synchronization_run
+      - file: worked-examples/04b_first_synchronization_run
       - file: smoke-tests/08_synchronization
   - file: 05_first_artifact_pass
+    sections:
+      - file: worked-examples/05_first_artifact_pass
   - file: 06_first_baseline
+    sections:
+      - file: worked-examples/06_first_baseline_run
   - file: 07_first_event_locked_workflow
     sections:
-      - file: worked-examples/03_first_epoching_run
+      - file: worked-examples/07_first_epoching_run
       - file: smoke-tests/04_baselining_and_epoching
   - file: 08_first_psd_and_fooof
     sections:
-      - file: worked-examples/04_first_psd_and_fooof_run
+      - file: worked-examples/08_first_psd_and_fooof_run
       - file: smoke-tests/05_psd_and_fooof
   - file: 09_first_time_frequency
     sections:
-      - file: worked-examples/05_first_tfr_run
+      - file: worked-examples/09_first_tfr_run
       - file: smoke-tests/06_time_frequency
   - file: 10_first_connectivity_and_surrogates
     sections:
-      - file: worked-examples/06_first_connectivity_run
+      - file: worked-examples/10_first_connectivity_run
       - file: smoke-tests/07_connectivity_and_surrogates
   - file: 10b_first_time_resolved_stats
     sections:
-      - file: worked-examples/09_first_stats_run
+      - file: worked-examples/10b_first_stats_run
   - file: 11_advanced_utility_interoperability
   - file: 12_anatomy_and_roi_assignment
   - file: 13_assembling_analysis_dataframes
     sections:
-      - file: worked-examples/10_assembling_dataframes
+      - file: worked-examples/13_assembling_dataframes
   - file: 14_group_level_statistics
     sections:
-      - file: worked-examples/11_group_statistics
+      - file: worked-examples/14_group_statistics
   - file: 15_saving_and_organizing_results
   - file: 16_plotting_recipes
   - file: 20_old_repo_mental_model
   - file: 21_legacy_function_mapping
   - file: 22_translate_condensed_notebook
     sections:
-      - file: worked-examples/07_migrating_condensed_notebook
+      - file: worked-examples/22_migrating_condensed_notebook
   - file: 23_translate_tfr_workflow
   - file: 24_translate_connectivity_workflow
   - file: 25_legacy_only_surfaces

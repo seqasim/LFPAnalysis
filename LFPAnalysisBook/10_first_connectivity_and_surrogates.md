@@ -43,7 +43,7 @@ surr = oscillation_utils.make_surrogate_arrays(
 )
 ```
 
-The worked notebook plots connectivity and surrogate distributions.
+The worked notebook ({doc}`worked-examples/10_first_connectivity_run`) plots a coherence matrix and surrogate distributions.
 
 ## How to inspect the result
 

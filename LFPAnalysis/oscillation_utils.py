@@ -1806,16 +1806,20 @@ def phase_gcmi(mne_data: mne.Epochs, seed_to_target: Tuple[np.ndarray, np.ndarra
     signal0 = mne_data._data[:, np.unique(seed_to_target[0]), :]
     signal1 = mne_data._data[:, np.unique(seed_to_target[1]), :]
 
-    signal0_filt = mne.filter.filter_data(signal0, 
-                     mne_data.info['sfreq'], 
-                     l_freq=freqs0[0], 
-                     h_freq=freqs0[1])
-    
-    signal1_filt = mne.filter.filter_data(signal1,
-                        mne_data.info['sfreq'],
-                        l_freq=freqs0[0],
-                        h_freq=freqs0[1])
-    
+    from .mne_compat import filter_array
+
+    signal0_filt = filter_array(
+        signal0,
+        mne_data.info["sfreq"],
+        l_freq=freqs0[0],
+        h_freq=freqs0[1],
+    )
+    signal1_filt = filter_array(
+        signal1,
+        mne_data.info["sfreq"],
+        l_freq=freqs0[0],
+        h_freq=freqs0[1],
+    )
     gcmi = []
     for ei in range(nevents):
         signal0_hilbert = hilbert(signal0_filt[ei, :, :], N=nfft, axis=-1)[..., :ntimes]
@@ -1887,15 +1891,20 @@ def amp_amp_coupling(mne_data: mne.Epochs, seed_to_target: Tuple[np.ndarray, np.
     signal0 = mne_data._data[:, np.unique(seed_to_target[0]), :]
     signal1 = mne_data._data[:, np.unique(seed_to_target[1]), :]
 
-    signal0_filt = mne.filter.filter_data(signal0, 
-                     mne_data.info['sfreq'], 
-                     l_freq=freqs0[0], 
-                     h_freq=freqs0[1])
-    
-    signal1_filt = mne.filter.filter_data(signal1,
-                        mne_data.info['sfreq'],
-                        l_freq=freqs0[0],
-                        h_freq=freqs0[1])
+    from .mne_compat import filter_array
+
+    signal0_filt = filter_array(
+        signal0,
+        mne_data.info["sfreq"],
+        l_freq=freqs0[0],
+        h_freq=freqs0[1],
+    )
+    signal1_filt = filter_array(
+        signal1,
+        mne_data.info["sfreq"],
+        l_freq=freqs0[0],
+        h_freq=freqs0[1],
+    )
     
     corrs = []
 
