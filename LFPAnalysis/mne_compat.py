@@ -30,11 +30,14 @@ def upcast_mne_data(data: Any, dtype=_FILTER_DTYPE):
 
 
 def downcast_mne_data(data: Any, dtype=None):
-    """Cast preloaded MNE signal arrays back to the working dtype."""
+    """Cast in-memory MNE signal arrays back to the working dtype.
+
+    Keys off ``_data`` rather than ``preload`` so an upcast buffer is always
+    restored even when a nonstandard object has ``preload=False`` but still
+    exposes a writable ``_data`` array.
+    """
     if dtype is None:
         dtype = _WORKING_DTYPE
-    if not hasattr(data, "preload") or not data.preload:
-        return data
     if not hasattr(data, "_data") or data._data is None:
         return data
     if data._data.dtype != dtype:

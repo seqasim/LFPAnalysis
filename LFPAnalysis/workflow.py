@@ -99,11 +99,13 @@ def _get_data_array(data, *, copy: bool = False, dtype=None):
 
 
 def _downcast_mne_data(data, dtype=None):
-    """Cast preloaded MNE signal arrays to the working dtype in place when possible."""
+    """Cast in-memory MNE signal arrays to the working dtype when present.
+
+    Keys off ``_data`` rather than ``preload`` so float64 upcasts are always
+    restored even if ``preload`` is False on a nonstandard object.
+    """
     if dtype is None:
         dtype = _WORKING_DTYPE
-    if not hasattr(data, "preload") or not data.preload:
-        return data
     if not hasattr(data, "_data") or data._data is None:
         return data
     if data._data.dtype != dtype:

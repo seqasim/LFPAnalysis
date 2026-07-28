@@ -162,6 +162,20 @@ def test_filter_mne_object_upcasts_then_restores_working_dtype(synthetic_raw):
 
 
 @pytest.mark.unit
+def test_downcast_mne_data_restores_dtype_when_preload_false():
+    """Upcast/downcast must not skip restore just because preload is False."""
+    from types import SimpleNamespace
+
+    from LFPAnalysis.mne_compat import downcast_mne_data, upcast_mne_data
+
+    fake = SimpleNamespace(preload=False, _data=np.ones((2, 10), dtype=np.float32))
+    upcast_mne_data(fake)
+    assert fake._data.dtype == np.float64
+    downcast_mne_data(fake)
+    assert fake._data.dtype.name == "float32"
+
+
+@pytest.mark.unit
 def test_filter_array_upcasts_then_restores_working_dtype():
     from LFPAnalysis.mne_compat import filter_array
 

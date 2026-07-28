@@ -1090,12 +1090,12 @@ def detect_IEDs(mne_data, peak_thresh: float = 5, closeness_thresh: float = 0.25
     # filter data in beta-gamma band (MNE requires float64; restore after Hilbert)
     from .mne_compat import downcast_mne_data, filter_mne_object
 
-    filtered_data = filter_mne_object(mne_data, 25, 80, n_jobs=1, restore_working_dtype=False)
+    filtered_data = filter_mne_object(mne_data, 25, 80, n_jobs=-1, restore_working_dtype=False)
 
     n_fft = next_fast_len(n_times)
 
     # Hilbert bandpass amplitude 
-    filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=1)
+    filtered_data = filtered_data.apply_hilbert(envelope=True, n_fft=n_fft, n_jobs=-1)
     downcast_mne_data(filtered_data)
 
     # Rectify: 

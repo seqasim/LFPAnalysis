@@ -126,13 +126,23 @@ def test_get_data_array_typeerror_fallback():
 
 
 @pytest.mark.unit
-def test_downcast_skips_when_not_preloaded():
+def test_downcast_restores_dtype_even_when_preload_false():
     class FakeRaw:
         preload = False
         _data = np.ones((1, 3), dtype=np.float64)
 
     out = _downcast_mne_data(FakeRaw())
-    assert out._data.dtype == np.dtype("float64")
+    assert out._data.dtype == np.dtype("float32")
+
+
+@pytest.mark.unit
+def test_downcast_skips_when_data_missing():
+    class FakeRaw:
+        preload = False
+        _data = None
+
+    out = _downcast_mne_data(FakeRaw())
+    assert out._data is None
 
 
 @pytest.mark.unit
