@@ -18,10 +18,6 @@ worked_examples:
     notebook: worked-examples/05_first_artifact_pass.ipynb
     required_symbols: [build_basic_pipeline_config, run_pipeline]
     required_plot: true
-  - chapter: 06_first_baseline.md
-    notebook: worked-examples/06_first_baseline_run.ipynb
-    required_symbols: [build_analysis_config, run_analysis]
-    required_plot: true
   - chapter: 07_first_event_locked_workflow.md
     notebook: worked-examples/07_first_epoching_run.ipynb
     required_symbols: [build_event_locked_pipeline_config, run_pipeline]

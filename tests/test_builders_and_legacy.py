@@ -37,6 +37,46 @@ def test_build_event_locked_pipeline_config_enables_epoch_and_baseline():
     assert config.epoch.tmin == -0.5
     assert config.epoch.tmax == 1.5
     assert config.load.preload is False
+    assert config.epoch.baseline_event_times is None
+
+
+@pytest.mark.unit
+def test_build_event_locked_cross_event_baseline_plumbing():
+    config = build_event_locked_pipeline_config(
+        "data/sample_ieeg_bp.fif",
+        event_name="recog_time",
+        event_times=[1.0, 2.0, 3.0],
+        baseline_event_times=[0.2, 1.2, 2.2],
+        baseline_window=(-0.4, 0.0),
+    )
+    assert config.epoch.baseline_event_times == [0.2, 1.2, 2.2]
+    assert config.epoch.baseline_tmin == -0.4
+    assert config.epoch.baseline_tmax == 0.0
+    assert config.baseline.baseline_window == (-0.4, 0.0)
+
+
+@pytest.mark.unit
+def test_build_event_locked_rejects_mismatched_baseline_event_times():
+    with pytest.raises(ConfigurationError, match="same length"):
+        build_event_locked_pipeline_config(
+            "data/sample_ieeg_bp.fif",
+            event_name="recog_time",
+            event_times=[1.0, 2.0],
+            baseline_event_times=[0.2],
+        )
+
+
+@pytest.mark.unit
+def test_build_prep_config_cross_event_requires_window():
+    from LFPAnalysis import build_prep_config
+
+    with pytest.raises(ConfigurationError, match="baseline_window"):
+        build_prep_config(
+            "data/sample_ieeg_bp.fif",
+            event_name="demo",
+            event_times=[1.0, 2.0],
+            baseline_event_times=[0.1, 1.1],
+        )
 
 
 @pytest.mark.unit

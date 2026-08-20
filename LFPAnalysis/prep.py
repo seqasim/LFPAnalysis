@@ -193,7 +193,39 @@ def _epoch_config_with_sync(epoch: EpochConfig, slope: float, offset: float) -> 
         tmax=epoch.tmax + float(epoch.buffer_s),
         buffer_s=epoch.buffer_s,
         metadata=epoch.metadata,
+        baseline_event_times=(
+            list(epoch.baseline_event_times) if epoch.baseline_event_times is not None else None
+        ),
+        baseline_tmin=epoch.baseline_tmin,
+        baseline_tmax=epoch.baseline_tmax,
     )
+
+
+def _make_baseline_epochs(data, epoch: EpochConfig):
+    """Extract baseline-event epochs when cross-event baselining is configured."""
+    if not epoch.baseline_event_times:
+        return None
+    if epoch.baseline_tmin is None or epoch.baseline_tmax is None:
+        raise ConfigurationError(
+            "epoch.baseline_tmin and epoch.baseline_tmax are required when "
+            "epoch.baseline_event_times is set."
+        )
+    if len(epoch.baseline_event_times) != len(epoch.event_times):
+        raise ConfigurationError(
+            "epoch.baseline_event_times must have the same length as epoch.event_times."
+        )
+    baseline_cfg = EpochConfig(
+        enabled=True,
+        event_name="baseline_event",
+        event_times=list(epoch.baseline_event_times),
+        slope=epoch.slope,
+        offset=epoch.offset,
+        tmin=float(epoch.baseline_tmin),
+        tmax=float(epoch.baseline_tmax),
+        buffer_s=0.0,
+        metadata=None,
+    )
+    return make_epochs(data, baseline_cfg)
 
 
 def run_prep(config: PrepConfig) -> PrepResult:
@@ -215,6 +247,7 @@ def run_prep(config: PrepConfig) -> PrepResult:
 
     epoch_cfg = _epoch_config_with_sync(config.epoch, slope, offset)
     epochs = make_epochs(referenced, epoch_cfg)
+    baseline_epochs = _make_baseline_epochs(referenced, epoch_cfg)
 
     if epochs is not None:
         raw_out = None
@@ -235,11 +268,13 @@ def run_prep(config: PrepConfig) -> PrepResult:
         "electrode_path": str(config.electrode.path) if config.electrode.path else None,
         "working_dtype": str(WORKING_DTYPE),
         "preload": bool(config.load.preload),
+        "has_baseline_epochs": baseline_epochs is not None,
     }
     return PrepResult(
         epochs=epochs,
         raw=raw_out,
         referenced=referenced_out,
+        baseline_epochs=baseline_epochs,
         artifact_tables=artifact_tables,
         electrode_df=electrode_df,
         sync=sync_details,

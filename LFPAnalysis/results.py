@@ -17,11 +17,15 @@ class PrepResult:
     Analysis should depend on ``epochs`` (and optionally ``electrode_df`` /
     ``artifact_tables`` / ``sync`` provenance) — not on how sync or electrodes
     were obtained.
+
+    When cross-event baselining is configured, ``baseline_epochs`` holds the
+    per-trial baseline windows locked to a different event stream.
     """
 
     epochs: Any | None
     raw: Any | None = None
     referenced: Any | None = None
+    baseline_epochs: Any | None = None
     artifact_tables: dict[str, pd.DataFrame] = field(default_factory=dict)
     electrode_df: pd.DataFrame | None = None
     sync: dict[str, Any] = field(default_factory=dict)

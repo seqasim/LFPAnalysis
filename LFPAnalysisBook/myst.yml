@@ -27,9 +27,6 @@ project:
     - file: 05_first_artifact_pass.md
       children:
         - file: worked-examples/05_first_artifact_pass.ipynb
-    - file: 06_first_baseline.md
-      children:
-        - file: worked-examples/06_first_baseline_run.ipynb
     - file: 07_first_event_locked_workflow.md
       children:
         - file: worked-examples/07_first_epoching_run.ipynb

@@ -163,9 +163,87 @@ def test_laplacian_no_longer_in_reference_literal():
 
 
 @pytest.mark.unit
-def test_advanced_package_lazy_exports():
-    from LFPAnalysis import advanced
+def test_run_prep_produces_baseline_epochs(synthetic_raw):
+    prep = run_prep(
+        PrepConfig(
+            load=LoadConfig(path=synthetic_raw, file_format="mne", preload=True),
+            epoch=EpochConfig(
+                enabled=True,
+                event_name="task",
+                event_times=[1.0, 2.0, 3.0],
+                tmin=-0.2,
+                tmax=0.5,
+                baseline_event_times=[0.5, 1.5, 2.5],
+                baseline_tmin=-0.1,
+                baseline_tmax=0.1,
+            ),
+        )
+    )
+    assert prep.epochs is not None
+    assert prep.baseline_epochs is not None
+    assert len(prep.baseline_epochs) == len(prep.epochs) == 3
+    assert prep.metadata["has_baseline_epochs"] is True
+    np.testing.assert_allclose(prep.baseline_epochs.times[[0, -1]], [-0.1, 0.1])
 
-    assert hasattr(advanced, "make_surrogate_arrays")
-    fn = advanced.make_surrogate_arrays
-    assert callable(fn)
+
+@pytest.mark.unit
+def test_cross_event_baseline_zscore_math(synthetic_raw):
+    """Per-trial zscore from baseline_epochs matches hand-computed stats."""
+    prep = run_prep(
+        PrepConfig(
+            load=LoadConfig(path=synthetic_raw, file_format="mne", preload=True),
+            epoch=EpochConfig(
+                enabled=True,
+                event_name="task",
+                event_times=[1.0, 2.0, 3.0],
+                tmin=-0.2,
+                tmax=0.5,
+                baseline_event_times=[0.5, 1.5, 2.5],
+                baseline_tmin=-0.1,
+                baseline_tmax=0.1,
+            ),
+        )
+    )
+    task = prep.epochs.copy()
+    baseline_ep = prep.baseline_epochs.copy()
+    task_data = task.get_data().copy()
+    bl_data = baseline_ep.get_data()
+    expected_mean = bl_data.mean(axis=-1, keepdims=True)
+    expected_std = bl_data.std(axis=-1, keepdims=True)
+    expected = (task_data - expected_mean) / expected_std
+
+    analysis = run_analysis(
+        task,
+        AnalysisConfig(
+            baseline=BaselineConfig(mode="zscore", enabled=True, baseline_window=(-0.1, 0.1)),
+        ),
+        baseline_epochs=baseline_ep,
+    )
+    got = analysis.epochs.get_data()
+    np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-5)
+    assert analysis.metadata["cross_event_baseline"] is True
+    assert not analysis.baseline_summary.empty
+
+
+@pytest.mark.unit
+def test_run_pipeline_wires_cross_event_baseline(synthetic_raw):
+    result = run_pipeline(
+        PipelineConfig(
+            load=LoadConfig(path=synthetic_raw, file_format="mne", preload=True),
+            epoch=EpochConfig(
+                enabled=True,
+                event_name="task",
+                event_times=[1.0, 2.0],
+                tmin=-0.2,
+                tmax=0.5,
+                baseline_event_times=[0.5, 1.5],
+                baseline_tmin=-0.1,
+                baseline_tmax=0.1,
+            ),
+            baseline=BaselineConfig(mode="zscore", enabled=True, baseline_window=(-0.1, 0.1)),
+        )
+    )
+    assert result.epochs is not None
+    assert result.metadata["cross_event_baseline"] is True
+    assert result.metadata["has_baseline_epochs"] is True
+    assert len(result.baseline_summary) == 2

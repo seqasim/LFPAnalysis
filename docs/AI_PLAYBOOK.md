@@ -85,7 +85,7 @@ Add an integration test in `test_workflow_integration.py` if it affects `run_pip
 
 **3.** Add unit test in `test_lfp_preprocess_utils.py` with parametrized modes.
 
-**4.** Update `LFPAnalysisBook/06_first_baseline.md`.
+**4.** Update `LFPAnalysisBook/07_first_event_locked_workflow.md`.
 
 ### Recipe: add utility-only analysis feature
 

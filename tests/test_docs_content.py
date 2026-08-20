@@ -18,7 +18,6 @@ BEGINNER_CHAPTERS = [
     BOOK / "03_first_load.md",
     BOOK / "04_first_reference.md",
     BOOK / "05_first_artifact_pass.md",
-    BOOK / "06_first_baseline.md",
     BOOK / "07_first_event_locked_workflow.md",
     BOOK / "08_first_psd_and_fooof.md",
     BOOK / "09_first_time_frequency.md",
@@ -205,16 +204,23 @@ def test_worked_notebooks_reference_advanced_utility_when_needed():
 
 
 @pytest.mark.unit
-def test_baseline_chapter_uses_analysis_spine_not_spectral_builder():
-    text = (BOOK / "06_first_baseline.md").read_text()
+def test_event_locked_chapter_documents_same_and_cross_event_baseline():
+    text = (BOOK / "07_first_event_locked_workflow.md").read_text()
+    assert "build_event_locked_pipeline_config" in text
+    assert "run_pipeline" in text
+    assert "baseline_event_times" in text
+    assert "Cross-event baselining" in text
     assert "build_analysis_config" in text
     assert "run_analysis" in text
-    # Minimal example code fence should not call the spectral builder.
-    example = text.split("## Minimal example", 1)[1]
-    fence = example.split("```python", 1)[1].split("```", 1)[0]
-    assert "build_analysis_config" in fence
-    assert "run_analysis" in fence
-    assert "build_spectral_pipeline_config" not in fence
+    assert "build_spectral_pipeline_config" in text
+    # Same-event minimal example should not require baseline_event_times
+    same_event = text.split("## Minimal example", 1)[1].split("## Cross-event", 1)[0]
+    fence = same_event.split("```python", 1)[1].split("```", 1)[0]
+    assert "baseline_window" in fence
+    assert "baseline_event_times" not in fence
+    cross = text.split("## Cross-event baselining", 1)[1]
+    cross_fence = cross.split("```python", 1)[1].split("```", 1)[0]
+    assert "baseline_event_times" in cross_fence
 
 
 @pytest.mark.unit

@@ -50,7 +50,6 @@ def notebooks(session: nox.Session) -> None:
         "LFPAnalysisBook/worked-examples/04_first_preprocessing_run.ipynb",
         "LFPAnalysisBook/worked-examples/04b_first_synchronization_run.ipynb",
         "LFPAnalysisBook/worked-examples/05_first_artifact_pass.ipynb",
-        "LFPAnalysisBook/worked-examples/06_first_baseline_run.ipynb",
         "LFPAnalysisBook/worked-examples/07_first_epoching_run.ipynb",
         "LFPAnalysisBook/worked-examples/08_first_psd_and_fooof_run.ipynb",
         "LFPAnalysisBook/worked-examples/09_first_tfr_run.ipynb",

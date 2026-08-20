@@ -278,14 +278,69 @@ def _apply_baseline_array(data: np.ndarray, baseline: np.ndarray, mode: str) -> 
     return legacy.mean_baseline_time(data, baseline, mode=mode)
 
 
-def baseline_lfp(data, config: BaselineConfig):
-    """Baseline continuous or epoched data using the shared summary schema."""
+def baseline_lfp(data, config: BaselineConfig, baseline_epochs=None):
+    """Baseline continuous or epoched data using the shared summary schema.
+
+    Parameters
+    ----------
+    data
+        MNE Raw or Epochs to correct.
+    config
+        Baseline mode / window configuration.
+    baseline_epochs
+        Optional MNE Epochs locked to a different per-trial event. When
+        provided, per-trial baseline statistics are taken from these epochs
+        instead of ``config.baseline_window`` on ``data.times``.
+    """
     ensure_supported(config.mode, field_name="baseline.mode", supported=BASELINE_METHODS)
     if not config.enabled or config.mode == "none":
         return data, empty_baseline_summary()
 
     mne = _require_mne()
     _ensure_preloaded(data)
+
+    if baseline_epochs is not None:
+        if not isinstance(data, mne.BaseEpochs):
+            raise ConfigurationError(
+                "Cross-event baselining requires task data to be MNE Epochs."
+            )
+        if not isinstance(baseline_epochs, mne.BaseEpochs):
+            raise ConfigurationError("baseline_epochs must be an MNE Epochs object.")
+        _ensure_preloaded(baseline_epochs)
+        if len(baseline_epochs) != len(data):
+            raise ConfigurationError(
+                "baseline_epochs must have the same number of trials as the task epochs."
+            )
+        if list(baseline_epochs.ch_names) != list(data.ch_names):
+            raise ConfigurationError(
+                "baseline_epochs channel names must match the task epochs."
+            )
+        all_data = _get_data_array(data, copy=False)
+        baseline = _get_data_array(baseline_epochs, copy=False)
+        # mean_baseline_time broadcasts over leading dims (n_trials, n_channels).
+        corrected = _apply_baseline_array(all_data, baseline, config.mode)
+        data._data = np.asarray(corrected, dtype=_WORKING_DTYPE)
+        bl_start = (
+            float(config.baseline_window[0])
+            if config.baseline_window is not None
+            else float(baseline_epochs.times[0])
+        )
+        bl_stop = (
+            float(config.baseline_window[1])
+            if config.baseline_window is not None
+            else float(baseline_epochs.times[-1])
+        )
+        summary = build_baseline_summary(
+            target="epochs",
+            channel_names=data.ch_names,
+            mode=config.mode,
+            baseline_start=bl_start,
+            baseline_stop=bl_stop,
+            baseline_mean=baseline.mean(axis=(0, 2)),
+            baseline_std=baseline.std(axis=(0, 2)),
+        )
+        return data, summary
+
     if isinstance(data, mne.BaseEpochs):
         indices = _get_baseline_indices(data.times, config.baseline_window)
         # Single materialization; mutate in place on a float32 working buffer.
@@ -451,10 +506,19 @@ def compute_tfr_features(data, config: TfrConfig) -> dict[str, Any]:
     return {"method": "morlet", "power": power, "metadata": meta}
 
 
-def run_analysis(epochs, config: AnalysisConfig) -> AnalysisResult:
+def run_analysis(epochs, config: AnalysisConfig, baseline_epochs=None) -> AnalysisResult:
     """Run the analysis spine starting from MNE Epochs (or continuous fallback).
 
     Does not perform sync or electrode localization — those belong in :func:`run_prep`.
+
+    Parameters
+    ----------
+    epochs
+        Task epochs (or continuous data) to analyze.
+    config
+        Analysis configuration.
+    baseline_epochs
+        Optional per-trial baseline epochs locked to a different event stream.
     """
     if epochs is None:
         raise ConfigurationError(
@@ -462,7 +526,9 @@ def run_analysis(epochs, config: AnalysisConfig) -> AnalysisResult:
             "or pass your own MNE Epochs."
         )
 
-    baselined, baseline_summary = baseline_lfp(epochs, config.baseline)
+    baselined, baseline_summary = baseline_lfp(
+        epochs, config.baseline, baseline_epochs=baseline_epochs
+    )
     spectral = compute_spectral_features(baselined, config.spectral)
     tfr = compute_tfr_features(baselined, config.tfr)
     metadata = {
@@ -471,6 +537,7 @@ def run_analysis(epochs, config: AnalysisConfig) -> AnalysisResult:
         "spectral_method": config.spectral.method,
         "tfr_method": config.tfr.method,
         "working_dtype": str(WORKING_DTYPE),
+        "cross_event_baseline": baseline_epochs is not None,
     }
     return AnalysisResult(
         epochs=baselined,
@@ -504,7 +571,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             raise ConfigurationError(
                 "Analysis stages are enabled but prep produced neither Epochs nor continuous data."
             )
-        analysis = run_analysis(analysis_input, analysis_cfg)
+        analysis = run_analysis(
+            analysis_input, analysis_cfg, baseline_epochs=prep.baseline_epochs
+        )
         if prep.epochs is not None:
             raw_out = None
             referenced_out = None

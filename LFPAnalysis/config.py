@@ -113,7 +113,12 @@ class BaselineConfig:
 
 @dataclass(slots=True)
 class EpochConfig:
-    """Configuration for epoch extraction around behavioral timestamps (prep spine)."""
+    """Configuration for epoch extraction around behavioral timestamps (prep spine).
+
+    When ``baseline_event_times`` is set, prep also extracts a second set of
+    epochs locked to those times (window ``baseline_tmin``/``baseline_tmax``)
+    so analysis can apply a cross-event, per-trial baseline.
+    """
 
     enabled: bool = False
     event_name: str = "task_event"
@@ -124,6 +129,9 @@ class EpochConfig:
     tmax: float = 1.5
     buffer_s: float = 0.0
     metadata: dict[str, Any] | None = None
+    baseline_event_times: list[float] | None = None
+    baseline_tmin: float | None = None
+    baseline_tmax: float | None = None
 
 
 @dataclass(slots=True)

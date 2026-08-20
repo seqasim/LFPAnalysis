@@ -52,9 +52,32 @@ def build_prep_config(
     buffer_s: float = 0.0,
     sync: SyncConfig | None = None,
     metadata: dict | None = None,
+    baseline_event_times: list[float] | None = None,
+    baseline_window: tuple[float, float] | None = None,
 ) -> PrepConfig:
-    """Build a prep-spine configuration (raw → Epochs handoff)."""
+    """Build a prep-spine configuration (raw → Epochs handoff).
+
+    When ``baseline_event_times`` is provided, prep also extracts baseline
+    epochs locked to those times. ``baseline_window`` then becomes the
+    ``(baseline_tmin, baseline_tmax)`` window relative to each baseline event.
+    """
     epoch_enabled = bool(event_name and event_times)
+    baseline_tmin = None
+    baseline_tmax = None
+    if baseline_event_times is not None:
+        if not event_times:
+            raise ConfigurationError(
+                "baseline_event_times requires event_times (task events) to be set."
+            )
+        if len(baseline_event_times) != len(event_times):
+            raise ConfigurationError(
+                "baseline_event_times must have the same length as event_times."
+            )
+        if baseline_window is None:
+            raise ConfigurationError(
+                "baseline_window is required when baseline_event_times is set."
+            )
+        baseline_tmin, baseline_tmax = float(baseline_window[0]), float(baseline_window[1])
     return PrepConfig(
         load=LoadConfig(
             path=path,
@@ -81,6 +104,9 @@ def build_prep_config(
             tmax=tmax,
             buffer_s=buffer_s,
             metadata=metadata,
+            baseline_event_times=baseline_event_times,
+            baseline_tmin=baseline_tmin,
+            baseline_tmax=baseline_tmax,
         ),
     )
 
@@ -224,13 +250,33 @@ def build_event_locked_pipeline_config(
     preload: bool = False,
     baseline_mode: str = "zscore",
     baseline_window: tuple[float, float] = (-0.5, 0.0),
+    baseline_event_times: list[float] | None = None,
     tmin: float = -0.5,
     tmax: float = 1.5,
     slope: float = 1.0,
     offset: float = 0.0,
     metadata: dict | None = None,
 ) -> PipelineConfig:
-    """Build a beginner-friendly event-locked pipeline configuration."""
+    """Build a beginner-friendly event-locked pipeline configuration.
+
+    Same-event baselining (default)
+        ``baseline_window`` is relative to ``event_name`` / ``event_times`` and
+        is applied on the task epochs' time axis.
+
+    Cross-event baselining
+        Pass ``baseline_event_times`` (same length as ``event_times``). Then
+        ``baseline_window`` is interpreted relative to each baseline event
+        (e.g. baseline ``recog_time`` epochs using a window around
+        ``baseline_time_mem``).
+    """
+    baseline_tmin = None
+    baseline_tmax = None
+    if baseline_event_times is not None:
+        if len(baseline_event_times) != len(event_times):
+            raise ConfigurationError(
+                "baseline_event_times must have the same length as event_times."
+            )
+        baseline_tmin, baseline_tmax = float(baseline_window[0]), float(baseline_window[1])
     return PipelineConfig(
         load=LoadConfig(path=path, file_format=file_format, preload=preload),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
@@ -245,6 +291,9 @@ def build_event_locked_pipeline_config(
             tmin=tmin,
             tmax=tmax,
             metadata=metadata,
+            baseline_event_times=baseline_event_times,
+            baseline_tmin=baseline_tmin,
+            baseline_tmax=baseline_tmax,
         ),
         spectral=SpectralConfig(enabled=False, method="none"),
         electrode=ElectrodeConfig(path=electrode_path),

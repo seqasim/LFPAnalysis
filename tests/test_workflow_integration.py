@@ -281,3 +281,34 @@ def test_builder_helpers_cover_edge_paths():
     assert spectral.spectral.enabled is True
     assert spectral.epoch.enabled is True
     assert spectral.baseline.enabled is True
+
+
+@pytest.mark.integration
+def test_cross_event_baseline_on_sample_data():
+    """End-to-end: baseline feedback_start epochs using baseline_start windows."""
+    import pandas as pd
+    from pathlib import Path
+
+    from LFPAnalysis import build_event_locked_pipeline_config
+
+    root = Path(__file__).resolve().parents[1]
+    beh = pd.read_csv(root / "data" / "sample_beh.csv")
+    config = build_event_locked_pipeline_config(
+        root / "data" / "sample_ieeg_bp.fif",
+        file_format="mne",
+        event_name="feedback_start",
+        event_times=beh["feedback_start"].tolist(),
+        baseline_mode="zscore",
+        baseline_event_times=beh["baseline_start"].tolist(),
+        baseline_window=(-0.5, 0.0),
+        tmin=-0.5,
+        tmax=1.5,
+        metadata={"reward": beh["reward"].tolist()},
+    )
+    result = run_pipeline(config)
+    assert result.epochs is not None
+    assert len(result.epochs) == 80
+    assert result.metadata["cross_event_baseline"] is True
+    assert result.metadata["has_baseline_epochs"] is True
+    assert not result.baseline_summary.empty
+    assert set(result.baseline_summary["mode"]) == {"zscore"}

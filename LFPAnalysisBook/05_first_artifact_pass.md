@@ -50,4 +50,4 @@ Compare with the sidecar files `feedback_start_artifact_df.csv` (pre-binned by t
 
 Old notebooks called `detect_misc_artifacts` or `detect_IEDs` directly. The stable path wraps those into standardized tables with columns `event_kind`, `channel`, `time_seconds`, `sample_index`.
 
-Next step: {doc}`06_first_baseline`
+Next step: {doc}`07_first_event_locked_workflow`

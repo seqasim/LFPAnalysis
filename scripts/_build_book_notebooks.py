@@ -222,61 +222,18 @@ NOTEBOOKS["worked-examples/05_first_artifact_pass.ipynb"] = nb(
             "plt.show()",
             tags=["worked"],
         ),
-        md("## Next step\n\nChapter 06 (`06_first_baseline`) covers baseline correction on epochs."),
+        md("## Next step\n\nChapter 07 (`07_first_event_locked_workflow`) covers event-locked epochs and baselining."),
     ]
 )
 
-# --- Worked 06 baseline ---
-NOTEBOOKS["worked-examples/06_first_baseline_run.ipynb"] = nb(
-    [
-        md(
-            "# Worked Example: Baseline Correction on Feedback Epochs\n\n"
-            "## Goal\n"
-            "Apply z-score baselining to pre-built feedback epochs via the analysis spine "
-            "(`build_analysis_config` + `run_analysis`) without running PSD.\n"
-        ),
-        code(
-            "from pathlib import Path\n"
-            "from LFPAnalysis import build_analysis_config, load_lfp, run_analysis\n"
-            "from LFPAnalysis.config import LoadConfig\n\n"
-            "epochs = load_lfp(\n"
-            "    LoadConfig(path=Path('../../data/sample_feedback_start-epo.fif'), file_format='mne', preload=True)\n"
-            ")\n"
-            "analysis = run_analysis(\n"
-            "    epochs,\n"
-            "    build_analysis_config(baseline_mode='zscore', baseline_window=(-0.5, 0.0)),\n"
-            ")\n"
-            "print(analysis.baseline_summary.head())\n"
-            "print('spectral (should be empty):', analysis.spectral)\n"
-            "print('epoch window:', analysis.epochs.times[[0, -1]])",
-            tags=["worked"],
-        ),
-        md("## Plot baseline-corrected evoked activity for one channel"),
-        code(
-            "import matplotlib.pyplot as plt\n\n"
-            "chan = 'racas1-racas2'\n"
-            "evoked = analysis.epochs.copy().pick([chan]).average()\n"
-            "fig, ax = plt.subplots(figsize=(7, 3))\n"
-            "ax.plot(evoked.times, evoked.data[0], label='zscore-baselined')\n"
-            "ax.axvline(0, color='k', ls='--', lw=0.8)\n"
-            "ax.axvspan(-0.5, 0.0, color='0.85', label='baseline window')\n"
-            "ax.set(xlabel='Time (s)', ylabel='Amplitude (a.u.)', title=f'Baselined evoked {chan}')\n"
-            "ax.legend()\n"
-            "fig.tight_layout()\n"
-            "plt.show()",
-            tags=["worked"],
-        ),
-        md("## Next step\n\nChapter 07 (`07_first_event_locked_workflow`) epochs continuous data with behavior metadata."),
-    ]
-)
-
-# --- Worked 07 epoching ---
+# --- Worked 07 epoching (+ same-event and cross-event baseline) ---
 NOTEBOOKS["worked-examples/07_first_epoching_run.ipynb"] = nb(
     [
         md(
             "# Worked Example: Feedback-Locked Epochs with Behavior Metadata\n\n"
             "## Goal\n"
-            "Epoch around real `feedback_start` times and attach reward/RPE for condition contrasts.\n"
+            "Epoch around real `feedback_start` times, attach reward/RPE for condition contrasts, "
+            "and demonstrate same-event vs cross-event baselining.\n"
         ),
         code(
             "import pandas as pd\n"
@@ -310,10 +267,35 @@ NOTEBOOKS["worked-examples/07_first_epoching_run.ipynb"] = nb(
             "ax.plot(reward_evoked.times, reward_evoked.data[0], label='reward')\n"
             "ax.plot(loss_evoked.times, loss_evoked.data[0], label='no reward')\n"
             "ax.axvline(0, color='k', ls='--', lw=0.8)\n"
+            "ax.axvspan(-0.5, 0.0, color='0.85', alpha=0.5, label='same-event baseline')\n"
             "ax.set(xlabel='Time (s)', ylabel='Amplitude (a.u.)', title=f'Evoked {chan}')\n"
             "ax.legend()\n"
             "fig.tight_layout()\n"
             "plt.show()",
+            tags=["worked"],
+        ),
+        md(
+            "## Cross-event baselining\n\n"
+            "Baseline each `feedback_start` epoch using a window around that trial's "
+            "`baseline_start` (analog of baselining `recog_time` to `baseline_time_mem`)."
+        ),
+        code(
+            "cross_config = build_event_locked_pipeline_config(\n"
+            "    Path('../../data/sample_ieeg_bp.fif'),\n"
+            "    file_format='mne',\n"
+            "    event_name='feedback_start',\n"
+            "    event_times=beh['feedback_start'].tolist(),\n"
+            "    baseline_mode='zscore',\n"
+            "    baseline_event_times=beh['baseline_start'].tolist(),\n"
+            "    baseline_window=(-0.5, 0.0),\n"
+            "    tmin=-0.5,\n"
+            "    tmax=1.5,\n"
+            "    metadata={'reward': beh['reward'].tolist(), 'rpe': beh['rpe'].tolist()},\n"
+            ")\n"
+            "cross = run_pipeline(cross_config)\n"
+            "print('cross_event_baseline:', cross.metadata.get('cross_event_baseline'))\n"
+            "print('has_baseline_epochs:', cross.metadata.get('has_baseline_epochs'))\n"
+            "print(cross.baseline_summary.head())",
             tags=["worked"],
         ),
         md("## Next step\n\nChapter 08 (`08_first_psd_and_fooof`) covers PSD and FOOOF."),
