@@ -165,6 +165,8 @@ class TfrConfig:
     z_thresh: float = 10.0
     crop_tmin: float | None = None
     crop_tmax: float | None = None
+    baseline_crop_tmin: float | None = None
+    baseline_crop_tmax: float | None = None
     decim: int = 1
     n_jobs: int = 1
 

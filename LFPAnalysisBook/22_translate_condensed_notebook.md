@@ -53,6 +53,6 @@ result = run_pipeline(config)
 
 - the stable path does not recreate every legacy side effect such as writing artifact CSVs to disk
 - the stable path makes baseline explicit instead of hiding it inside a broader epoching flow
-- connectivity remains outside the stable pipeline; beginner Morlet TFR is available via `run_analysis`
+- connectivity remains outside the stable pipeline; cross-event Morlet TFR uses two saved `-epo.fif` files + `load_lfp` + `run_analysis(..., baseline_epochs=...)`
 
 Next step: {doc}`23_translate_tfr_workflow`

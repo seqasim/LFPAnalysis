@@ -7,7 +7,7 @@
 | `make_mne(...)` | `load_lfp(...)` or `build_basic_pipeline_config(...)` + `run_pipeline(...)` | Use `LFPAnalysis.legacy.make_mne` if you need a bridge |
 | `ref_mne(...)` | `preprocess_lfp(...)` or `ReferenceConfig(...)` inside `run_pipeline(...)` | Stable path for `none`, `wm`, and `bipolar` |
 | `make_epochs(...)` | `make_epochs(raw, EpochConfig(...))` or `build_event_locked_pipeline_config(...)` | Stable path covers the no-side-effects case |
-| `compute_and_baseline_tfr(...)` | `build_analysis_config(..., tfr_method="morlet")` + `run_analysis` for beginner Morlet; advanced/legacy for full orchestration | Beginner Morlet is stable; full legacy options remain advanced |
+| `compute_and_baseline_tfr(...)` | Save task + baseline `-epo.fif` files (chapter 07), then `load_lfp` + `run_analysis(..., baseline_epochs=...)` with `TfrConfig` crop on the TFR axis | Cross-event trialwise Morlet is stable; full legacy orchestration remains advanced |
 | `compute_connectivity(...)` | advanced utilities + migration guide | Still advanced, not fully wrapped |
 
 ## Side-by-side example

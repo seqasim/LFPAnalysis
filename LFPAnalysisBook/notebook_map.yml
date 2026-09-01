@@ -28,7 +28,7 @@ worked_examples:
     required_plot: true
   - chapter: 09_first_time_frequency.md
     notebook: worked-examples/09_first_tfr_run.ipynb
-    required_symbols: [build_analysis_config, run_analysis]
+    required_symbols: [load_lfp, run_analysis]
     required_plot: true
   - chapter: 10_first_connectivity_and_surrogates.md
     notebook: worked-examples/10_first_connectivity_run.ipynb

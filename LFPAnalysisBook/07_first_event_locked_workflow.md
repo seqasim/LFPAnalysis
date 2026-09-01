@@ -2,7 +2,7 @@
 
 ## What this step is for
 
-Build **feedback-locked raw epochs** from real trial times in `sample_beh.csv`, attach `reward`, `rpe`, and `gamble_rt` metadata, and optionally stage cross-event baseline epochs for TFR in chapter 09.
+Build **feedback-locked and baseline-locked raw epochs** from real trial times in `sample_beh.csv`, attach `reward`, `rpe`, and `gamble_rt` metadata, and save two buffered epoch files for TFR in chapter 09.
 
 ## When you should use it
 
@@ -30,6 +30,7 @@ config = build_event_locked_pipeline_config(
     baseline_mode="none",
     tmin=-0.5,
     tmax=1.5,
+    buffer_s=1.0,
     metadata={
         "reward": beh["reward"].tolist(),
         "rpe": beh["rpe"].tolist(),
@@ -38,48 +39,65 @@ config = build_event_locked_pipeline_config(
 )
 result = run_pipeline(config)
 print(f"epochs: {len(result.epochs)}")
-print("baseline summary rows:", len(result.baseline_summary))
+print("epoch time span:", result.epochs.times[0], result.epochs.times[-1])
 ```
 
-Epochs remain raw by design. Baseline normalization now belongs to the TFR stage, not to voltage epochs.
+Epochs remain raw by design. Baseline normalization belongs to the TFR stage (chapter 09), not voltage epochs.
 
-## Cross-event baseline epochs for TFR
+## Two epoch files for cross-event TFR (recommended)
 
-For legacy-style cross-event normalization, pass `baseline_event_times` plus a `baseline_window`. Prep will extract and carry baseline-event epochs (`result.metadata["has_baseline_epochs"] == True`) so chapter 09 can apply trialwise TFR z-scoring.
+Save **separate** task and baseline epoch sets (each with `buffer_s=1.0`). Chapter 09 loads both and crops buffers on the **TFR** axis after Morlet.
 
 ```python
-cross_cfg = build_event_locked_pipeline_config(
-    Path("../data/sample_ieeg_bp.fif"),
-    file_format="mne",
-    event_name="feedback_start",
-    event_times=beh["feedback_start"].tolist(),
-    baseline_mode="trialwise",
-    baseline_event_times=beh["baseline_start"].tolist(),
-    baseline_window=(-0.5, 0.0),  # relative to baseline_start
-    tmin=-0.5,
-    tmax=1.5,
-    metadata={"reward": beh["reward"].tolist(), "rpe": beh["rpe"].tolist()},
+# Task: feedback_start, core window [-0.5, 1.5] + 1 s buffer
+task = run_pipeline(
+    build_event_locked_pipeline_config(
+        Path("../data/sample_ieeg_bp.fif"),
+        file_format="mne",
+        event_name="feedback_start",
+        event_times=beh["feedback_start"].tolist(),
+        baseline_mode="none",
+        tmin=-0.5,
+        tmax=1.5,
+        buffer_s=1.0,
+        metadata={"reward": beh["reward"].tolist(), "rpe": beh["rpe"].tolist()},
+    )
 )
-cross = run_pipeline(cross_cfg)
-print(cross.metadata["cross_event_baseline"], cross.metadata["has_baseline_epochs"])
+
+# Baseline: baseline_start, core window [-0.5, 0.0] + 1 s buffer
+baseline = run_pipeline(
+    build_event_locked_pipeline_config(
+        Path("../data/sample_ieeg_bp.fif"),
+        file_format="mne",
+        event_name="baseline_start",
+        event_times=beh["baseline_start"].tolist(),
+        baseline_mode="none",
+        tmin=-0.5,
+        tmax=0.0,
+        buffer_s=1.0,
+        metadata={"reward": beh["reward"].tolist(), "rpe": beh["rpe"].tolist()},
+    )
+)
+
+task.epochs.save(Path("../data/sample_feedback_start-epo.fif"), overwrite=True)
+baseline.epochs.save(Path("../data/sample_baseline_start-epo.fif"), overwrite=True)
 ```
+
+Alternative in-memory path: pass `baseline_event_times` in one `run_pipeline` call to carry baseline epochs without saving a second file. The book prefers two saved `-epo.fif` files so TFR never re-epochs from raw.
 
 ## How to inspect the result
 
 - `len(result.epochs)` — expect 80
-- `result.epochs.times[[0, -1]]` — pre/post window
+- `result.epochs.times[[0, -1]]` — includes 1 s buffer beyond core window (e.g. ~-1.5 to 2.5 for feedback)
 - `result.epochs.metadata[["reward", "rpe"]].describe()`
-- `len(result.baseline_summary)` — expect `0` for raw-epoch runs
-- For cross-event runs, `result.metadata["cross_event_baseline"]` / `has_baseline_epochs` should be true
 
 ## Common mistakes
 
 - Passing milliseconds instead of seconds
 - Using hardcoded demo times `[5.0, 10.0, 15.0]` instead of real `feedback_start` values
 - Forgetting `metadata` keys must match `event_times` length
+- Cropping voltage epochs before TFR (drop buffers on the TFR power axis in chapter 09 instead)
 - Expecting voltage-domain baselining in this chapter (removed by design)
-- Passing `baseline_event_times` with a different length than `event_times`
-- Expecting the stable API to write artifact CSV sidecars to disk
 
 ## Old-to-new translation note
 

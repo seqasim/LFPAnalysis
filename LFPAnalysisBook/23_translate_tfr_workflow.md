@@ -13,29 +13,60 @@ lfp_preprocess_utils.compute_and_baseline_tfr(
 )
 ```
 
-### New workflow
+### New workflow (cross-event, two saved epoch files)
 
 ```python
-import pandas as pd
 import numpy as np
 from pathlib import Path
-from LFPAnalysis import build_analysis_config, build_event_locked_pipeline_config, run_analysis, run_pipeline
+from LFPAnalysis import load_lfp, run_analysis
+from LFPAnalysis.config import AnalysisConfig, LoadConfig, TfrConfig
 
-beh = pd.read_csv(Path("../data/sample_beh.csv"))
-prep = run_pipeline(
-    build_event_locked_pipeline_config(
-        Path("../data/sample_ieeg_bp.fif"),
-        file_format="mne",
-        event_name="feedback_start",
-        event_times=beh["feedback_start"].tolist(),
-        tmin=-0.5,
-        tmax=1.5,
-        baseline_mode="none",
-    )
+task_epochs = load_lfp(
+    LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True)
+)
+baseline_epochs = load_lfp(
+    LoadConfig(path=Path("../data/sample_baseline_start-epo.fif"), file_format="mne", preload=True)
+)
+freqs = np.arange(4, 30, 4).tolist()
+
+result = run_analysis(
+    task_epochs,
+    AnalysisConfig(
+        tfr=TfrConfig(
+            enabled=True,
+            method="morlet",
+            freqs=freqs,
+            n_cycles=3.0,
+            baseline_mode="trialwise",
+            apply_baseline=True,
+            crop_tmin=-0.5,
+            crop_tmax=1.5,
+            baseline_crop_tmin=-0.5,
+            baseline_crop_tmax=0.0,
+        )
+    ),
+    baseline_epochs=baseline_epochs,
+)
+print(result.tfr["power"].data.shape)
+print(result.tfr["power"].times[0], result.tfr["power"].times[-1])
+```
+
+Voltage epochs keep their prep buffers for Morlet. `crop_tmin` / `crop_tmax` trim the **TFR** time axis after Morlet; use `baseline_crop_*` when the baseline core window differs from the task window.
+
+### Simple Morlet (single epoch file, no cross-event baseline)
+
+```python
+import numpy as np
+from pathlib import Path
+from LFPAnalysis import build_analysis_config, load_lfp, run_analysis
+from LFPAnalysis.config import LoadConfig
+
+epochs = load_lfp(
+    LoadConfig(path=Path("../data/sample_feedback_start-epo.fif"), file_format="mne", preload=True)
 )
 freqs = np.arange(4, 30, 4).tolist()
 tfr = run_analysis(
-    prep.epochs.copy().pick(["racas1-racas2"]),
+    epochs.copy().pick(["racas1-racas2"]),
     build_analysis_config(tfr_method="morlet", tfr_freqs=freqs, tfr_n_cycles=3.0),
 )
 print(tfr.tfr["power"].data.shape)
@@ -43,7 +74,7 @@ print(tfr.tfr["power"].data.shape)
 
 ## What changed conceptually
 
-The refactored repo separates preparation from time-frequency computation. You prepare trusted epochs first, then run beginner Morlet TFR on the analysis spine.
+The refactored repo separates preparation from time-frequency computation. Save trusted raw epoch files once (chapter 07), then run TFR many times via `run_analysis` without re-epoching from continuous data.
 
 ## Where behavior is not identical
 

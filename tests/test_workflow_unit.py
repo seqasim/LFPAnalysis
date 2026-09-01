@@ -224,6 +224,43 @@ def test_derive_referenced_electrode_df_warns_on_missing_contact():
 
 
 @pytest.mark.unit
+def test_ui_electrode_load_and_bipolar_derive(tmp_path):
+    from LFPAnalysis.config import ElectrodeConfig
+    from LFPAnalysis.prep import _load_electrodes
+
+    path = tmp_path / "UI001_KN.xlsx"
+    kn_data = pd.DataFrame(
+        {
+            "Contact": [1, 2, 3],
+            "Channel": [12, 13, 14],
+            "Array": ["A", "A", "A"],
+            "Destrieux": ["Left-Hippocampus", "Left-Amygdala", "Left-Temporal"],
+            "mni_x": [1.0, 2.0, 3.0],
+            "mni_y": [4.0, 5.0, 6.0],
+            "mni_z": [7.0, 8.0, 9.0],
+        }
+    )
+    with pd.ExcelWriter(path) as writer:
+        pd.DataFrame({"notes": ["ignore"]}).to_excel(writer, sheet_name="notes", index=False)
+        kn_data.to_excel(writer, sheet_name="localization", index=False)
+
+    electrode_df = _load_electrodes(ElectrodeConfig(path=path, site="UI"))
+    assert list(electrode_df["label"]) == ["lfpx12", "lfpx13", "lfpx14"]
+    assert electrode_df.loc[0, "salman_region"] == "HPC"
+    assert electrode_df.loc[1, "salman_region"] == "AMY"
+
+    derived = derive_referenced_electrode_df(
+        electrode_df,
+        ["lfpx12-lfpx13", "lfpx13-lfpx14"],
+        method="bipolar",
+    )
+    assert list(derived["label"]) == ["lfpx12-lfpx13", "lfpx13-lfpx14"]
+    assert derived.loc[0, "mni_x"] == pytest.approx(1.5)
+    assert derived.loc[0, "anode"] == "lfpx12"
+    assert derived.loc[0, "cathode"] == "lfpx13"
+
+
+@pytest.mark.unit
 def test_make_epochs_drops_nan_and_none_times_with_metadata(mne_module):
     sfreq = 100.0
     raw = mne_module.io.RawArray(
@@ -301,6 +338,84 @@ def test_compute_tfr_features_cross_event_uses_trialwise_baseline(monkeypatch, m
     assert tfr["method"] == "morlet"
     assert calls["count"] >= 1
     assert tfr["metadata"]["baseline_mode"].iloc[0] == "trialwise"
+
+
+@pytest.mark.unit
+def test_compute_tfr_features_applies_separate_baseline_crop(monkeypatch, mne_module):
+    sfreq = 50.0
+    times = np.arange(0, 20, 1 / sfreq)
+    raw = mne_module.io.RawArray(
+        np.vstack([np.sin(2 * np.pi * 3 * times)]),
+        mne_module.create_info(["l1"], sfreq, ch_types=["seeg"]),
+        verbose=False,
+    )
+    events = np.array([[200, 0, 1], [500, 0, 1]])
+    task_epochs = mne_module.Epochs(
+        raw.copy(),
+        events=events,
+        event_id={"task": 1},
+        tmin=-1.0,
+        tmax=2.0,
+        baseline=None,
+        preload=True,
+        verbose=False,
+    )
+    baseline_epochs = mne_module.Epochs(
+        raw.copy(),
+        events=events,
+        event_id={"baseline": 1},
+        tmin=-1.0,
+        tmax=1.75,
+        baseline=None,
+        preload=True,
+        verbose=False,
+    )
+
+    from LFPAnalysis.config import TfrConfig
+    import LFPAnalysis.workflow as workflow_mod
+
+    captured: dict[str, np.ndarray] = {}
+
+    def _fake_trialwise(**kwargs):
+        captured["baseline_shape"] = kwargs["baseline_mne"].shape
+        return kwargs["data"]
+
+    def _fake_compute_tfr(self, **kwargs):
+        tfr_times = np.asarray(self.times, dtype=float)
+        data = np.ones((len(self), len(self.ch_names), 2, len(tfr_times)), dtype=float)
+        return mne_module.time_frequency.EpochsTFRArray(
+            self.info,
+            data,
+            tfr_times,
+            np.asarray([4.0, 8.0]),
+        )
+
+    monkeypatch.setattr(mne_module.Epochs, "compute_tfr", _fake_compute_tfr)
+    monkeypatch.setattr(
+        workflow_mod,
+        "_legacy_preprocess_module",
+        lambda: SimpleNamespace(baseline_trialwise_TFR=_fake_trialwise, _nan_mask_tfr_events=lambda *a, **k: None),
+    )
+
+    tfr = compute_tfr_features(
+        task_epochs,
+        TfrConfig(
+            enabled=True,
+            method="morlet",
+            freqs=[4, 8],
+            n_cycles=2.0,
+            crop_tmin=0.0,
+            crop_tmax=1.0,
+            baseline_crop_tmin=0.0,
+            baseline_crop_tmax=0.75,
+        ),
+        baseline_epochs=baseline_epochs,
+        artifact_tables={},
+    )
+    assert tfr["power"].times[0] == pytest.approx(0.0)
+    assert tfr["power"].times[-1] == pytest.approx(1.0)
+    assert captured["baseline_shape"][-1] == 39
+    assert captured["baseline_shape"][-1] < len(tfr["power"].times)
 
 
 @pytest.mark.unit

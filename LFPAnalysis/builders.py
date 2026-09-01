@@ -127,6 +127,10 @@ def build_analysis_config(
     tfr_method: str = "none",
     tfr_freqs: list[float] | None = None,
     tfr_n_cycles: float = 7.0,
+    tfr_crop_tmin: float | None = None,
+    tfr_crop_tmax: float | None = None,
+    baseline_crop_tmin: float | None = None,
+    baseline_crop_tmax: float | None = None,
 ) -> AnalysisConfig:
     """Build an analysis-spine configuration (Epochs → features)."""
     if baseline_mode != "none" or baseline_window is not None:
@@ -160,6 +164,10 @@ def build_analysis_config(
             n_cycles=tfr_n_cycles,
             baseline_mode=baseline_mode,
             apply_baseline=baseline_mode != "none",
+            crop_tmin=tfr_crop_tmin,
+            crop_tmax=tfr_crop_tmax,
+            baseline_crop_tmin=baseline_crop_tmin,
+            baseline_crop_tmax=baseline_crop_tmax,
         ),
     )
 
@@ -233,6 +241,7 @@ def build_basic_pipeline_config(
     file_format: str = "mne",
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
+    electrode_site: str = "MSSM",
     artifact_methods: Iterable[str] | None = None,
     resample_sfreq: float | None | str = "auto",
     notch_freqs: tuple[float, ...] | None = (60.0, 120.0, 180.0, 240.0),
@@ -251,12 +260,16 @@ def build_basic_pipeline_config(
             check_bad_channels=check_bad_channels,
             include_micros=include_micros,
         ),
-        reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
+        reference=ReferenceConfig(
+            method=reference_method,
+            electrode_path=electrode_path,
+            site=electrode_site,
+        ),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["none"])),
         baseline=BaselineConfig(mode="none", enabled=False),
         epoch=EpochConfig(enabled=False),
         spectral=SpectralConfig(enabled=False, method="none"),
-        electrode=ElectrodeConfig(path=electrode_path),
+        electrode=ElectrodeConfig(path=electrode_path, site=electrode_site),
     )
 
 
@@ -268,6 +281,7 @@ def build_event_locked_pipeline_config(
     file_format: str = "mne",
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
+    electrode_site: str = "MSSM",
     artifact_methods: Iterable[str] | None = None,
     preload: bool = False,
     baseline_mode: str = "zscore",
@@ -305,7 +319,11 @@ def build_event_locked_pipeline_config(
         baseline_tmin, baseline_tmax = float(baseline_window[0]), float(baseline_window[1])
     return PipelineConfig(
         load=LoadConfig(path=path, file_format=file_format, preload=preload),
-        reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
+        reference=ReferenceConfig(
+            method=reference_method,
+            electrode_path=electrode_path,
+            site=electrode_site,
+        ),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["misc"])),
         baseline=BaselineConfig(mode="none", enabled=False, baseline_window=None),
         epoch=EpochConfig(
@@ -333,7 +351,7 @@ def build_event_locked_pipeline_config(
             crop_tmin=tmin,
             crop_tmax=tmax,
         ),
-        electrode=ElectrodeConfig(path=electrode_path),
+        electrode=ElectrodeConfig(path=electrode_path, site=electrode_site),
     )
 
 

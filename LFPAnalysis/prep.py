@@ -182,6 +182,9 @@ def _load_electrodes(config: ElectrodeConfig) -> pd.DataFrame | None:
     if not config.load_into_result or config.path is None:
         return None
     path = resolve_existing_path(config.path, field_name="electrode.path")
+    if config.site == "UI":
+        legacy = _legacy_preprocess_module()
+        return legacy.load_elec(str(path), site="UI")
     return load_electrode_metadata(path)
 
 

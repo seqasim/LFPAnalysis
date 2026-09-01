@@ -109,7 +109,15 @@ def _downcast_mne_data(data, dtype=None):
         dtype = _WORKING_DTYPE
     if not hasattr(data, "_data") or data._data is None:
         return data
-    if data._data.dtype != dtype:
+    skipped = False
+    try:
+        mne = _require_mne()
+        if isinstance(data, mne.BaseEpochs):
+            # Keep Epochs in float64 for MNE FIF save compatibility.
+            skipped = True
+    except Exception:
+        pass
+    if (not skipped) and data._data.dtype != dtype:
         data._data = np.asarray(data._data, dtype=dtype)
     return data
 
@@ -610,14 +618,28 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
     )
 
 
-def _crop_tfr_power(power, config: TfrConfig):
-    if config.crop_tmin is None or config.crop_tmax is None:
+def _crop_tfr_power(
+    power,
+    config: TfrConfig,
+    *,
+    crop_tmin: float | None = None,
+    crop_tmax: float | None = None,
+):
+    tmin_bound = config.crop_tmin if crop_tmin is None else crop_tmin
+    tmax_bound = config.crop_tmax if crop_tmax is None else crop_tmax
+    if tmin_bound is None or tmax_bound is None:
         return power
-    tmin = max(float(config.crop_tmin), float(power.times[0]))
-    tmax = min(float(config.crop_tmax), float(power.times[-1]))
+    tmin = max(float(tmin_bound), float(power.times[0]))
+    tmax = min(float(tmax_bound), float(power.times[-1]))
     if tmin < tmax:
         power.crop(tmin=tmin, tmax=tmax)
     return power
+
+
+def _baseline_tfr_crop_bounds(config: TfrConfig) -> tuple[float | None, float | None]:
+    if config.baseline_crop_tmin is not None or config.baseline_crop_tmax is not None:
+        return config.baseline_crop_tmin, config.baseline_crop_tmax
+    return config.crop_tmin, config.crop_tmax
 
 
 def _nan_mask_tfr_tables(power, tables: list[pd.DataFrame]):
@@ -710,7 +732,13 @@ def compute_tfr_features(data, config: TfrConfig, baseline_epochs=None, artifact
             verbose=False,
         )
         power = _crop_tfr_power(power, config)
-        baseline_power = _crop_tfr_power(baseline_power, config)
+        bl_tmin, bl_tmax = _baseline_tfr_crop_bounds(config)
+        baseline_power = _crop_tfr_power(
+            baseline_power,
+            config,
+            crop_tmin=bl_tmin,
+            crop_tmax=bl_tmax,
+        )
         if config.mask_artifacts and artifact_tables:
             power = _nan_mask_tfr_tables(
                 power,

@@ -67,7 +67,7 @@ Read {doc}`11_advanced_utility_interoperability` before chaining utility modules
 - I want to epoch task events with behavior metadata: `build_event_locked_pipeline_config` + `sample_beh.csv`
 - I want PSD or FOOOF: `build_spectral_pipeline_config` / `run_pipeline`, or `build_analysis_config` + `run_analysis` on existing Epochs
 - I want baseline-only on existing Epochs: `build_analysis_config` + `run_analysis`
-- I want beginner Morlet TFR: `build_analysis_config(..., tfr_method="morlet")` + `run_analysis`
+- I want beginner Morlet TFR: load saved Epochs with `load_lfp`, then `run_analysis(..., baseline_epochs=...)` for cross-event trialwise baseline (chapter 09)
 - I used the old notebooks: `LFPAnalysis.legacy` plus the migration chapters
 
 Next step: {doc}`01_installation`

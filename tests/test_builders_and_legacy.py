@@ -25,6 +25,30 @@ def test_build_basic_pipeline_config_returns_stable_defaults():
 
 
 @pytest.mark.unit
+def test_build_basic_pipeline_config_passes_electrode_site():
+    config = build_basic_pipeline_config(
+        "data/sample_ieeg.fif",
+        electrode_path="loc.xlsx",
+        electrode_site="UI",
+    )
+    assert config.reference.site == "UI"
+    assert config.electrode.site == "UI"
+
+
+@pytest.mark.unit
+def test_build_event_locked_pipeline_config_passes_electrode_site():
+    config = build_event_locked_pipeline_config(
+        "data/sample_ieeg.fif",
+        event_name="demo",
+        event_times=[1.0],
+        electrode_path="loc.xlsx",
+        electrode_site="UI",
+    )
+    assert config.reference.site == "UI"
+    assert config.electrode.site == "UI"
+
+
+@pytest.mark.unit
 def test_build_event_locked_pipeline_config_enables_epoch_and_baseline():
     config = build_event_locked_pipeline_config(
         "data/sample_ieeg_continuous_rest.fif",

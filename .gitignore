@@ -1,5 +1,6 @@
 # repo specific files we don't need to include 
 scripts/Condensed Notebook Memory-Bandit.ipynb
+LFPAnalysisBook/worked-examples/day2_preprocess_salma.ipynb
 
 # Jupyter Notebook
 .ipynb_checkpoints

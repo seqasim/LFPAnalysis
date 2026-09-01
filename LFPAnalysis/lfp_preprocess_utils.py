@@ -1296,7 +1296,7 @@ def load_elec(elec_path=None, site: str = 'MSSM'):
 
         # Assign regions here that match keys for more detailed YBA atlas that we use for MSSM data.
 
-        elec_data['salman_region'] = np.nan
+        elec_data['salman_region'] = pd.Series([None] * len(elec_data), index=elec_data.index, dtype=object)
  
         if any(elec_data.keys().str.contains('Destrieux')):
 
@@ -1324,7 +1324,7 @@ def load_elec(elec_path=None, site: str = 'MSSM'):
         if any(elec_data.keys().str.contains('Region')):
             
             # make a manual column to assign white matter 
-            elec_data['manual'] = np.nan
+            elec_data['manual'] = pd.Series([None] * len(elec_data), index=elec_data.index, dtype=object)
             # elec_data['manual'][elec_data['Destrieuxlabel'].str.lower().str.contains('white')] = 'white'
             elec_data['manual'][elec_data['Region'].str.lower().str.contains('wm', na=False)] = 'white'
                         
