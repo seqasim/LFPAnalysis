@@ -40,7 +40,9 @@ class LoadConfig:
     file_format: InputFormat = "mne"
     preload: bool = False
     memmap: bool = True
-    resample_sfreq: float | None = None
+    resample_sfreq: float | None | Literal["auto"] = "auto"
+    notch_freqs: tuple[float, ...] | None = (60.0, 120.0, 180.0, 240.0)
+    check_bad_channels: bool = False
     include_micros: bool = False
     eeg_names: list[str] = field(default_factory=list)
     resp_names: list[str] = field(default_factory=list)
@@ -128,7 +130,7 @@ class EpochConfig:
     offset: float = 0.0
     tmin: float = -0.5
     tmax: float = 1.5
-    buffer_s: float = 0.0
+    buffer_s: float = 1.0
     metadata: dict[str, Any] | None = None
     baseline_event_times: list[float] | None = None
     baseline_tmin: float | None = None
@@ -158,6 +160,11 @@ class TfrConfig:
     n_cycles: float | Any = 7.0
     baseline_mode: BaselineMode = "zscore"
     apply_baseline: bool = True
+    mask_artifacts: bool = True
+    uncaptured_z_thresh: bool = True
+    z_thresh: float = 10.0
+    crop_tmin: float | None = None
+    crop_tmax: float | None = None
     decim: int = 1
     n_jobs: int = 1
 

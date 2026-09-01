@@ -7,7 +7,9 @@ and site I/O can evolve without rewriting science code.
 from __future__ import annotations
 
 from typing import Any
+import warnings
 
+import numpy as np
 import pandas as pd
 
 from .config import (
@@ -22,6 +24,7 @@ from .results import PrepResult
 from .schemas import build_sync_summary, empty_sync_summary
 from .validation import ensure_supported, resolve_existing_path
 from .workflow import (
+    _legacy_preprocess_module,
     derive_referenced_electrode_df,
     detect_artifacts,
     load_electrode_metadata,
@@ -184,19 +187,64 @@ def _load_electrodes(config: ElectrodeConfig) -> pd.DataFrame | None:
 
 def _epoch_config_with_sync(epoch: EpochConfig, slope: float, offset: float) -> EpochConfig:
     """Return an EpochConfig using sync-derived slope/offset when sync ran."""
+    keep_indices: list[int] = []
+    clean_event_times: list[float] = []
+    for ix, raw_time in enumerate(epoch.event_times):
+        if str(raw_time) == "None":
+            continue
+        time_value = float(raw_time)
+        if np.isnan(time_value):
+            continue
+        keep_indices.append(ix)
+        clean_event_times.append(time_value)
+
+    metadata = epoch.metadata
+    if metadata is not None:
+        frame = pd.DataFrame(metadata)
+        if len(frame) == len(epoch.event_times):
+            frame = frame.iloc[keep_indices].reset_index(drop=True)
+            metadata = frame.to_dict(orient="list")
+
+    baseline_event_times = None
+    if epoch.baseline_event_times is not None:
+        if len(epoch.baseline_event_times) != len(epoch.event_times):
+            raise ConfigurationError(
+                "epoch.baseline_event_times must have the same length as epoch.event_times."
+            )
+        baseline_event_times = [epoch.baseline_event_times[ix] for ix in keep_indices]
+        valid_pairs: list[int] = []
+        for ix, raw_time in enumerate(baseline_event_times):
+            if str(raw_time) == "None":
+                continue
+            time_value = float(raw_time)
+            if np.isnan(time_value):
+                continue
+            valid_pairs.append(ix)
+        if len(valid_pairs) != len(baseline_event_times):
+            clean_event_times = [clean_event_times[ix] for ix in valid_pairs]
+            baseline_event_times = [baseline_event_times[ix] for ix in valid_pairs]
+            if metadata is not None:
+                frame = pd.DataFrame(metadata).iloc[valid_pairs].reset_index(drop=True)
+                metadata = frame.to_dict(orient="list")
+
+    if len(clean_event_times) != len(epoch.event_times):
+        warnings.warn(
+            "Dropped invalid event timestamps (None/NaN) while building epochs.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
     return EpochConfig(
         enabled=epoch.enabled,
         event_name=epoch.event_name,
-        event_times=list(epoch.event_times),
+        event_times=clean_event_times,
         slope=slope,
         offset=offset,
         tmin=epoch.tmin - float(epoch.buffer_s),
         tmax=epoch.tmax + float(epoch.buffer_s),
         buffer_s=epoch.buffer_s,
-        metadata=epoch.metadata,
-        baseline_event_times=(
-            list(epoch.baseline_event_times) if epoch.baseline_event_times is not None else None
-        ),
+        metadata=metadata,
+        baseline_event_times=baseline_event_times,
         baseline_tmin=epoch.baseline_tmin,
         baseline_tmax=epoch.baseline_tmax,
     )
@@ -221,12 +269,61 @@ def _make_baseline_epochs(data, epoch: EpochConfig):
         event_times=list(epoch.baseline_event_times),
         slope=epoch.slope,
         offset=epoch.offset,
-        tmin=float(epoch.baseline_tmin),
-        tmax=float(epoch.baseline_tmax),
-        buffer_s=0.0,
+        tmin=float(epoch.baseline_tmin) - float(epoch.buffer_s),
+        tmax=float(epoch.baseline_tmax) + float(epoch.buffer_s),
+        buffer_s=float(epoch.buffer_s),
         metadata=None,
     )
     return make_epochs(data, baseline_cfg)
+
+
+def _bin_artifact_tables_for_epochs(
+    artifact_tables: dict[str, pd.DataFrame],
+    epoch: EpochConfig,
+) -> dict[str, pd.DataFrame]:
+    if not epoch.enabled or not epoch.event_times:
+        return artifact_tables
+    legacy = _legacy_preprocess_module()
+    out = dict(artifact_tables)
+    event_times = np.asarray(epoch.event_times, dtype=float)
+    event_task_starts = (event_times * float(epoch.slope)) + float(epoch.offset) + float(epoch.tmin)
+    event_task_ends = (event_times * float(epoch.slope)) + float(epoch.offset) + float(epoch.tmax)
+
+    for method in ("ied", "misc"):
+        table = artifact_tables.get(method)
+        if table is None or table.empty:
+            continue
+        chan_map = (
+            table.groupby("channel")["time_seconds"]
+            .apply(lambda series: [float(value) for value in series.to_list()])
+            .to_dict()
+        )
+        out[f"{method}_task_epoched"] = legacy._bin_channelwise_times_into_behav_evs(
+            chan_map,
+            event_task_starts.tolist(),
+            event_task_ends.tolist(),
+        )
+
+        if epoch.baseline_event_times and epoch.baseline_tmin is not None and epoch.baseline_tmax is not None:
+            baseline_times = np.asarray(epoch.baseline_event_times, dtype=float)
+            bl_starts = (
+                (baseline_times * float(epoch.slope))
+                + float(epoch.offset)
+                + float(epoch.baseline_tmin)
+                - float(epoch.buffer_s)
+            )
+            bl_ends = (
+                (baseline_times * float(epoch.slope))
+                + float(epoch.offset)
+                + float(epoch.baseline_tmax)
+                + float(epoch.buffer_s)
+            )
+            out[f"{method}_baseline_epoched"] = legacy._bin_channelwise_times_into_behav_evs(
+                chan_map,
+                bl_starts.tolist(),
+                bl_ends.tolist(),
+            )
+    return out
 
 
 def run_prep(config: PrepConfig) -> PrepResult:
@@ -260,6 +357,7 @@ def run_prep(config: PrepConfig) -> PrepResult:
         sync_summary = empty_sync_summary()
 
     epoch_cfg = _epoch_config_with_sync(config.epoch, slope, offset)
+    artifact_tables = _bin_artifact_tables_for_epochs(artifact_tables, epoch_cfg)
     epochs = make_epochs(referenced, epoch_cfg)
     baseline_epochs = _make_baseline_epochs(referenced, epoch_cfg)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
+import warnings
 
 from .config import (
     AnalysisConfig,
@@ -40,7 +41,9 @@ def build_prep_config(
     electrode_path: PathLike | None = None,
     electrode_site: str = "MSSM",
     artifact_methods: Iterable[str] | None = None,
-    resample_sfreq: float | None = None,
+    resample_sfreq: float | None | str = "auto",
+    notch_freqs: tuple[float, ...] | None = (60.0, 120.0, 180.0, 240.0),
+    check_bad_channels: bool = False,
     include_micros: bool = False,
     preload: bool = False,
     event_name: str | None = None,
@@ -49,7 +52,7 @@ def build_prep_config(
     tmax: float = 1.5,
     slope: float = 1.0,
     offset: float = 0.0,
-    buffer_s: float = 0.0,
+    buffer_s: float = 1.0,
     sync: SyncConfig | None = None,
     metadata: dict | None = None,
     baseline_event_times: list[float] | None = None,
@@ -84,6 +87,8 @@ def build_prep_config(
             file_format=file_format,
             preload=preload,
             resample_sfreq=resample_sfreq,
+            notch_freqs=notch_freqs,
+            check_bad_channels=check_bad_channels,
             include_micros=include_micros,
         ),
         reference=ReferenceConfig(
@@ -124,6 +129,13 @@ def build_analysis_config(
     tfr_n_cycles: float = 7.0,
 ) -> AnalysisConfig:
     """Build an analysis-spine configuration (Epochs → features)."""
+    if baseline_mode != "none" or baseline_window is not None:
+        warnings.warn(
+            "build_analysis_config baseline args now control TFR baseline only; "
+            "voltage baselining in run_analysis is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     if spectral_method not in {"none", "psd", "fooof"}:
         raise ConfigurationError(
             "build_analysis_config supports spectral methods: none, psd, fooof."
@@ -132,13 +144,8 @@ def build_analysis_config(
         raise ConfigurationError("build_analysis_config supports tfr methods: none, morlet.")
     spectral_enabled = spectral_method != "none"
     tfr_enabled = tfr_method != "none"
-    baseline_enabled = baseline_mode != "none"
     return AnalysisConfig(
-        baseline=BaselineConfig(
-            mode=baseline_mode,
-            enabled=baseline_enabled,
-            baseline_window=baseline_window,
-        ),
+        baseline=BaselineConfig(mode="none", enabled=False, baseline_window=None),
         spectral=SpectralConfig(
             enabled=spectral_enabled,
             method=spectral_method if spectral_enabled else "none",
@@ -151,6 +158,8 @@ def build_analysis_config(
             method=tfr_method if tfr_enabled else "none",
             freqs=tfr_freqs,
             n_cycles=tfr_n_cycles,
+            baseline_mode=baseline_mode,
+            apply_baseline=baseline_mode != "none",
         ),
     )
 
@@ -174,6 +183,10 @@ def build_tutorial_pipeline_config(
     spectral_method: str = "none",
     tfr_method: str = "none",
     tfr_freqs: list[float] | None = None,
+    buffer_s: float = 1.0,
+    resample_sfreq: float | None | str = "auto",
+    notch_freqs: tuple[float, ...] | None = (60.0, 120.0, 180.0, 240.0),
+    check_bad_channels: bool = False,
 ) -> PipelineConfig:
     """Compose prep + analysis into a flat PipelineConfig for tutorials."""
     prep = build_prep_config(
@@ -183,12 +196,16 @@ def build_tutorial_pipeline_config(
         electrode_path=electrode_path,
         artifact_methods=artifact_methods,
         preload=preload,
+        resample_sfreq=resample_sfreq,
+        notch_freqs=notch_freqs,
+        check_bad_channels=check_bad_channels,
         event_name=event_name,
         event_times=event_times,
         tmin=tmin,
         tmax=tmax,
         slope=slope,
         offset=offset,
+        buffer_s=buffer_s,
     )
     analysis = build_analysis_config(
         baseline_mode=baseline_mode if event_name and event_times else "none",
@@ -217,7 +234,9 @@ def build_basic_pipeline_config(
     reference_method: str = "none",
     electrode_path: PathLike | None = None,
     artifact_methods: Iterable[str] | None = None,
-    resample_sfreq: float | None = None,
+    resample_sfreq: float | None | str = "auto",
+    notch_freqs: tuple[float, ...] | None = (60.0, 120.0, 180.0, 240.0),
+    check_bad_channels: bool = False,
     include_micros: bool = False,
     preload: bool = False,
 ) -> PipelineConfig:
@@ -228,6 +247,8 @@ def build_basic_pipeline_config(
             file_format=file_format,
             preload=preload,
             resample_sfreq=resample_sfreq,
+            notch_freqs=notch_freqs,
+            check_bad_channels=check_bad_channels,
             include_micros=include_micros,
         ),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
@@ -257,6 +278,10 @@ def build_event_locked_pipeline_config(
     slope: float = 1.0,
     offset: float = 0.0,
     metadata: dict | None = None,
+    buffer_s: float = 1.0,
+    tfr_method: str = "none",
+    tfr_freqs: list[float] | None = None,
+    tfr_n_cycles: float = 7.0,
 ) -> PipelineConfig:
     """Build a beginner-friendly event-locked pipeline configuration.
 
@@ -282,7 +307,7 @@ def build_event_locked_pipeline_config(
         load=LoadConfig(path=path, file_format=file_format, preload=preload),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["misc"])),
-        baseline=BaselineConfig(mode=baseline_mode, enabled=True, baseline_window=baseline_window),
+        baseline=BaselineConfig(mode="none", enabled=False, baseline_window=None),
         epoch=EpochConfig(
             enabled=True,
             event_name=event_name,
@@ -291,12 +316,23 @@ def build_event_locked_pipeline_config(
             offset=offset,
             tmin=tmin,
             tmax=tmax,
+            buffer_s=buffer_s,
             metadata=metadata,
             baseline_event_times=baseline_event_times,
             baseline_tmin=baseline_tmin,
             baseline_tmax=baseline_tmax,
         ),
         spectral=SpectralConfig(enabled=False, method="none"),
+        tfr=TfrConfig(
+            enabled=tfr_method != "none",
+            method=tfr_method if tfr_method != "none" else "none",
+            freqs=tfr_freqs,
+            n_cycles=tfr_n_cycles,
+            baseline_mode=baseline_mode,
+            apply_baseline=baseline_mode != "none",
+            crop_tmin=tmin,
+            crop_tmax=tmax,
+        ),
         electrode=ElectrodeConfig(path=electrode_path),
     )
 
@@ -341,11 +377,7 @@ def build_spectral_pipeline_config(
         load=LoadConfig(path=path, file_format=file_format, preload=preload),
         reference=ReferenceConfig(method=reference_method, electrode_path=electrode_path),
         artifact=ArtifactConfig(methods=_normalize_methods(artifact_methods, ["misc"])),
-        baseline=BaselineConfig(
-            mode=baseline_mode,
-            enabled=baseline_mode != "none",
-            baseline_window=effective_baseline_window,
-        ),
+        baseline=BaselineConfig(mode="none", enabled=False, baseline_window=None),
         epoch=EpochConfig(
             enabled=epoch_enabled,
             event_name=event_name or "task_event",

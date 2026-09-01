@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from LFPAnalysis import (
+    AnalysisConfig,
     ArtifactConfig,
     BaselineConfig,
     EpochConfig,
@@ -16,6 +17,7 @@ from LFPAnalysis import (
     PipelineConfig,
     ReferenceConfig,
     SpectralConfig,
+    TfrConfig,
     baseline_lfp,
     build_basic_pipeline_config,
     build_spectral_pipeline_config,
@@ -24,6 +26,7 @@ from LFPAnalysis import (
     load_lfp,
     make_epochs,
     preprocess_lfp,
+    run_analysis,
     run_pipeline,
 )
 from LFPAnalysis.exceptions import ConfigurationError
@@ -256,7 +259,7 @@ def test_run_pipeline_with_baseline_and_psd(synthetic_raw):
     assert result.epochs is None
     assert result.referenced is not None
     assert result.spectral["method"] == "psd"
-    assert not result.baseline_summary.empty
+    assert result.baseline_summary.empty
 
 
 @pytest.mark.integration
@@ -287,7 +290,7 @@ def test_builder_helpers_cover_edge_paths():
     )
     assert spectral.spectral.enabled is True
     assert spectral.epoch.enabled is True
-    assert spectral.baseline.enabled is True
+    assert spectral.baseline.enabled is False
 
 
 @pytest.mark.integration
@@ -317,8 +320,22 @@ def test_cross_event_baseline_on_sample_data():
     assert len(result.epochs) == 80
     assert result.metadata["cross_event_baseline"] is True
     assert result.metadata["has_baseline_epochs"] is True
-    assert not result.baseline_summary.empty
-    assert set(result.baseline_summary["mode"]) == {"zscore"}
+    assert result.baseline_summary.empty
+
+
+@pytest.mark.integration
+def test_run_analysis_keeps_epochs_raw_when_baseline_enabled(synthetic_epochs):
+    original = synthetic_epochs.get_data(copy=True)
+    analyzed = run_analysis(
+        synthetic_epochs,
+        AnalysisConfig(
+            baseline=BaselineConfig(enabled=True, mode="zscore", baseline_window=(-0.5, 0.0)),
+            spectral=SpectralConfig(enabled=False, method="none"),
+            tfr=TfrConfig(enabled=False, method="none"),
+        ),
+    )
+    assert np.allclose(analyzed.epochs.get_data(), original)
+    assert analyzed.baseline_summary.empty
 
 
 @pytest.mark.integration

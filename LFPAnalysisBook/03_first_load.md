@@ -31,6 +31,16 @@ print(f"Working dtype: {WORKING_DTYPE}")
 
 The worked notebook plots a short raw trace and a sanity-check PSD for one channel.
 
+## Legacy parity defaults
+
+For clinical raw formats (`edf`, `neuralynx`), the stable loader now mirrors legacy defaults:
+
+- notch filter at 60/120/180/240 Hz
+- resample to 500 Hz (unless you set `resample_sfreq=None`)
+- optional bad-channel detection via `check_bad_channels=True`
+
+For `file_format="mne"`, no automatic notch/resample is applied.
+
 ## How to inspect the result
 
 Check:

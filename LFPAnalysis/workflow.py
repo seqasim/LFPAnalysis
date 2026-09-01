@@ -244,9 +244,33 @@ def load_lfp(config: LoadConfig):
 
     if config.pick_channels and hasattr(data, "pick"):
         data.pick(config.pick_channels)
-    if config.resample_sfreq and hasattr(data, "resample"):
+
+    clinical_format = config.file_format in {"edf", "neuralynx"}
+    if clinical_format and config.notch_freqs:
         _ensure_preloaded(data)
-        data.resample(config.resample_sfreq)
+        data.info["line_freq"] = 60.0
+        data.notch_filter(freqs=tuple(float(freq) for freq in config.notch_freqs))
+    target_sfreq = config.resample_sfreq
+    if target_sfreq == "auto":
+        target_sfreq = 500.0 if clinical_format else None
+    if target_sfreq is not None and hasattr(data, "resample"):
+        _ensure_preloaded(data)
+        data.resample(float(target_sfreq))
+    if clinical_format and config.check_bad_channels:
+        legacy = _legacy_preprocess_module()
+        channel_types = data.get_channel_types()
+        seeg_names = [
+            name
+            for name, ch_type in zip(data.ch_names, channel_types)
+            if ch_type in {"seeg", "eeg"}
+        ]
+        if not seeg_names:
+            seeg_names = list(data.ch_names)
+        bads = legacy.detect_bad_elecs(
+            data.copy(),
+            {name: "seeg" for name in seeg_names},
+        )
+        data.info["bads"] = list(bads)
     return _downcast_mne_data(data)
 
 
@@ -504,7 +528,20 @@ def make_epochs(data, config: EpochConfig):
         raise ConfigurationError("epoch.event_times must be provided when epoching is enabled.")
 
     _ensure_preloaded(data)
-    transformed_times = [(time_value * config.slope) + config.offset for time_value in config.event_times]
+    keep_indices: list[int] = []
+    filtered_times: list[float] = []
+    for ix, raw_time in enumerate(config.event_times):
+        if str(raw_time) == "None":
+            continue
+        time_value = float(raw_time)
+        if np.isnan(time_value):
+            continue
+        keep_indices.append(ix)
+        filtered_times.append(time_value)
+    if not filtered_times:
+        raise ConfigurationError("epoch.event_times contained no valid timestamps after dropping NaNs.")
+
+    transformed_times = [(time_value * config.slope) + config.offset for time_value in filtered_times]
     events = np.column_stack(
         [
             np.asarray(transformed_times, dtype=_WORKING_DTYPE) * float(data.info["sfreq"]),
@@ -515,8 +552,9 @@ def make_epochs(data, config: EpochConfig):
     metadata = None
     if config.metadata:
         metadata = pd.DataFrame(config.metadata)
-        if len(metadata) != len(events):
+        if len(metadata) != len(config.event_times):
             raise ConfigurationError("epoch.metadata must have the same number of rows as event_times.")
+        metadata = metadata.iloc[keep_indices].reset_index(drop=True)
     # Avoid an extra full Raw copy: Epochs will materialize its own preloaded array.
     epochs = mne.Epochs(
         data,
@@ -572,7 +610,70 @@ def compute_spectral_features(data, config: SpectralConfig) -> dict[str, Any]:
     )
 
 
-def compute_tfr_features(data, config: TfrConfig) -> dict[str, Any]:
+def _crop_tfr_power(power, config: TfrConfig):
+    if config.crop_tmin is None or config.crop_tmax is None:
+        return power
+    tmin = max(float(config.crop_tmin), float(power.times[0]))
+    tmax = min(float(config.crop_tmax), float(power.times[-1]))
+    if tmin < tmax:
+        power.crop(tmin=tmin, tmax=tmax)
+    return power
+
+
+def _nan_mask_tfr_tables(power, tables: list[pd.DataFrame]):
+    legacy = _legacy_preprocess_module()
+    for table in tables:
+        if table is None or table.empty:
+            continue
+        power.data = np.asarray(power.data, dtype=_WORKING_DTYPE)
+        legacy._nan_mask_tfr_events(
+            power.data,
+            table,
+            power.ch_names,
+            float(power.info["sfreq"]),
+            int(power.data.shape[-1]),
+        )
+    return power
+
+
+def _cross_event_trialwise_zscore(task_power, baseline_power, config: TfrConfig):
+    legacy = _legacy_preprocess_module()
+    working = np.asarray(task_power.data, dtype=_WORKING_DTYPE)
+    baseline_data = np.asarray(baseline_power.data, dtype=_WORKING_DTYPE)
+    z_data = legacy.baseline_trialwise_TFR(
+        data=working,
+        include_epoch_in_baseline=False,
+        baseline_mne=baseline_data,
+        mode="zscore",
+        ev_axis=0,
+        elec_axis=1,
+        freq_axis=2,
+        time_axis=3,
+    )
+    if config.uncaptured_z_thresh:
+        threshold = float(config.z_thresh)
+        max_iter = 10
+        iteration = 0
+        while iteration < max_iter:
+            large_mask = np.where(np.abs(z_data) > threshold)
+            if large_mask[0].shape[0] == 0:
+                break
+            working[large_mask] = np.nan
+            z_data = legacy.baseline_trialwise_TFR(
+                data=working,
+                include_epoch_in_baseline=False,
+                baseline_mne=baseline_data,
+                mode="zscore",
+                ev_axis=0,
+                elec_axis=1,
+                freq_axis=2,
+                time_axis=3,
+            )
+            iteration += 1
+    return z_data
+
+
+def compute_tfr_features(data, config: TfrConfig, baseline_epochs=None, artifact_tables: dict[str, pd.DataFrame] | None = None) -> dict[str, Any]:
     """Compute optional TFR features on epoched data (analysis spine)."""
     ensure_supported(config.method, field_name="tfr.method", supported=TFR_METHODS)
     if not config.enabled or config.method == "none":
@@ -596,6 +697,52 @@ def compute_tfr_features(data, config: TfrConfig) -> dict[str, Any]:
         return_itc=False,
         verbose=False,
     )
+
+    if baseline_epochs is not None:
+        baseline_power = baseline_epochs.compute_tfr(
+            method="morlet",
+            freqs=freqs,
+            n_cycles=config.n_cycles,
+            decim=config.decim,
+            n_jobs=config.n_jobs,
+            average=False,
+            return_itc=False,
+            verbose=False,
+        )
+        power = _crop_tfr_power(power, config)
+        baseline_power = _crop_tfr_power(baseline_power, config)
+        if config.mask_artifacts and artifact_tables:
+            power = _nan_mask_tfr_tables(
+                power,
+                [
+                    artifact_tables.get("ied_task_epoched"),
+                    artifact_tables.get("misc_task_epoched"),
+                ],
+            )
+            baseline_power = _nan_mask_tfr_tables(
+                baseline_power,
+                [
+                    artifact_tables.get("ied_baseline_epoched"),
+                    artifact_tables.get("misc_baseline_epoched"),
+                ],
+            )
+        z_data = _cross_event_trialwise_zscore(power, baseline_power, config)
+        z_power = mne.time_frequency.EpochsTFRArray(
+            data.info,
+            np.asarray(z_data, dtype=_WORKING_DTYPE),
+            power.times,
+            freqs,
+        )
+        z_power.metadata = data.metadata
+        meta = build_tfr_metadata(
+            method="morlet",
+            baseline_mode="trialwise",
+            freqs=freqs,
+            n_cycles=config.n_cycles,
+            decim=config.decim,
+        )
+        return {"method": "morlet", "power": z_power, "metadata": meta}
+
     if config.apply_baseline and config.baseline_mode not in {"none", None}:
         # EpochsTFR baseline expects a (tmin, tmax) window; use full epoch pre-zero when present.
         times = np.asarray(power.times, dtype=float)
@@ -619,7 +766,7 @@ def compute_tfr_features(data, config: TfrConfig) -> dict[str, Any]:
     return {"method": "morlet", "power": power, "metadata": meta}
 
 
-def run_analysis(epochs, config: AnalysisConfig, baseline_epochs=None) -> AnalysisResult:
+def run_analysis(epochs, config: AnalysisConfig, baseline_epochs=None, artifact_tables: dict[str, pd.DataFrame] | None = None) -> AnalysisResult:
     """Run the analysis spine starting from MNE Epochs (or continuous fallback).
 
     Does not perform sync or electrode localization — those belong in :func:`run_prep`.
@@ -639,21 +786,31 @@ def run_analysis(epochs, config: AnalysisConfig, baseline_epochs=None) -> Analys
             "or pass your own MNE Epochs."
         )
 
-    baselined, baseline_summary = baseline_lfp(
-        epochs, config.baseline, baseline_epochs=baseline_epochs
+    if config.baseline.enabled:
+        warnings.warn(
+            "analysis.baseline is deprecated in the analysis spine; epochs remain raw "
+            "and baselining should happen in the TFR stage.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    baseline_summary = empty_baseline_summary()
+    spectral = compute_spectral_features(epochs, config.spectral)
+    tfr = compute_tfr_features(
+        epochs,
+        config.tfr,
+        baseline_epochs=baseline_epochs,
+        artifact_tables=artifact_tables,
     )
-    spectral = compute_spectral_features(baselined, config.spectral)
-    tfr = compute_tfr_features(baselined, config.tfr)
     metadata = {
         "spine": "analysis",
-        "baseline_mode": config.baseline.mode,
+        "baseline_mode": "none",
         "spectral_method": config.spectral.method,
         "tfr_method": config.tfr.method,
         "working_dtype": str(WORKING_DTYPE),
         "cross_event_baseline": baseline_epochs is not None,
     }
     return AnalysisResult(
-        epochs=baselined,
+        epochs=epochs,
         baseline_summary=baseline_summary,
         spectral=spectral,
         tfr=tfr,
@@ -672,6 +829,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
 
     prep = run_prep(prep_config_from_pipeline(config))
     analysis_cfg = analysis_config_from_pipeline(config)
+    if (
+        config.epoch.enabled
+        and analysis_cfg.tfr.enabled
+        and analysis_cfg.tfr.method != "none"
+        and (analysis_cfg.tfr.crop_tmin is None or analysis_cfg.tfr.crop_tmax is None)
+    ):
+        analysis_cfg.tfr.crop_tmin = float(config.epoch.tmin)
+        analysis_cfg.tfr.crop_tmax = float(config.epoch.tmax)
     analysis_input = prep.epochs if prep.epochs is not None else prep.referenced
     needs_analysis = (
         analysis_cfg.baseline.enabled
@@ -685,7 +850,10 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
                 "Analysis stages are enabled but prep produced neither Epochs nor continuous data."
             )
         analysis = run_analysis(
-            analysis_input, analysis_cfg, baseline_epochs=prep.baseline_epochs
+            analysis_input,
+            analysis_cfg,
+            baseline_epochs=prep.baseline_epochs,
+            artifact_tables=prep.artifact_tables,
         )
         if prep.epochs is not None:
             raw_out = None
@@ -714,11 +882,19 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         "input_format": config.load.file_format,
         "reference_method": config.reference.method,
         "artifact_methods": list(config.artifact.methods),
-        "baseline_mode": config.baseline.mode,
+        "baseline_mode": "none",
         "spectral_method": config.spectral.method,
         "tfr_method": config.tfr.method,
         "working_dtype": str(WORKING_DTYPE),
         "preload": bool(config.load.preload),
+        "notch_freqs": list(config.load.notch_freqs) if config.load.notch_freqs else None,
+        "buffer_s": float(config.epoch.buffer_s),
+        "tfr_baseline": (
+            "cross_event_trialwise_zscore" if prep.baseline_epochs is not None else config.tfr.baseline_mode
+        ),
+        "tfr_mask_artifacts": bool(config.tfr.mask_artifacts),
+        "tfr_uncaptured_z_thresh": bool(config.tfr.uncaptured_z_thresh),
+        "cross_event_baseline": prep.baseline_epochs is not None,
     }
     return PipelineResult(
         raw=raw_out,

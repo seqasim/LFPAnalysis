@@ -98,4 +98,12 @@ The old repo called `ref_mne` directly. The stable path wraps the same decision 
 
 `laplacian` is intentionally omitted from the stable reference registry until implemented.
 
+## Legacy parity note
+
+The stable path now preserves the legacy ordering for first-pass prep decisions:
+
+- load-stage conditioning first (clinical notch + 500 Hz resample defaults)
+- reference after load conditioning
+- electrode sheet outputs matched to the selected reference policy (`bipolar`/`wm` derive new labels; `car`/`car_trimmed` keep original labels)
+
 Next step: {doc}`04b_first_synchronization`

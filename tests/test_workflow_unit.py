@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from LFPAnalysis import ArtifactConfig, BaselineConfig, detect_artifacts
-from LFPAnalysis.config import EpochConfig, ReferenceConfig
+from LFPAnalysis.config import EpochConfig, LoadConfig, ReferenceConfig
 from LFPAnalysis.exceptions import ConfigurationError
 from LFPAnalysis.schemas import ARTIFACT_EVENT_COLUMNS
 from LFPAnalysis.workflow import (
     _downcast_mne_data,
     _get_data_array,
     baseline_lfp,
+    compute_tfr_features,
     derive_referenced_electrode_df,
+    load_lfp,
     load_electrode_metadata,
     make_epochs,
     preprocess_lfp,
@@ -218,3 +221,154 @@ def test_derive_referenced_electrode_df_warns_on_missing_contact():
     with pytest.warns(RuntimeWarning, match="Could not derive electrode row"):
         derived = derive_referenced_electrode_df(elec, ["a1-a2"], method="bipolar")
     assert derived.empty
+
+
+@pytest.mark.unit
+def test_make_epochs_drops_nan_and_none_times_with_metadata(mne_module):
+    sfreq = 100.0
+    raw = mne_module.io.RawArray(
+        np.vstack([np.sin(np.arange(5000) / sfreq)]),
+        mne_module.create_info(["l1"], sfreq, ch_types=["seeg"]),
+        verbose=False,
+    )
+    config = EpochConfig(
+        enabled=True,
+        event_name="ev",
+        event_times=[1.0, np.nan, 2.0, "None"],
+        tmin=-0.2,
+        tmax=0.3,
+        metadata={"trial": [10, 20, 30, 40]},
+    )
+    epochs = make_epochs(raw, config)
+    assert len(epochs) == 2
+    assert list(epochs.metadata["trial"]) == [10, 30]
+
+
+@pytest.mark.unit
+def test_compute_tfr_features_cross_event_uses_trialwise_baseline(monkeypatch, mne_module):
+    sfreq = 50.0
+    times = np.arange(0, 20, 1 / sfreq)
+    raw = mne_module.io.RawArray(
+        np.vstack([np.sin(2 * np.pi * 3 * times)]),
+        mne_module.create_info(["l1"], sfreq, ch_types=["seeg"]),
+        verbose=False,
+    )
+    events = np.array([[200, 0, 1], [500, 0, 1]])
+    task_epochs = mne_module.Epochs(
+        raw.copy(),
+        events=events,
+        event_id={"task": 1},
+        tmin=-0.5,
+        tmax=0.5,
+        baseline=None,
+        preload=True,
+        verbose=False,
+    )
+    baseline_events = events.copy()
+    baseline_events[:, 0] = baseline_events[:, 0] + 20
+    baseline_epochs = mne_module.Epochs(
+        raw.copy(),
+        events=baseline_events,
+        event_id={"baseline": 1},
+        tmin=-0.5,
+        tmax=0.5,
+        baseline=None,
+        preload=True,
+        verbose=False,
+    )
+
+    from LFPAnalysis.config import TfrConfig
+    import LFPAnalysis.workflow as workflow_mod
+
+    calls = {"count": 0}
+
+    def _fake_trialwise(**kwargs):
+        calls["count"] += 1
+        return kwargs["data"] - np.nanmean(kwargs["baseline_mne"], axis=(0, 3), keepdims=True)
+
+    monkeypatch.setattr(
+        workflow_mod,
+        "_legacy_preprocess_module",
+        lambda: SimpleNamespace(baseline_trialwise_TFR=_fake_trialwise, _nan_mask_tfr_events=lambda *a, **k: None),
+    )
+
+    tfr = compute_tfr_features(
+        task_epochs,
+        TfrConfig(enabled=True, method="morlet", freqs=[4, 8], n_cycles=2.0, crop_tmin=-0.2, crop_tmax=0.2),
+        baseline_epochs=baseline_epochs,
+        artifact_tables={},
+    )
+    assert tfr["method"] == "morlet"
+    assert calls["count"] >= 1
+    assert tfr["metadata"]["baseline_mode"].iloc[0] == "trialwise"
+
+
+@pytest.mark.unit
+def test_load_lfp_applies_clinical_default_notch_and_resample(monkeypatch):
+    class FakeRaw:
+        def __init__(self):
+            self.ch_names = ["a1"]
+            self.info = {"line_freq": None, "bads": []}
+            self._data = np.ones((1, 10), dtype=np.float32)
+            self.preload = True
+            self.calls = []
+
+        def get_channel_types(self):
+            return ["seeg"]
+
+        def notch_filter(self, freqs):
+            self.calls.append(("notch", tuple(freqs)))
+
+        def resample(self, sfreq):
+            self.calls.append(("resample", float(sfreq)))
+
+    import LFPAnalysis.workflow as workflow_mod
+
+    fake_raw = FakeRaw()
+    fake_mne = SimpleNamespace(io=SimpleNamespace(read_raw_edf=lambda *_args, **_kwargs: fake_raw))
+    monkeypatch.setattr(workflow_mod, "_require_mne", lambda: fake_mne)
+    monkeypatch.setattr(workflow_mod, "resolve_existing_path", lambda path, field_name=None: Path(path))
+
+    loaded = load_lfp(LoadConfig(path="demo.edf", file_format="edf", preload=True))
+    assert loaded is fake_raw
+    assert ("notch", (60.0, 120.0, 180.0, 240.0)) in fake_raw.calls
+    assert ("resample", 500.0) in fake_raw.calls
+
+
+@pytest.mark.unit
+def test_load_lfp_skips_clinical_resample_when_explicit_none(monkeypatch):
+    class FakeRaw:
+        def __init__(self):
+            self.ch_names = ["a1"]
+            self.info = {"line_freq": None, "bads": []}
+            self._data = np.ones((1, 10), dtype=np.float32)
+            self.preload = True
+            self.calls = []
+
+        def get_channel_types(self):
+            return ["seeg"]
+
+        def notch_filter(self, freqs):
+            self.calls.append(("notch", tuple(freqs)))
+
+        def resample(self, sfreq):
+            self.calls.append(("resample", float(sfreq)))
+
+    import LFPAnalysis.workflow as workflow_mod
+
+    fake_raw = FakeRaw()
+    fake_mne = SimpleNamespace(io=SimpleNamespace(read_raw_edf=lambda *_args, **_kwargs: fake_raw))
+    monkeypatch.setattr(workflow_mod, "_require_mne", lambda: fake_mne)
+    monkeypatch.setattr(workflow_mod, "resolve_existing_path", lambda path, field_name=None: Path(path))
+
+    loaded = load_lfp(
+        LoadConfig(
+            path="demo.edf",
+            file_format="edf",
+            preload=True,
+            resample_sfreq=None,
+            notch_freqs=None,
+        )
+    )
+    assert loaded is fake_raw
+    assert fake_raw.calls == []
