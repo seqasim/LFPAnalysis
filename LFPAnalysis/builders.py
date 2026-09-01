@@ -235,6 +235,7 @@ def build_basic_pipeline_config(
         baseline=BaselineConfig(mode="none", enabled=False),
         epoch=EpochConfig(enabled=False),
         spectral=SpectralConfig(enabled=False, method="none"),
+        electrode=ElectrodeConfig(path=electrode_path),
     )
 
 

@@ -16,6 +16,7 @@ from LFPAnalysis.workflow import (
     _downcast_mne_data,
     _get_data_array,
     baseline_lfp,
+    derive_referenced_electrode_df,
     load_electrode_metadata,
     make_epochs,
     preprocess_lfp,
@@ -86,6 +87,14 @@ def test_load_electrode_metadata_xlsx(tmp_path):
             "z": [3.0],
         }
     ).to_excel(path, index=False)
+    dataframe = load_electrode_metadata(path)
+    assert list(dataframe["label"]) == ["l1"]
+
+
+@pytest.mark.unit
+def test_load_electrode_metadata_accepts_nmmlabel(tmp_path):
+    path = tmp_path / "electrodes.xlsx"
+    pd.DataFrame({"NMMlabel": ["l1"], "x": [1.0]}).to_excel(path, index=False)
     dataframe = load_electrode_metadata(path)
     assert list(dataframe["label"]) == ["l1"]
 
@@ -162,3 +171,50 @@ def test_make_epochs_requires_raw_like():
 def test_baseline_requires_get_data_for_raw_like():
     with pytest.raises(ConfigurationError):
         baseline_lfp(SimpleNamespace(), BaselineConfig(enabled=True, mode="zscore", baseline_window=(0, 1)))
+
+
+@pytest.mark.unit
+def test_derive_referenced_electrode_df_bipolar_midpoint():
+    elec = pd.DataFrame(
+        {
+            "label": ["a1", "a2"],
+            "mni_x": [0.0, 10.0],
+            "mni_y": [2.0, 6.0],
+            "mni_z": [4.0, 8.0],
+            "roi": ["ACC", "ACC"],
+        }
+    )
+    derived = derive_referenced_electrode_df(elec, ["a1-a2"], method="bipolar")
+    assert list(derived["label"]) == ["a1-a2"]
+    assert derived.loc[0, "anode"] == "a1"
+    assert derived.loc[0, "cathode"] == "a2"
+    assert derived.loc[0, "mni_x"] == pytest.approx(5.0)
+    assert derived.loc[0, "mni_y"] == pytest.approx(4.0)
+    assert derived.loc[0, "mni_z"] == pytest.approx(6.0)
+    assert derived.loc[0, "roi"] == "ACC"
+
+
+@pytest.mark.unit
+def test_derive_referenced_electrode_df_wm_inherits_anode():
+    elec = pd.DataFrame({"label": ["g1", "w1"], "mni_x": [1.5, 99.0], "roi": ["GM", "WM"]})
+    derived = derive_referenced_electrode_df(elec, ["g1-w1"], method="wm")
+    assert derived.loc[0, "mni_x"] == pytest.approx(1.5)
+    assert derived.loc[0, "roi"] == "GM"
+    assert derived.loc[0, "anode"] == "g1"
+    assert derived.loc[0, "cathode"] == "w1"
+
+
+@pytest.mark.unit
+def test_derive_referenced_electrode_df_passthrough_for_name_preserving_methods():
+    elec = pd.DataFrame({"label": ["a1", "a2"], "mni_x": [1.0, 2.0]})
+    for method in ("none", "car", "car_trimmed"):
+        derived = derive_referenced_electrode_df(elec, ["a1", "a2"], method=method)
+        assert derived.equals(elec)
+
+
+@pytest.mark.unit
+def test_derive_referenced_electrode_df_warns_on_missing_contact():
+    elec = pd.DataFrame({"label": ["a1"], "mni_x": [1.0]})
+    with pytest.warns(RuntimeWarning, match="Could not derive electrode row"):
+        derived = derive_referenced_electrode_df(elec, ["a1-a2"], method="bipolar")
+    assert derived.empty

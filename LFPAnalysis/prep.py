@@ -22,6 +22,7 @@ from .results import PrepResult
 from .schemas import build_sync_summary, empty_sync_summary
 from .validation import ensure_supported, resolve_existing_path
 from .workflow import (
+    derive_referenced_electrode_df,
     detect_artifacts,
     load_electrode_metadata,
     load_lfp,
@@ -232,10 +233,23 @@ def run_prep(config: PrepConfig) -> PrepResult:
     """Run the prep spine and return Epochs plus handoff metadata."""
     raw = load_lfp(config.load)
     referenced = preprocess_lfp(raw, config.reference)
+    referenced_ch_names = list(getattr(referenced, "ch_names", []))
     keep_raw = referenced is raw
 
     artifact_tables = detect_artifacts(referenced, config.artifact)
     electrode_df = _load_electrodes(config.electrode)
+    electrode_df_referenced = False
+    if (
+        electrode_df is not None
+        and config.reference.method in {"bipolar", "wm"}
+        and referenced_ch_names
+    ):
+        electrode_df = derive_referenced_electrode_df(
+            electrode_df=electrode_df,
+            ch_names=referenced_ch_names,
+            method=config.reference.method,
+        )
+        electrode_df_referenced = True
 
     if config.sync.enabled:
         slope, offset, sync_details, sync_summary = synchronize_lfp(referenced, config.sync)
@@ -269,6 +283,7 @@ def run_prep(config: PrepConfig) -> PrepResult:
         "working_dtype": str(WORKING_DTYPE),
         "preload": bool(config.load.preload),
         "has_baseline_epochs": baseline_epochs is not None,
+        "electrode_df_referenced": electrode_df_referenced,
     }
     return PrepResult(
         epochs=epochs,

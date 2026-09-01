@@ -20,7 +20,7 @@ BaselineMode = Literal[
     "continuous",
 ]
 # laplacian intentionally omitted until implemented (was a reserved registry trap).
-ReferenceMethod = Literal["none", "bipolar", "wm"]
+ReferenceMethod = Literal["none", "bipolar", "wm", "car", "car_trimmed"]
 SpectralMethod = Literal["none", "psd", "fooof"]
 TfrMethod = Literal["none", "morlet"]
 SyncSource = Literal["none", "photodiode", "ttl", "precomputed"]
@@ -57,6 +57,7 @@ class ReferenceConfig:
     method: ReferenceMethod = "none"
     electrode_path: PathLike | None = None
     site: str = "MSSM"
+    car_trim_proportion: float = 0.2
 
 
 @dataclass(slots=True)

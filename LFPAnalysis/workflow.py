@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -42,7 +43,7 @@ from .validation import (
 )
 
 
-REFERENCE_METHODS = {"none", "bipolar", "wm"}
+REFERENCE_METHODS = {"none", "bipolar", "wm", "car", "car_trimmed"}
 ARTIFACT_METHODS = {"none", "misc", "ied", "custom"}
 BASELINE_METHODS = {
     "none",
@@ -122,11 +123,80 @@ def load_electrode_metadata(path: str | Path) -> pd.DataFrame:
         dataframe = pd.read_excel(path_obj)
     else:
         raise ConfigurationError("electrode_path must point to a CSV or Excel file.")
+    if "label" not in dataframe.columns and "NMMlabel" in dataframe.columns:
+        dataframe = dataframe.rename(columns={"NMMlabel": "label"})
     return validate_required_columns(
         dataframe,
         required_columns=ELECTRODE_REQUIRED_COLUMNS,
         schema_name="Electrode metadata",
     )
+
+
+def derive_referenced_electrode_df(
+    electrode_df: pd.DataFrame,
+    ch_names: list[str],
+    method: str,
+) -> pd.DataFrame:
+    """Derive electrode metadata aligned to re-referenced channel names.
+
+    For bipolar channels (``anode-cathode``), the derived row inherits
+    categorical metadata from the anode and averages coordinate columns from
+    the anode/cathode pair. For white-matter reference pairs, metadata is
+    inherited from the anode contact (no coordinate averaging).
+    """
+    if method not in {"bipolar", "wm"}:
+        return electrode_df.copy()
+    if "label" not in electrode_df.columns:
+        raise ConfigurationError("electrode_df must include a 'label' column.")
+
+    base = electrode_df.copy()
+    base["label"] = base["label"].astype(str)
+    by_label = {
+        str(row["label"]).lower(): row.copy()
+        for _, row in base.iterrows()
+    }
+    coord_cols = [
+        name
+        for name in ("x", "y", "z", "mni_x", "mni_y", "mni_z")
+        if name in base.columns
+    ]
+    derived_rows: list[pd.Series] = []
+
+    for ch_name in ch_names:
+        if "-" not in ch_name:
+            src = by_label.get(ch_name.lower())
+            if src is not None:
+                derived_rows.append(src.copy())
+            continue
+
+        anode, cathode = ch_name.split("-", 1)
+        anode_row = by_label.get(anode.lower())
+        cathode_row = by_label.get(cathode.lower())
+        if anode_row is None or cathode_row is None:
+            warnings.warn(
+                f"Could not derive electrode row for '{ch_name}' because "
+                "one or both contacts are missing from the electrode table.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+
+        out_row = anode_row.copy()
+        out_row["label"] = ch_name
+        out_row["anode"] = anode
+        out_row["cathode"] = cathode
+        if method == "bipolar":
+            for coord in coord_cols:
+                anode_v = pd.to_numeric(pd.Series([anode_row[coord]]), errors="coerce").iloc[0]
+                cathode_v = pd.to_numeric(pd.Series([cathode_row[coord]]), errors="coerce").iloc[0]
+                if pd.notna(anode_v) and pd.notna(cathode_v):
+                    out_row[coord] = (float(anode_v) + float(cathode_v)) / 2.0
+        derived_rows.append(out_row)
+
+    if not derived_rows:
+        return base.iloc[0:0].copy()
+    derived = pd.DataFrame(derived_rows).reset_index(drop=True)
+    return derived
 
 
 def load_lfp(config: LoadConfig):
@@ -187,12 +257,16 @@ def preprocess_lfp(data, config: ReferenceConfig):
         return data
     if not hasattr(data, "copy"):
         raise ConfigurationError("Reference operations require an MNE Raw-like object.")
+    _ensure_preloaded(data)
+    if config.method in {"car", "car_trimmed"}:
+        trim_proportion = 0.0 if config.method == "car" else float(config.car_trim_proportion)
+        return _common_average_reference(data, trim_proportion=trim_proportion)
+
     if not config.electrode_path:
-        raise ConfigurationError("Reference methods other than 'none' require electrode_path.")
+        raise ConfigurationError("Reference methods 'wm' and 'bipolar' require electrode_path.")
 
     electrode_path = str(resolve_existing_path(config.electrode_path, field_name="electrode_path"))
     legacy = _legacy_preprocess_module()
-    _ensure_preloaded(data)
     if config.method in {"wm", "bipolar"}:
         # Single copy into the legacy rereferencer (which may also copy internally).
         referenced = legacy.ref_mne(
@@ -203,6 +277,45 @@ def preprocess_lfp(data, config: ReferenceConfig):
         )
         return _downcast_mne_data(referenced)
     raise ConfigurationError(f"Unsupported reference method '{config.method}'.")
+
+
+def _common_average_reference(data, trim_proportion: float = 0.0):
+    """Apply common-average reference with optional trimmed-mean robustness."""
+    if trim_proportion < 0.0 or trim_proportion >= 0.5:
+        raise ConfigurationError("reference.car_trim_proportion must be in [0.0, 0.5).")
+
+    referenced = data.copy()
+    _ensure_preloaded(referenced)
+    channel_types = referenced.get_channel_types()
+    picked_names = [
+        name
+        for name, ch_type in zip(referenced.ch_names, channel_types)
+        if ch_type in {"seeg", "eeg"}
+    ]
+    if not picked_names:
+        picked_names = list(referenced.ch_names)
+
+    name_to_ix = {name: ix for ix, name in enumerate(referenced.ch_names)}
+    picked_ix = [name_to_ix[name] for name in picked_names]
+    bad_names = set(referenced.info.get("bads", []))
+    good_ref_ix = [name_to_ix[name] for name in picked_names if name not in bad_names]
+    if not good_ref_ix:
+        raise ConfigurationError("No non-bad channels are available for common-average reference.")
+
+    arr = _get_data_array(referenced, copy=False, dtype=_WORKING_DTYPE)
+    reference_input = np.asarray(arr[good_ref_ix, :], dtype=np.float64)
+    if trim_proportion > 0.0:
+        scipy_stats = ensure_dependency("scipy.stats", install_hint="pip install -e .[dev]")
+        reference_signal = scipy_stats.trim_mean(
+            reference_input,
+            proportiontocut=trim_proportion,
+            axis=0,
+        )
+    else:
+        reference_signal = reference_input.mean(axis=0)
+    arr[picked_ix, :] = arr[picked_ix, :] - reference_signal
+    referenced._data = np.asarray(arr, dtype=_WORKING_DTYPE)
+    return _downcast_mne_data(referenced)
 
 
 def _artifact_none(data, config: ArtifactConfig) -> pd.DataFrame:

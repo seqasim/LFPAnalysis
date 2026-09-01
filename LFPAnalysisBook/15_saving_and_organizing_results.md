@@ -19,6 +19,12 @@ Use this whenever you leave the interactive case study and start accumulating pe
 
 `PipelineResult` (`LFPAnalysis.results`) holds `raw`, `referenced`, `epochs`, `artifact_tables`, `baseline_summary`, `spectral`, `tfr`, `electrode_df`, `sync`, and `metadata`. It does **not** write to disk. Persist anything you need explicitly (e.g. `epochs.save(...)`, `DataFrame.to_csv` / `to_parquet`).
 
+`electrode_df` reflects your reference method:
+
+- `bipolar`: virtual pair labels (`a-b`) with midpoint coordinate averages and `anode`/`cathode` provenance
+- `wm`: pair labels with anode-inherited coordinates/metadata
+- `none`, `car`, `car_trimmed`: unchanged original contact sheet
+
 ### TFR helpers
 
 `lfp_preprocess_utils.compute_and_baseline_tfr(..., save_path=..., output='save')` writes MNE TFR HDF5 files as `{save_path}/{event}-tfr.h5`. Related array-based helpers can write `.npz` when `output` is `'save'` or `'both'`.
@@ -64,6 +70,8 @@ out.mkdir(parents=True, exist_ok=True)
 smoothed_df.to_parquet(out / "bandpower_long.parquet", index=False)
 # or: smoothed_df.to_csv(out / "bandpower_long.csv", index=False)
 mlm_res.to_csv(out / "mlm_time_resolved.csv", index=False)
+# if available from run_pipeline(...):
+# result.electrode_df.to_csv(out / "electrodes_referenced.csv", index=False)
 ```
 
 Prefer parquet for large long tables; CSV is fine for small regression summaries and for readers who do not have `pyarrow`/`fastparquet`.
